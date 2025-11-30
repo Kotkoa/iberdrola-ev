@@ -62,17 +62,11 @@ const chargeSpeedLabels: Record<number, string> = {
 }
 
 const fetchStation = async (cuprId: number) => {
-  const response = await fetch(
-    'https://www.iberdrola.es/o/webclipb/iberdrola/puntosrecargacontroller/getDatosPuntoRecarga',
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        dto: { cuprId: [cuprId] },
-        language: 'en',
-      }),
-    }
-  )
+  const params = new URLSearchParams({
+    cuprId: cuprId.toString(),
+    language: 'en',
+  })
+  const response = await fetch(`/.netlify/functions/fetchStation?${params.toString()}`)
 
   if (!response.ok) {
     throw new Error(`Request failed with status ${response.status}`)
