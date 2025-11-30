@@ -6,7 +6,8 @@ const IBERDROLA_HEADERS = {
   'Content-Type': 'application/json; charset=UTF-8',
   'X-Requested-With': 'XMLHttpRequest',
   Origin: 'https://www.iberdrola.es',
-  Referer: 'https://www.iberdrola.es/en/electric-mobility/recharge-outside-the-house',
+  Referer:
+    'https://www.iberdrola.es/en/electric-mobility/recharge-outside-the-house',
   'Accept-Language': 'en-US,en;q=0.9,ru;q=0.8,es;q=0.7',
   'User-Agent':
     'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
@@ -30,7 +31,10 @@ type HandlerEvent = {
   body?: string | null
 }
 
-const jsonResponse = (statusCode: number, payload: unknown): HandlerResponse => ({
+const jsonResponse = (
+  statusCode: number,
+  payload: unknown
+): HandlerResponse => ({
   statusCode,
   headers: {
     ...corsHeaders,
@@ -50,7 +54,9 @@ const parseBody = (body?: string | null) => {
   }
 }
 
-export const handler = async (event: HandlerEvent): Promise<HandlerResponse> => {
+export const handler = async (
+  event: HandlerEvent
+): Promise<HandlerResponse> => {
   if (event.httpMethod === 'OPTIONS') {
     return {
       statusCode: 204,
@@ -61,9 +67,11 @@ export const handler = async (event: HandlerEvent): Promise<HandlerResponse> => 
 
   const params = event.queryStringParameters ?? {}
   const body = parseBody(event.body)
-  const cuprIdValue = params.cuprId ?? (typeof body.cuprId === 'string' ? body.cuprId : undefined)
+  const cuprIdValue =
+    params.cuprId ?? (typeof body.cuprId === 'string' ? body.cuprId : undefined)
   const languageValue =
-    params.language ?? (typeof body.language === 'string' ? body.language : DEFAULT_LANGUAGE)
+    params.language ??
+    (typeof body.language === 'string' ? body.language : DEFAULT_LANGUAGE)
   const cuprId = cuprIdValue ? Number(cuprIdValue) : undefined
 
   if (!cuprId || Number.isNaN(cuprId)) {
@@ -82,16 +90,31 @@ export const handler = async (event: HandlerEvent): Promise<HandlerResponse> => 
       }),
     })
 
-    const payload = await iberdrolaResponse.json()
+    const rawBody = await iberdrolaResponse.text()
+    let parsedBody: unknown
+    try {
+      parsedBody = JSON.parse(rawBody)
+    } catch (error) {
+      if (iberdrolaResponse.ok) {
+        return jsonResponse(502, {
+          error: `Received non-JSON response from Iberdrola, ${error}`,
+          snippet: rawBody.slice(0, 200),
+        })
+      }
+      parsedBody = {
+        error: 'Failed to parse Iberdrola error response as JSON',
+        snippet: rawBody.slice(0, 200),
+      }
+    }
 
     if (!iberdrolaResponse.ok) {
       return jsonResponse(iberdrolaResponse.status, {
         error: 'Request to Iberdrola failed',
-        details: payload,
+        details: parsedBody,
       })
     }
 
-    return jsonResponse(200, payload)
+    return jsonResponse(200, parsedBody)
   } catch (error) {
     return jsonResponse(500, {
       error: 'Unexpected error while fetching data from Iberdrola',
