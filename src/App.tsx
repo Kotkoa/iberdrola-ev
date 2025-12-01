@@ -1,5 +1,6 @@
 import './App.css'
 
+import { useEffect, useState } from 'react'
 import Typography from '@mui/material/Typography'
 import Box from '@mui/material/Box'
 import Container from '@mui/material/Container'
@@ -35,8 +36,13 @@ const formatDuration = (durationMinutes: number | null) => {
 
 function App() {
   const { data: charger, loading, error } = useCharger()
-
-  const now = new Date()
+  const [now, setNow] = useState(() => new Date())
+  useEffect(() => {
+    const intervalId = setInterval(() => setNow(new Date()), 60000)
+    return () => {
+      clearInterval(intervalId)
+    }
+  }, [])
 
   const port1Update = charger?.port1_update_date
     ? new Date(charger.port1_update_date)
@@ -53,7 +59,6 @@ function App() {
     ? Math.floor((now.getTime() - port2Update.getTime()) / 60000)
     : null
 
-  
   const isFirstPortAvailable = charger?.port1_status === 'AVAILABLE'
   const isSecondPortAvailable = charger?.port2_status === 'AVAILABLE'
   const statusSummary = {
@@ -175,7 +180,7 @@ function App() {
                   border: 2,
                   borderColor: isFirstPortAvailable
                     ? 'success.main'
-                    : 'primary.main',
+                    : 'warning.main',
                   borderRadius: 2,
                   height: 140,
                   display: 'flex',
@@ -188,7 +193,7 @@ function App() {
                   sx={{
                     bgcolor: isFirstPortAvailable
                       ? 'success.main'
-                      : 'primary.main',
+                      : 'warning.main',
                     color: 'primary.contrastText',
                     px: 2,
                     py: 0.5,
@@ -201,7 +206,9 @@ function App() {
                     Semi-fast
                   </Typography>
                   <Typography variant="caption" sx={{ lineHeight: 1.2 }}>
-                    Free charging point
+                    {port1BusyDurationLabel
+                      ? `Busy for ${port1BusyDurationLabel}`
+                      : 'Free charging point'}
                   </Typography>
                 </Box>
                 <Stack direction="row" alignItems="center" height="100%">
@@ -239,15 +246,6 @@ function App() {
                       <Typography variant="body2" color="textSecondary">
                         {charger.port1_power_kw} kW
                       </Typography>
-                      {port1BusyDurationLabel && (
-                        <Typography
-                          variant="caption"
-                          color="textSecondary"
-                          sx={{ display: 'block', mt: 0.5 }}
-                        >
-                          Busy for {port1BusyDurationLabel}
-                        </Typography>
-                      )}
                     </Box>
                   </Stack>
                 </Stack>
@@ -257,7 +255,7 @@ function App() {
                   border: 2,
                   borderColor: isSecondPortAvailable
                     ? 'success.main'
-                    : 'primary.main',
+                    : 'warning.main',
                   borderRadius: 2,
                   height: 140,
                   display: 'flex',
@@ -270,7 +268,7 @@ function App() {
                   sx={{
                     bgcolor: isSecondPortAvailable
                       ? 'success.main'
-                      : 'primary.main',
+                      : 'warning.main',
                     color: 'primary.contrastText',
                     px: 2,
                     py: 0.5,
@@ -283,7 +281,9 @@ function App() {
                     Semi-fast
                   </Typography>
                   <Typography variant="caption" sx={{ lineHeight: 1.2 }}>
-                    Free charging point
+                    {port2BusyDurationLabel
+                      ? `Busy for ${port2BusyDurationLabel}`
+                      : 'Free charging point'}
                   </Typography>
                 </Box>
                 <Stack direction="row" alignItems="center" height="100%">
@@ -321,15 +321,6 @@ function App() {
                       <Typography variant="body2" color="textSecondary">
                         {charger.port2_power_kw} kW
                       </Typography>
-                      {port2BusyDurationLabel && (
-                        <Typography
-                          variant="caption"
-                          color="textSecondary"
-                          sx={{ display: 'block', mt: 0.5 }}
-                        >
-                          Busy for {port2BusyDurationLabel}
-                        </Typography>
-                      )}
                     </Box>
                   </Stack>
                 </Stack>
