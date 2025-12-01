@@ -8,12 +8,17 @@ function Copyright() {
       align="center"
       sx={{
         color: 'text.secondary',
+        marginTop: 2,
       }}
     >
       {'Copyright © '}
-      <Link color="inherit" href="https://github.com/Kotkoa">
+      <Link
+        color="inherit"
+        href="https://github.com/Kotkoa"
+        className="no-underline"
+      >
         Kotkoa
-      </Link>
+      </Link>{' '}
       {new Date().getFullYear()}.
     </Typography>
   )
