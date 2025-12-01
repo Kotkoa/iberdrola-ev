@@ -1,5 +1,5 @@
 import './App.css'
-import { useEffect, useMemo, useState } from 'react'
+
 import Typography from '@mui/material/Typography'
 import Box from '@mui/material/Box'
 import Container from '@mui/material/Container'
@@ -12,138 +12,16 @@ import AlertTitle from '@mui/material/AlertTitle'
 import DirectionsIcon from '@mui/icons-material/Directions'
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined'
 import Copyright from './components/Copyright'
-
-type ApiResponse = {
-  entidad: Array<{
-    cpId: number
-    cpStatus?: { statusCode?: string }
-    locationData: {
-      cuprName?: string
-      cuprReservationIndicator?: boolean
-      supplyPointData?: {
-        cpAddress?: {
-          streetName?: string
-          streetNum?: string
-          townName?: string
-          regionName?: string
-        }
-      }
-      level?: string
-      number?: string
-      scheduleType?: { scheduleTypeDesc?: string }
-      operator?: { operatorDesc?: string }
-    }
-    logicalSocket: Array<{
-      logicalSocketId: number
-      chargeSpeedId?: number
-      status?: { statusCode?: string }
-      physicalSocket: Array<{
-        physicalSocketId: number
-        physicalSocketCode?: string
-        maxPower?: number
-        socketType?: { socketName?: string; socketTypeId?: string }
-        appliedRate?: {
-          recharge?: { price?: number }
-        }
-      }>
-    }>
-  }>
-}
-
-const connectorIcons: Record<string, string> = {
-  '2': '/tipo-2.svg',
-}
-
-const chargeSpeedLabels: Record<number, string> = {
-  1: 'Slow',
-  2: 'Semi-fast',
-  3: 'Fast',
-  4: 'Ultra-fast',
-}
-
-const fetchStation = async (cuprId: number) => {
-  const params = new URLSearchParams({
-    cuprId: cuprId.toString(),
-    language: 'en',
-  })
-  const response = await fetch(`/.netlify/functions/fetchStation?${params.toString()}`)
-
-  if (!response.ok) {
-    throw new Error(`Request failed with status ${response.status}`)
-  }
-
-  const data = (await response.json()) as ApiResponse
-  return data.entidad?.[0]
-}
+import { useCharger } from '../hooks/useCharger'
 
 function App() {
-  const [station, setStation] = useState<ApiResponse['entidad'][number] | null>(
-    null
-  )
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const { data: charger, loading, error } = useCharger()
 
-  useEffect(() => {
-    let active = true
-    const load = async () => {
-      try {
-        setLoading(true)
-        const data = await fetchStation(144569)
-        if (active) {
-          setStation(data ?? null)
-          setError(null)
-        }
-      } catch (err) {
-        if (active) {
-          setError(err instanceof Error ? err.message : 'Unknown error')
-        }
-      } finally {
-        if (active) {
-          setLoading(false)
-        }
-      }
-    }
-    load()
-    return () => {
-      active = false
-    }
-  }, [])
-
-  const logicalSockets = useMemo(
-    () => station?.logicalSocket ?? [],
-    [station]
-  )
-  const operatorName =
-    station?.locationData.operator?.operatorDesc ?? 'Iberdrola'
-  const reservationLabel = station?.locationData.cuprReservationIndicator
-    ? 'Reservable'
-    : 'Not reservable'
-  const address = station?.locationData.supplyPointData?.cpAddress
-  const streetLine = [address?.streetName, address?.streetNum]
-    .filter(Boolean)
-    .join(' ')
-  const cityLine = [address?.townName, address?.regionName]
-    .filter(Boolean)
-    .join(', ')
-  const level = station?.locationData.level ?? '-'
-  const spot = station?.locationData.number ?? '-'
-  const schedule = station?.locationData.scheduleType?.scheduleTypeDesc
-
-  const statusSummary = useMemo(() => {
-    const summary = { available: 0, total: logicalSockets.length }
-    logicalSockets.forEach((socket) => {
-      if (socket.status?.statusCode === 'AVAILABLE') {
-        summary.available += 1
-      }
-    })
-    return summary
-  }, [logicalSockets])
-
-  const getSpeedLabel = (chargeSpeedId?: number) =>
-    (chargeSpeedId && chargeSpeedLabels[chargeSpeedId]) || 'Unknown speed'
-
-  const getRateLabel = (price?: number) =>
-    price && price > 0 ? `${price.toFixed(2)} €` : 'Free charging point'
+  const isFirstPortAvailable = charger?.port1_status === 'AVAILABLE'
+  const isSecondPortAvailable = charger?.port2_status === 'AVAILABLE'
+  const statusSummary = {
+    available: (isFirstPortAvailable ? 1 : 0) + (isSecondPortAvailable ? 1 : 0),
+  }
 
   return (
     <Container
@@ -165,19 +43,19 @@ function App() {
             {error}
           </Alert>
         )}
-        {station && (
+        {charger && (
           <>
             <Typography
               variant="h5"
               component="h1"
               sx={{ mb: 1 }}
-              color={statusSummary.available > 0 ? 'success' : 'error'}
+              color={statusSummary.available > 0 ? 'success' : 'warning'}
             >
-              Available {statusSummary.available}/{statusSummary.total}
+              Available {statusSummary.available}/2
             </Typography>
             <Stack direction="row" gap={2}>
               <Chip
-                label={operatorName}
+                label="Iberdrola"
                 color="default"
                 variant="outlined"
                 size="small"
@@ -196,7 +74,7 @@ function App() {
                 }
               />
               <Chip
-                label={reservationLabel}
+                label="Not reservable"
                 color="default"
                 variant="outlined"
                 size="small"
@@ -204,14 +82,13 @@ function App() {
               />
             </Stack>
             <Typography variant="caption" color="textSecondary" sx={{ mt: 1 }}>
-              {cityLine || 'Unknown location'}
+              PEGO, ALICANTE
             </Typography>
             <Typography variant="body1" color="textPrimary" fontWeight={600}>
-              {station.locationData.cuprName || streetLine || 'Unnamed point'}
+              {charger.cp_name}
             </Typography>
             <Typography variant="caption" color="textSecondary">
-              Level: {level} / Spot: {spot}
-              {schedule ? ` · ${schedule}` : ''}
+              Level: 0 / Spot: 1 / {charger.schedule}
             </Typography>
             <Stack>
               <Chip
@@ -246,11 +123,11 @@ function App() {
                 </Typography>
               </Stack>
               <Typography variant="caption" color="textSecondary">
-                ID. {station.cpId}
+                ID. {charger.cp_id}
               </Typography>
             </Stack>
             <Stack direction="row" spacing={2} sx={{ mt: 3 }}>
-              {logicalSockets.map((socket, idx) => {
+              {[1, 2].map((socket, idx) => {
                 const physical = socket.physicalSocket[0]
                 const iconSrc =
                   (physical?.socketType?.socketTypeId &&
@@ -282,10 +159,10 @@ function App() {
                         variant="subtitle2"
                         sx={{ lineHeight: 1.2, fontWeight: 600 }}
                       >
-                        {getSpeedLabel(socket.chargeSpeedId)}
+                        Type 2
                       </Typography>
                       <Typography variant="caption" sx={{ lineHeight: 1.2 }}>
-                        {getRateLabel(physical?.appliedRate?.recharge?.price)}
+                        {charger.port2_power_kw} kW
                       </Typography>
                     </Box>
                     <Stack direction="row" alignItems="center" height="100%">
@@ -338,7 +215,7 @@ function App() {
             </Stack>
           </>
         )}
-        {!loading && !station && !error && (
+        {!loading && !charger && !error && (
           <Typography variant="body2" color="textSecondary">
             No data available.
           </Typography>
