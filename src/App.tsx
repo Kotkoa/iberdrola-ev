@@ -14,14 +14,57 @@ import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined'
 import Copyright from './components/Copyright'
 import { useCharger } from '../hooks/useCharger'
 
+const formatDuration = (durationMinutes: number | null) => {
+  if (durationMinutes === null) {
+    return null
+  }
+
+  if (durationMinutes < 1) {
+    return '< 1 min'
+  }
+
+  const hours = Math.floor(durationMinutes / 60)
+  const minutes = durationMinutes % 60
+
+  if (hours > 0) {
+    return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`
+  }
+
+  return `${minutes}m`
+}
+
 function App() {
   const { data: charger, loading, error } = useCharger()
 
+  const now = new Date()
+
+  const port1Update = charger?.port1_update_date
+    ? new Date(charger.port1_update_date)
+    : null
+  const port2Update = charger?.port2_update_date
+    ? new Date(charger.port2_update_date)
+    : null
+
+  const port1DurationMinutes = port1Update
+    ? Math.floor((now.getTime() - port1Update.getTime()) / 60000)
+    : null
+
+  const port2DurationMinutes = port2Update
+    ? Math.floor((now.getTime() - port2Update.getTime()) / 60000)
+    : null
+
+  
   const isFirstPortAvailable = charger?.port1_status === 'AVAILABLE'
   const isSecondPortAvailable = charger?.port2_status === 'AVAILABLE'
   const statusSummary = {
     available: (isFirstPortAvailable ? 1 : 0) + (isSecondPortAvailable ? 1 : 0),
   }
+  const port1BusyDurationLabel = !isFirstPortAvailable
+    ? formatDuration(port1DurationMinutes)
+    : null
+  const port2BusyDurationLabel = !isSecondPortAvailable
+    ? formatDuration(port2DurationMinutes)
+    : null
 
   return (
     <Container
@@ -196,6 +239,15 @@ function App() {
                       <Typography variant="body2" color="textSecondary">
                         {charger.port1_power_kw} kW
                       </Typography>
+                      {port1BusyDurationLabel && (
+                        <Typography
+                          variant="caption"
+                          color="textSecondary"
+                          sx={{ display: 'block', mt: 0.5 }}
+                        >
+                          Busy for {port1BusyDurationLabel}
+                        </Typography>
+                      )}
                     </Box>
                   </Stack>
                 </Stack>
@@ -269,6 +321,15 @@ function App() {
                       <Typography variant="body2" color="textSecondary">
                         {charger.port2_power_kw} kW
                       </Typography>
+                      {port2BusyDurationLabel && (
+                        <Typography
+                          variant="caption"
+                          color="textSecondary"
+                          sx={{ display: 'block', mt: 0.5 }}
+                        >
+                          Busy for {port2BusyDurationLabel}
+                        </Typography>
+                      )}
                     </Box>
                   </Stack>
                 </Stack>
