@@ -26,7 +26,7 @@ function App() {
   return (
     <Container
       maxWidth="sm"
-      className="border border-gray-200 rounded-xl shadow-md"
+      className="border border-gray-200 rounded-xl shadow-md bg-white"
     >
       <Box sx={{ m: 4, textAlign: 'start', width: '400px' }}>
         {loading && (
