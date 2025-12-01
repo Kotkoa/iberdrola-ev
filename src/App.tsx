@@ -127,91 +127,152 @@ function App() {
               </Typography>
             </Stack>
             <Stack direction="row" spacing={2} sx={{ mt: 3 }}>
-              {[1, 2].map((socket, idx) => {
-                const physical = socket.physicalSocket[0]
-                const iconSrc =
-                  (physical?.socketType?.socketTypeId &&
-                    connectorIcons[physical.socketType.socketTypeId]) ||
-                  null
-                return (
+              <Box
+                sx={{
+                  border: 2,
+                  borderColor: isFirstPortAvailable
+                    ? 'success.main'
+                    : 'primary.main',
+                  borderRadius: 2,
+                  height: 140,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  overflow: 'hidden',
+                  flex: 1,
+                }}
+              >
+                <Box
+                  sx={{
+                    bgcolor: isFirstPortAvailable
+                      ? 'success.main'
+                      : 'primary.main',
+                    color: 'primary.contrastText',
+                    px: 2,
+                    py: 0.5,
+                  }}
+                >
+                  <Typography
+                    variant="subtitle2"
+                    sx={{ lineHeight: 1.2, fontWeight: 600 }}
+                  >
+                    Semi-fast
+                  </Typography>
+                  <Typography variant="caption" sx={{ lineHeight: 1.2 }}>
+                    Free charging point
+                  </Typography>
+                </Box>
+                <Stack direction="row" alignItems="center" height="100%">
                   <Box
-                    key={socket.logicalSocketId}
                     sx={{
-                      border: 2,
-                      borderColor: 'primary.main',
-                      borderRadius: 2,
-                      height: 140,
+                      width: 25,
+                      height: 25,
+                      borderRadius: '50%',
+                      bgcolor: 'grey.200',
                       display: 'flex',
-                      flexDirection: 'column',
-                      overflow: 'hidden',
-                      flex: 1,
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      mx: 2,
                     }}
                   >
+                    <Typography variant="subtitle2" fontWeight={600}>
+                      1
+                    </Typography>
+                  </Box>
+                  <Stack
+                    direction="row"
+                    alignItems="center"
+                    sx={{ mr: 2, ml: 'auto', textAlign: 'right' }}
+                  >
                     <Box
-                      sx={{
-                        bgcolor: 'primary.main',
-                        color: 'primary.contrastText',
-                        px: 2,
-                        py: 0.5,
-                      }}
-                    >
-                      <Typography
-                        variant="subtitle2"
-                        sx={{ lineHeight: 1.2, fontWeight: 600 }}
-                      >
+                      component="img"
+                      src="/tipo-2.svg"
+                      alt="Connector 1"
+                      sx={{ width: 32, height: 32, mr: 1 }}
+                    />
+                    <Box>
+                      <Typography variant="body2" color="textSecondary">
                         Type 2
                       </Typography>
-                      <Typography variant="caption" sx={{ lineHeight: 1.2 }}>
+                      <Typography variant="body2" color="textSecondary">
+                        {charger.port1_power_kw} kW
+                      </Typography>
+                    </Box>
+                  </Stack>
+                </Stack>
+              </Box>
+              <Box
+                sx={{
+                  border: 2,
+                  borderColor: isSecondPortAvailable
+                    ? 'success.main'
+                    : 'primary.main',
+                  borderRadius: 2,
+                  height: 140,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  overflow: 'hidden',
+                  flex: 1,
+                }}
+              >
+                <Box
+                  sx={{
+                    bgcolor: isSecondPortAvailable
+                      ? 'success.main'
+                      : 'primary.main',
+                    color: 'primary.contrastText',
+                    px: 2,
+                    py: 0.5,
+                  }}
+                >
+                  <Typography
+                    variant="subtitle2"
+                    sx={{ lineHeight: 1.2, fontWeight: 600 }}
+                  >
+                    Semi-fast
+                  </Typography>
+                  <Typography variant="caption" sx={{ lineHeight: 1.2 }}>
+                    Free charging point
+                  </Typography>
+                </Box>
+                <Stack direction="row" alignItems="center" height="100%">
+                  <Box
+                    sx={{
+                      width: 25,
+                      height: 25,
+                      borderRadius: '50%',
+                      bgcolor: 'grey.200',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      mx: 2,
+                    }}
+                  >
+                    <Typography variant="subtitle2" fontWeight={600}>
+                      1
+                    </Typography>
+                  </Box>
+                  <Stack
+                    direction="row"
+                    alignItems="center"
+                    sx={{ mr: 2, ml: 'auto', textAlign: 'right' }}
+                  >
+                    <Box
+                      component="img"
+                      src="/tipo-2.svg"
+                      alt="Connector 1"
+                      sx={{ width: 32, height: 32, mr: 1 }}
+                    />
+                    <Box>
+                      <Typography variant="body2" color="textSecondary">
+                        Type 2
+                      </Typography>
+                      <Typography variant="body2" color="textSecondary">
                         {charger.port2_power_kw} kW
                       </Typography>
                     </Box>
-                    <Stack direction="row" alignItems="center" height="100%">
-                      <Box
-                        sx={{
-                          width: 25,
-                          height: 25,
-                          borderRadius: '50%',
-                          bgcolor: 'grey.200',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          mx: 2,
-                        }}
-                      >
-                        <Typography variant="subtitle2" fontWeight={600}>
-                          {physical?.physicalSocketCode ?? idx + 1}
-                        </Typography>
-                      </Box>
-                      <Stack
-                        direction="row"
-                        alignItems="center"
-                        sx={{ mr: 2, ml: 'auto', textAlign: 'right' }}
-                      >
-                        {iconSrc && (
-                          <Box
-                            component="img"
-                            src={iconSrc}
-                            alt={
-                              physical?.socketType?.socketName ?? 'Connector'
-                            }
-                            sx={{ width: 32, height: 32, mr: 1 }}
-                          />
-                        )}
-                        <Box>
-                          <Typography variant="body2" color="textSecondary">
-                            {physical?.socketType?.socketName ?? 'Unknown type'}
-                          </Typography>
-                          <Typography variant="body2" color="textSecondary">
-                            {physical?.maxPower
-                              ? `${physical.maxPower} kW`
-                              : 'Power n/a'}
-                          </Typography>
-                        </Box>
-                      </Stack>
-                    </Stack>
-                  </Box>
-                )
-              })}
+                  </Stack>
+                </Stack>
+              </Box>
             </Stack>
           </>
         )}
