@@ -60,6 +60,17 @@ The `ChargerStatus` type includes:
 - Two ports with individual status, power ratings, and update timestamps
 - Overall status tracking
 
+## Backend: Iberdrola Scraper
+
+Short summary
+
+`iberdrola-scraper` is a lightweight Node.js script that automates collection of charging-point data from Iberdrola's public site using Playwright and stores results in Supabase. It captures the raw JSON responses and inserts parsed, normalized fields for the frontend.
+
+Essentials (what the scraper does)
+
+- Launches Chromium via Playwright and loads the public charging page.
+- Saves the full JSON response into `charge_logs` and inserts normalized rows into `charge_logs_parsed` for the app to consume.
+
 ## How It Works
 
 ### 1. Data Fetching
