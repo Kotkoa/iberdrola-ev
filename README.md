@@ -77,21 +77,11 @@ Essentials (what the scraper does)
 
 The application uses the `useCharger` hook to fetch the latest charging station data from Supabase on component mount:
 
-```typescript
-const { data: charger, loading, error } = useCharger()
-```
-
 The hook queries the `charge_logs_parsed` table, retrieving the most recent record sorted by creation date.
 
 ### 2. Real-Time Duration Calculation
 
 The app maintains a local timer that updates every minute to calculate how long each port has been busy:
-
-```typescript
-const port1DurationMinutes = port1Update
-  ? Math.floor((now.getTime() - port1Update.getTime()) / 60000)
-  : null
-```
 
 ### 3. Status Visualization
 
@@ -105,12 +95,6 @@ Each of the two charging ports is displayed in a dedicated card showing:
 ### 4. Smart Status Summary
 
 The application calculates a summary showing how many ports are available out of two:
-
-```typescript
-const statusSummary = {
-  available: (isFirstPortAvailable ? 1 : 0) + (isSecondPortAvailable ? 1 : 0),
-}
-```
 
 ### 5. User Interface Features
 
