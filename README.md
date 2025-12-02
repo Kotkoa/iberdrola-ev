@@ -2,7 +2,7 @@
 
 Real-time monitoring dashboard for Iberdrola electric vehicle charging stations, displaying live availability status, connector types, and charging duration.
 
-![Main Dashboard](./screenshot.png)
+<img width="1480" height="652" alt="Screenshot" src="https://github.com/user-attachments/assets/0f67510d-cd41-47a2-b80f-94003f53f3e6" />
 
 ## Overview
 
