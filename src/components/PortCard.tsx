@@ -18,14 +18,14 @@ export function PortCard({
   return (
     <Box
       sx={{
-        border: 2,
+        border: 1,
         borderColor: isAvailable ? 'success.main' : 'warning.main',
         borderRadius: 2,
-        height: 140,
+        height: 100,
         display: 'flex',
         flexDirection: 'column',
         overflow: 'hidden',
-        flex: 1,
+        width: 'fit-content',
       }}
     >
       <Box
@@ -36,13 +36,10 @@ export function PortCard({
           py: 0.5,
         }}
       >
-        <Typography
-          variant="subtitle2"
-          sx={{ lineHeight: 1.2, fontWeight: 600 }}
-        >
+        <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
           Semi-fast
         </Typography>
-        <Typography variant="caption" sx={{ lineHeight: 1.2 }}>
+        <Typography variant="caption">
           {busyDuration ? `Busy for ${busyDuration}` : 'Free charging point'}
         </Typography>
       </Box>
