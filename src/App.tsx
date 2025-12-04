@@ -109,26 +109,40 @@ function App() {
     <Container
       maxWidth="sm"
       className="border border-gray-200 rounded-xl shadow-md bg-white py-4"
+      sx={{
+        px: { xs: 2, sm: 3 },
+        maxWidth: { xs: '100vw', sm: '600px' },
+        width: '100%',
+      }}
     >
       <Box
-        sx={{ з: 4, textAlign: 'start', width: { xs: '100%', sm: '400px' } }}
+        sx={{
+          textAlign: 'start',
+          width: '100%',
+          maxWidth: { xs: '100%', sm: '400px' },
+        }}
       >
         <Typography
           variant="h5"
           component="h1"
-          sx={{ mb: 1, fontSize: { xs: '1.25rem', sm: '1.5rem' } }}
+          sx={{ mb: 1, fontSize: { xs: '1.1rem', sm: '1.5rem' } }}
           color={availableCount > 0 ? 'success' : 'warning'}
         >
           Available {availableCount}/2
         </Typography>
 
-        <Stack direction="row" gap={1} sx={{ mb: 2, flexWrap: 'wrap' }}>
+        <Stack direction="row" gap={0.5} sx={{ mb: 1.5, flexWrap: 'wrap' }}>
           <Chip
             label="Iberdrola"
             color="default"
             variant="outlined"
             size="small"
-            sx={{ borderRadius: '4px', flexDirection: 'row-reverse', pr: 0.5 }}
+            sx={{
+              borderRadius: '4px',
+              flexDirection: 'row-reverse',
+              pr: 0.5,
+              fontSize: { xs: '0.7rem', sm: '0.813rem' },
+            }}
             avatar={
               <Avatar
                 src="/iberdrola-logo.webp"
@@ -143,14 +157,17 @@ function App() {
             color="default"
             variant="outlined"
             size="small"
-            sx={{ borderRadius: '4px' }}
+            sx={{
+              borderRadius: '4px',
+              fontSize: { xs: '0.7rem', sm: '0.813rem' },
+            }}
           />
         </Stack>
 
         <Typography
           variant="caption"
           color="textSecondary"
-          sx={{ mt: 1, fontSize: { xs: '0.7rem', sm: '0.75rem' } }}
+          sx={{ mt: 0.5, fontSize: { xs: '0.65rem', sm: '0.75rem' } }}
         >
           PEGO, ALICANTE
         </Typography>
@@ -158,19 +175,19 @@ function App() {
           variant="body1"
           color="textPrimary"
           fontWeight={600}
-          sx={{ fontSize: { xs: '0.95rem', sm: '1rem' } }}
+          sx={{ fontSize: { xs: '0.9rem', sm: '1rem' } }}
         >
           {charger.cp_name}
         </Typography>
         <Typography
           variant="caption"
           color="textSecondary"
-          sx={{ fontSize: { xs: '0.7rem', sm: '0.75rem' } }}
+          sx={{ fontSize: { xs: '0.65rem', sm: '0.75rem' } }}
         >
           Level: 0 / Spot: 1 / {charger.schedule}
         </Typography>
 
-        <Stack sx={{ mt: 2, mb: 4 }}>
+        <Stack sx={{ mt: 1.5, mb: 2 }}>
           <Chip
             label="Show on map"
             color="success"
@@ -195,12 +212,12 @@ function App() {
             border: '1px solid #ccc',
             borderRadius: '4px',
             p: { xs: 1, sm: 2 },
-            mb: 3,
+            mb: 2,
             gap: 1,
             flexWrap: 'wrap',
           }}
         >
-          <Stack direction="row" alignItems="center" spacing={0.5}>
+          <Stack direction="row" alignItems="center" spacing={0.5} width="100%">
             <InfoOutlinedIcon
               fontSize="small"
               sx={{ width: { xs: 16, sm: 20 }, height: { xs: 16, sm: 20 } }}
@@ -208,7 +225,7 @@ function App() {
             <Typography
               variant="body2"
               color="textPrimary"
-              sx={{ fontSize: { xs: '0.75rem', sm: '0.875rem' } }}
+              sx={{ fontSize: { xs: '0.7rem', sm: '0.875rem' } }}
             >
               Charging point with limited power
             </Typography>
@@ -216,17 +233,13 @@ function App() {
           <Typography
             variant="caption"
             color="textSecondary"
-            sx={{ fontSize: { xs: '0.65rem', sm: '0.75rem' } }}
+            sx={{ fontSize: { xs: '0.6rem', sm: '0.75rem' } }}
           >
             ID. {charger.cp_id}
           </Typography>
         </Stack>
 
-        <Stack
-          direction={{ xs: 'column', sm: 'row' }}
-          spacing={1}
-          sx={{ mb: 2 }}
-        >
+        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
           <PortCard
             portNumber={1}
             isAvailable={isFirstPortAvailable}
