@@ -1,5 +1,8 @@
 import { useEffect, useState } from 'react'
-import { getLatestChargerStatus } from '../api/charger'
+import {
+  getLatestChargerStatus,
+  subscribeToLatestCharger,
+} from '../api/charger'
 import type { ChargerStatus } from '../types/charger'
 
 export function useCharger() {
@@ -9,6 +12,7 @@ export function useCharger() {
 
   useEffect(() => {
     let active = true
+    let unsubscribe: (() => void) | null = null
 
     const load = async () => {
       try {
@@ -17,6 +21,12 @@ export function useCharger() {
         if (active) {
           setData(rows?.[0] ?? null)
         }
+
+        unsubscribe = subscribeToLatestCharger((newCharger) => {
+          if (active) {
+            setData(newCharger)
+          }
+        })
       } catch (e) {
         if (active) {
           setError(e instanceof Error ? e.message : 'Unknown error')
@@ -32,6 +42,7 @@ export function useCharger() {
 
     return () => {
       active = false
+      unsubscribe?.()
     }
   }, [])
 
