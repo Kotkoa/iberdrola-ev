@@ -13,326 +13,242 @@ import AlertTitle from '@mui/material/AlertTitle'
 import DirectionsIcon from '@mui/icons-material/Directions'
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined'
 import Copyright from './components/Copyright'
+import { PortCard } from './components/PortCard'
 import { useCharger } from '../hooks/useCharger'
 
 const formatDuration = (durationMinutes: number | null) => {
-  if (durationMinutes === null) {
-    return null
-  }
-
-  if (durationMinutes < 1) {
-    return '< 1 min'
-  }
+  if (durationMinutes === null) return null
+  if (durationMinutes < 1) return '< 1 min'
 
   const hours = Math.floor(durationMinutes / 60)
   const minutes = durationMinutes % 60
 
-  if (hours > 0) {
-    return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`
-  }
-
-  return `${minutes}m`
+  return hours > 0
+    ? `${hours}h${minutes > 0 ? ` ${minutes}m` : ''}`
+    : `${minutes}m`
 }
 
 function App() {
   const { data: charger, loading, error } = useCharger()
   const [now, setNow] = useState(() => new Date())
+
   useEffect(() => {
     const intervalId = setInterval(() => setNow(new Date()), 60000)
-    return () => {
-      clearInterval(intervalId)
-    }
+    return () => clearInterval(intervalId)
   }, [])
 
-  const port1Update = charger?.port1_update_date
-    ? new Date(charger.port1_update_date)
-    : null
-  const port2Update = charger?.port2_update_date
-    ? new Date(charger.port2_update_date)
-    : null
-
-  const port1DurationMinutes = port1Update
-    ? Math.floor((now.getTime() - port1Update.getTime()) / 60000)
-    : null
-
-  const port2DurationMinutes = port2Update
-    ? Math.floor((now.getTime() - port2Update.getTime()) / 60000)
-    : null
-
-  const isFirstPortAvailable = charger?.port1_status === 'AVAILABLE'
-  const isSecondPortAvailable = charger?.port2_status === 'AVAILABLE'
-  const statusSummary = {
-    available: (isFirstPortAvailable ? 1 : 0) + (isSecondPortAvailable ? 1 : 0),
-  }
-  const port1BusyDurationLabel = !isFirstPortAvailable
-    ? formatDuration(port1DurationMinutes)
-    : null
-  const port2BusyDurationLabel = !isSecondPortAvailable
-    ? formatDuration(port2DurationMinutes)
-    : null
-
-  return (
-    <Container
-      maxWidth="sm"
-      className="border border-gray-200 rounded-xl shadow-md bg-white"
-    >
-      <Box sx={{ m: 4, textAlign: 'start', width: '400px' }}>
-        {loading && (
+  if (loading) {
+    return (
+      <Container
+        maxWidth="sm"
+        className="border border-gray-200 rounded-xl shadow-md bg-white"
+      >
+        <Box sx={{ m: 4 }}>
           <Stack alignItems="center" spacing={1} sx={{ my: 4 }}>
             <CircularProgress size={28} />
             <Typography variant="body2" color="textSecondary">
               Loading charging point...
             </Typography>
           </Stack>
-        )}
-        {error && (
+        </Box>
+      </Container>
+    )
+  }
+
+  if (error) {
+    return (
+      <Container
+        maxWidth="sm"
+        className="border border-gray-200 rounded-xl shadow-md bg-white"
+      >
+        <Box sx={{ m: 4 }}>
           <Alert severity="error" sx={{ mb: 2 }}>
             <AlertTitle>Failed to load data</AlertTitle>
             {error}
           </Alert>
-        )}
-        {charger && (
-          <>
-            <Typography
-              variant="h5"
-              component="h1"
-              sx={{ mb: 1 }}
-              color={statusSummary.available > 0 ? 'success' : 'warning'}
-            >
-              Available {statusSummary.available}/2
-            </Typography>
-            <Stack direction="row" gap={2}>
-              <Chip
-                label="Iberdrola"
-                color="default"
-                variant="outlined"
-                size="small"
-                sx={{
-                  borderRadius: '4px',
-                  flexDirection: 'row-reverse',
-                  pr: 1,
-                }}
-                avatar={
-                  <Avatar
-                    src="/iberdrola-logo.webp"
-                    alt="Iberdrola"
-                    sx={{ width: 18, height: 18 }}
-                    slotProps={{ img: { loading: 'lazy' } }}
-                  />
-                }
-              />
-              <Chip
-                label="Not reservable"
-                color="default"
-                variant="outlined"
-                size="small"
-                sx={{ borderRadius: '4px' }}
-              />
-            </Stack>
-            <Typography variant="caption" color="textSecondary" sx={{ mt: 1 }}>
-              PEGO, ALICANTE
-            </Typography>
-            <Typography variant="body1" color="textPrimary" fontWeight={600}>
-              {charger.cp_name}
-            </Typography>
-            <Typography variant="caption" color="textSecondary">
-              Level: 0 / Spot: 1 / {charger.schedule}
-            </Typography>
-            <Stack>
-              <Chip
-                label="Show on map"
-                color="success"
-                variant="outlined"
-                size="small"
-                sx={{
-                  borderRadius: '4px',
-                  flexDirection: 'row-reverse',
-                  pr: 1,
-                  ml: 'auto',
-                }}
-                icon={<DirectionsIcon fontSize="small" />}
-              />
-            </Stack>
-            <Stack
-              direction="row"
-              alignItems="center"
-              justifyContent="space-between"
-              sx={{
-                mt: 4,
-                border: '1px solid #ccc',
-                borderRadius: '4px',
-                p: 2,
-              }}
-            >
-              <Stack direction="row" alignItems="center" spacing={1}>
-                <InfoOutlinedIcon fontSize="small" />
-                <Typography variant="body2" color="textPrimary">
-                  Charging point with limited power
-                </Typography>
-              </Stack>
-              <Typography variant="caption" color="textSecondary">
-                ID. {charger.cp_id}
-              </Typography>
-            </Stack>
-            <Stack direction="row" spacing={2} sx={{ mt: 3 }}>
-              <Box
-                sx={{
-                  border: 2,
-                  borderColor: isFirstPortAvailable
-                    ? 'success.main'
-                    : 'warning.main',
-                  borderRadius: 2,
-                  height: 140,
-                  display: 'flex',
-                  flexDirection: 'column',
-                  overflow: 'hidden',
-                  flex: 1,
-                }}
-              >
-                <Box
-                  sx={{
-                    bgcolor: isFirstPortAvailable
-                      ? 'success.main'
-                      : 'warning.main',
-                    color: 'primary.contrastText',
-                    px: 2,
-                    py: 0.5,
-                  }}
-                >
-                  <Typography
-                    variant="subtitle2"
-                    sx={{ lineHeight: 1.2, fontWeight: 600 }}
-                  >
-                    Semi-fast
-                  </Typography>
-                  <Typography variant="caption" sx={{ lineHeight: 1.2 }}>
-                    {port1BusyDurationLabel
-                      ? `Busy for ${port1BusyDurationLabel}`
-                      : 'Free charging point'}
-                  </Typography>
-                </Box>
-                <Stack direction="row" alignItems="center" height="100%">
-                  <Box
-                    sx={{
-                      width: 25,
-                      height: 25,
-                      borderRadius: '50%',
-                      bgcolor: 'grey.200',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      mx: 2,
-                    }}
-                  >
-                    <Typography variant="subtitle2" fontWeight={600}>
-                      1
-                    </Typography>
-                  </Box>
-                  <Stack
-                    direction="row"
-                    alignItems="center"
-                    sx={{ mr: 2, ml: 'auto', textAlign: 'right' }}
-                  >
-                    <Box
-                      component="img"
-                      src="/tipo-2.svg"
-                      alt="Connector 1"
-                      sx={{ width: 32, height: 32, mr: 1 }}
-                    />
-                    <Box>
-                      <Typography variant="body2" color="textSecondary">
-                        Type 2
-                      </Typography>
-                      <Typography variant="body2" color="textSecondary">
-                        {charger.port1_power_kw} kW
-                      </Typography>
-                    </Box>
-                  </Stack>
-                </Stack>
-              </Box>
-              <Box
-                sx={{
-                  border: 2,
-                  borderColor: isSecondPortAvailable
-                    ? 'success.main'
-                    : 'warning.main',
-                  borderRadius: 2,
-                  height: 140,
-                  display: 'flex',
-                  flexDirection: 'column',
-                  overflow: 'hidden',
-                  flex: 1,
-                }}
-              >
-                <Box
-                  sx={{
-                    bgcolor: isSecondPortAvailable
-                      ? 'success.main'
-                      : 'warning.main',
-                    color: 'primary.contrastText',
-                    px: 2,
-                    py: 0.5,
-                  }}
-                >
-                  <Typography
-                    variant="subtitle2"
-                    sx={{ lineHeight: 1.2, fontWeight: 600 }}
-                  >
-                    Semi-fast
-                  </Typography>
-                  <Typography variant="caption" sx={{ lineHeight: 1.2 }}>
-                    {port2BusyDurationLabel
-                      ? `Busy for ${port2BusyDurationLabel}`
-                      : 'Free charging point'}
-                  </Typography>
-                </Box>
-                <Stack direction="row" alignItems="center" height="100%">
-                  <Box
-                    sx={{
-                      width: 25,
-                      height: 25,
-                      borderRadius: '50%',
-                      bgcolor: 'grey.200',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      mx: 2,
-                    }}
-                  >
-                    <Typography variant="subtitle2" fontWeight={600}>
-                      1
-                    </Typography>
-                  </Box>
-                  <Stack
-                    direction="row"
-                    alignItems="center"
-                    sx={{ mr: 2, ml: 'auto', textAlign: 'right' }}
-                  >
-                    <Box
-                      component="img"
-                      src="/tipo-2.svg"
-                      alt="Connector 1"
-                      sx={{ width: 32, height: 32, mr: 1 }}
-                    />
-                    <Box>
-                      <Typography variant="body2" color="textSecondary">
-                        Type 2
-                      </Typography>
-                      <Typography variant="body2" color="textSecondary">
-                        {charger.port2_power_kw} kW
-                      </Typography>
-                    </Box>
-                  </Stack>
-                </Stack>
-              </Box>
-            </Stack>
-          </>
-        )}
-        {!loading && !charger && !error && (
+        </Box>
+      </Container>
+    )
+  }
+
+  if (!charger) {
+    return (
+      <Container
+        maxWidth="sm"
+        className="border border-gray-200 rounded-xl shadow-md bg-white"
+      >
+        <Box sx={{ m: 4 }}>
           <Typography variant="body2" color="textSecondary">
             No data available.
           </Typography>
-        )}
+        </Box>
+      </Container>
+    )
+  }
+
+  const port1Update = charger.port1_update_date
+    ? new Date(charger.port1_update_date)
+    : null
+  const port2Update = charger.port2_update_date
+    ? new Date(charger.port2_update_date)
+    : null
+
+  const port1DurationMinutes = port1Update
+    ? Math.floor((now.getTime() - port1Update.getTime()) / 60000)
+    : null
+  const port2DurationMinutes = port2Update
+    ? Math.floor((now.getTime() - port2Update.getTime()) / 60000)
+    : null
+
+  const isFirstPortAvailable = charger.port1_status === 'AVAILABLE'
+  const isSecondPortAvailable = charger.port2_status === 'AVAILABLE'
+  const availableCount =
+    (isFirstPortAvailable ? 1 : 0) + (isSecondPortAvailable ? 1 : 0)
+
+  return (
+    <Container
+      maxWidth="sm"
+      className="border border-gray-200 rounded-xl shadow-md bg-white py-4"
+    >
+      <Box
+        sx={{ з: 4, textAlign: 'start', width: { xs: '100%', sm: '400px' } }}
+      >
+        <Typography
+          variant="h5"
+          component="h1"
+          sx={{ mb: 1, fontSize: { xs: '1.25rem', sm: '1.5rem' } }}
+          color={availableCount > 0 ? 'success' : 'warning'}
+        >
+          Available {availableCount}/2
+        </Typography>
+
+        <Stack direction="row" gap={1} sx={{ mb: 2, flexWrap: 'wrap' }}>
+          <Chip
+            label="Iberdrola"
+            color="default"
+            variant="outlined"
+            size="small"
+            sx={{ borderRadius: '4px', flexDirection: 'row-reverse', pr: 0.5 }}
+            avatar={
+              <Avatar
+                src="/iberdrola-logo.webp"
+                alt="Iberdrola"
+                sx={{ width: 16, height: 16 }}
+                slotProps={{ img: { loading: 'lazy' } }}
+              />
+            }
+          />
+          <Chip
+            label="Not reservable"
+            color="default"
+            variant="outlined"
+            size="small"
+            sx={{ borderRadius: '4px' }}
+          />
+        </Stack>
+
+        <Typography
+          variant="caption"
+          color="textSecondary"
+          sx={{ mt: 1, fontSize: { xs: '0.7rem', sm: '0.75rem' } }}
+        >
+          PEGO, ALICANTE
+        </Typography>
+        <Typography
+          variant="body1"
+          color="textPrimary"
+          fontWeight={600}
+          sx={{ fontSize: { xs: '0.95rem', sm: '1rem' } }}
+        >
+          {charger.cp_name}
+        </Typography>
+        <Typography
+          variant="caption"
+          color="textSecondary"
+          sx={{ fontSize: { xs: '0.7rem', sm: '0.75rem' } }}
+        >
+          Level: 0 / Spot: 1 / {charger.schedule}
+        </Typography>
+
+        <Stack sx={{ mt: 2, mb: 4 }}>
+          <Chip
+            label="Show on map"
+            color="success"
+            variant="outlined"
+            size="small"
+            sx={{
+              borderRadius: '4px',
+              flexDirection: 'row-reverse',
+              pr: 0.5,
+              ml: 'auto',
+              fontSize: { xs: '0.7rem', sm: '0.875rem' },
+            }}
+            icon={<DirectionsIcon fontSize="small" />}
+          />
+        </Stack>
+
+        <Stack
+          direction="row"
+          alignItems="center"
+          justifyContent="space-between"
+          sx={{
+            border: '1px solid #ccc',
+            borderRadius: '4px',
+            p: { xs: 1, sm: 2 },
+            mb: 3,
+            gap: 1,
+            flexWrap: 'wrap',
+          }}
+        >
+          <Stack direction="row" alignItems="center" spacing={0.5}>
+            <InfoOutlinedIcon
+              fontSize="small"
+              sx={{ width: { xs: 16, sm: 20 }, height: { xs: 16, sm: 20 } }}
+            />
+            <Typography
+              variant="body2"
+              color="textPrimary"
+              sx={{ fontSize: { xs: '0.75rem', sm: '0.875rem' } }}
+            >
+              Charging point with limited power
+            </Typography>
+          </Stack>
+          <Typography
+            variant="caption"
+            color="textSecondary"
+            sx={{ fontSize: { xs: '0.65rem', sm: '0.75rem' } }}
+          >
+            ID. {charger.cp_id}
+          </Typography>
+        </Stack>
+
+        <Stack
+          direction={{ xs: 'column', sm: 'row' }}
+          spacing={1}
+          sx={{ mb: 2 }}
+        >
+          <PortCard
+            portNumber={1}
+            isAvailable={isFirstPortAvailable}
+            busyDuration={
+              !isFirstPortAvailable
+                ? formatDuration(port1DurationMinutes)
+                : null
+            }
+            powerKw={charger.port1_power_kw}
+          />
+          <PortCard
+            portNumber={2}
+            isAvailable={isSecondPortAvailable}
+            busyDuration={
+              !isSecondPortAvailable
+                ? formatDuration(port2DurationMinutes)
+                : null
+            }
+            powerKw={charger.port2_power_kw}
+          />
+        </Stack>
+
         <Copyright />
       </Box>
     </Container>
