@@ -16,10 +16,7 @@ import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined'
 import Copyright from './components/Copyright'
 import { PortCard } from './components/PortCard'
 import { useCharger } from '../hooks/useCharger'
-import {
-  isPushSupported,
-  subscribeToStationNotifications,
-} from './pwa'
+import { isPushSupported, subscribeToStationNotifications } from './pwa'
 
 const formatDuration = (durationMinutes: number | null) => {
   if (durationMinutes === null) return null
@@ -317,8 +314,8 @@ function App() {
                 state === 'success'
                   ? 'Notifications enabled'
                   : state === 'error'
-                    ? 'Error enabling notifications'
-                    : 'Notify me when free'
+                  ? 'Error enabling notifications'
+                  : 'Notify me when free'
 
               return (
                 <Box
@@ -341,9 +338,15 @@ function App() {
                     variant="contained"
                     color="success"
                     disabled={
-                      !pushAvailable || state === 'loading' || state === 'success'
+                      !pushAvailable ||
+                      state === 'loading' ||
+                      state === 'success'
                     }
                     onClick={() => handleSubscribeClick(portNumber)}
+                    sx={{
+                      textTransform: 'none',
+                      fontSize: { xs: '0.75rem', sm: '0.875rem' },
+                    }}
                   >
                     {state === 'loading' ? 'Subscribing...' : buttonLabel}
                   </Button>
@@ -360,7 +363,7 @@ function App() {
                   )}
                 </Box>
               )
-            },
+            }
           )}
         </Stack>
 
