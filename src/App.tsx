@@ -7,6 +7,7 @@ import Container from '@mui/material/Container'
 import Stack from '@mui/material/Stack'
 import Chip from '@mui/material/Chip'
 import Avatar from '@mui/material/Avatar'
+import Button from '@mui/material/Button'
 import CircularProgress from '@mui/material/CircularProgress'
 import Alert from '@mui/material/Alert'
 import AlertTitle from '@mui/material/AlertTitle'
@@ -15,6 +16,10 @@ import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined'
 import Copyright from './components/Copyright'
 import { PortCard } from './components/PortCard'
 import { useCharger } from '../hooks/useCharger'
+import {
+  isPushSupported,
+  subscribeToStationNotifications,
+} from './pwa'
 
 const formatDuration = (durationMinutes: number | null) => {
   if (durationMinutes === null) return null
@@ -31,11 +36,35 @@ const formatDuration = (durationMinutes: number | null) => {
 function App() {
   const { data: charger, loading, error } = useCharger()
   const [now, setNow] = useState(() => new Date())
+  const [pushAvailable, setPushAvailable] = useState(() => isPushSupported())
+  const [subscriptionState, setSubscriptionState] = useState<
+    'idle' | 'loading' | 'success' | 'error'
+  >('idle')
+  const [subscriptionError, setSubscriptionError] = useState<string | null>(null)
 
   useEffect(() => {
     const intervalId = setInterval(() => setNow(new Date()), 60000)
     return () => clearInterval(intervalId)
   }, [])
+
+  useEffect(() => {
+    setPushAvailable(isPushSupported())
+  }, [])
+
+  const handleSubscribeClick = async () => {
+    if (!charger) return
+    setSubscriptionError(null)
+    setSubscriptionState('loading')
+    try {
+      await subscribeToStationNotifications(charger.cp_id)
+      setSubscriptionState('success')
+    } catch (err) {
+      setSubscriptionState('error')
+      setSubscriptionError(
+        err instanceof Error ? err.message : 'Не удалось подписаться.'
+      )
+    }
+  }
 
   if (loading) {
     return (
@@ -265,6 +294,43 @@ function App() {
             powerKw={charger.port2_power_kw}
           />
         </Stack>
+
+        <Box sx={{ mt: 2 }}>
+          <Stack spacing={1}>
+            <Button
+              variant="contained"
+              color="success"
+              disabled={
+                !pushAvailable ||
+                subscriptionState === 'loading' ||
+                subscriptionState === 'success'
+              }
+              onClick={handleSubscribeClick}
+            >
+              {subscriptionState === 'success'
+                ? 'Subscription active'
+                : 'Subscribe'}
+            </Button>
+            {!pushAvailable && (
+              <Typography variant="caption" color="textSecondary">
+                Push-unavailable in current browser. 
+              </Typography>
+            )}
+            {subscriptionState === 'success' && (
+              <Alert severity="success">
+                <AlertTitle>Subscribed successfully</AlertTitle>
+                You will receive notifications when the charging point status
+                changes.
+              </Alert>
+            )}
+            {subscriptionState === 'error' && subscriptionError && (
+              <Alert severity="warning">
+                <AlertTitle>Subscription failed</AlertTitle>
+                {subscriptionError}
+              </Alert>
+            )}
+          </Stack>
+        </Box>
 
         <Copyright />
       </Box>
