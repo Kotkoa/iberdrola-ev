@@ -1,5 +1,5 @@
-import { supabase, supabaseFetch } from './supabase.ts'
-import type { ChargerStatus } from '../types/charger.ts'
+import { supabase, supabaseFetch } from './supabase.js'
+import type { ChargerStatus } from '../types/charger.js'
 
 export async function getLatestChargerStatus() {
   return supabaseFetch<ChargerStatus[]>(
