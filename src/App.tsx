@@ -33,14 +33,24 @@ const formatDuration = (durationMinutes: number | null) => {
     : `${minutes}m`
 }
 
+type PortNumber = 1 | 2
+
 function App() {
   const { data: charger, loading, error } = useCharger()
   const [now, setNow] = useState(() => new Date())
   const [pushAvailable, setPushAvailable] = useState(() => isPushSupported())
   const [subscriptionState, setSubscriptionState] = useState<
-    'idle' | 'loading' | 'success' | 'error'
-  >('idle')
-  const [subscriptionError, setSubscriptionError] = useState<string | null>(null)
+    Record<PortNumber, 'idle' | 'loading' | 'success' | 'error'>
+  >({
+    1: 'idle',
+    2: 'idle',
+  })
+  const [subscriptionErrors, setSubscriptionErrors] = useState<
+    Record<PortNumber, string | null>
+  >({
+    1: null,
+    2: null,
+  })
 
   useEffect(() => {
     const intervalId = setInterval(() => setNow(new Date()), 60000)
@@ -51,18 +61,20 @@ function App() {
     setPushAvailable(isPushSupported())
   }, [])
 
-  const handleSubscribeClick = async () => {
+  const handleSubscribeClick = async (portNumber: PortNumber) => {
     if (!charger) return
-    setSubscriptionError(null)
-    setSubscriptionState('loading')
+    setSubscriptionErrors((prev) => ({ ...prev, [portNumber]: null }))
+    setSubscriptionState((prev) => ({ ...prev, [portNumber]: 'loading' }))
     try {
-      await subscribeToStationNotifications(charger.cp_id)
-      setSubscriptionState('success')
+      await subscribeToStationNotifications(charger.cp_id, portNumber)
+      setSubscriptionState((prev) => ({ ...prev, [portNumber]: 'success' }))
     } catch (err) {
-      setSubscriptionState('error')
-      setSubscriptionError(
-        err instanceof Error ? err.message : 'Не удалось подписаться.'
-      )
+      setSubscriptionState((prev) => ({ ...prev, [portNumber]: 'error' }))
+      setSubscriptionErrors((prev) => ({
+        ...prev,
+        [portNumber]:
+          err instanceof Error ? err.message : 'Не удалось подписаться.',
+      }))
     }
   }
 
@@ -133,6 +145,29 @@ function App() {
   const isSecondPortAvailable = charger.port2_status === 'AVAILABLE'
   const availableCount =
     (isFirstPortAvailable ? 1 : 0) + (isSecondPortAvailable ? 1 : 0)
+  const portConfigs: Array<{
+    portNumber: PortNumber
+    isAvailable: boolean
+    busyDuration: string | null
+    powerKw: number | null
+  }> = [
+    {
+      portNumber: 1 as const,
+      isAvailable: isFirstPortAvailable,
+      busyDuration: !isFirstPortAvailable
+        ? formatDuration(port1DurationMinutes)
+        : null,
+      powerKw: charger.port1_power_kw,
+    },
+    {
+      portNumber: 2 as const,
+      isAvailable: isSecondPortAvailable,
+      busyDuration: !isSecondPortAvailable
+        ? formatDuration(port2DurationMinutes)
+        : null,
+      powerKw: charger.port2_power_kw,
+    },
+  ]
 
   return (
     <Container
@@ -269,68 +304,75 @@ function App() {
 
         <Stack
           direction={{ xs: 'column', sm: 'row' }}
-          spacing={1}
+          spacing={1.5}
           justifyContent="space-between"
-          alignItems="center"
+          alignItems="stretch"
+          sx={{ mt: 1 }}
         >
-          <PortCard
-            portNumber={1}
-            isAvailable={isFirstPortAvailable}
-            busyDuration={
-              !isFirstPortAvailable
-                ? formatDuration(port1DurationMinutes)
-                : null
-            }
-            powerKw={charger.port1_power_kw}
-          />
-          <PortCard
-            portNumber={2}
-            isAvailable={isSecondPortAvailable}
-            busyDuration={
-              !isSecondPortAvailable
-                ? formatDuration(port2DurationMinutes)
-                : null
-            }
-            powerKw={charger.port2_power_kw}
-          />
+          {portConfigs.map(
+            ({ portNumber, isAvailable, busyDuration, powerKw }) => {
+              const state = subscriptionState[portNumber]
+              const errorMessage = subscriptionErrors[portNumber]
+              const buttonLabel =
+                state === 'success'
+                  ? 'Notifications enabled'
+                  : state === 'error'
+                    ? 'Error enabling notifications'
+                    : 'Notify me when free'
+
+              return (
+                <Box
+                  key={portNumber}
+                  sx={{
+                    flex: 1,
+                    width: '100%',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 1,
+                  }}
+                >
+                  <PortCard
+                    portNumber={portNumber}
+                    isAvailable={isAvailable}
+                    busyDuration={busyDuration}
+                    powerKw={powerKw}
+                  />
+                  <Button
+                    variant="contained"
+                    color="success"
+                    disabled={
+                      !pushAvailable || state === 'loading' || state === 'success'
+                    }
+                    onClick={() => handleSubscribeClick(portNumber)}
+                  >
+                    {state === 'loading' ? 'Subscribing...' : buttonLabel}
+                  </Button>
+                  {state === 'success' && (
+                    <Alert severity="success">
+                      Notifications enabled for port {portNumber}.
+                    </Alert>
+                  )}
+                  {state === 'error' && errorMessage && (
+                    <Alert severity="warning">
+                      <AlertTitle>Subscription error</AlertTitle>
+                      {errorMessage}
+                    </Alert>
+                  )}
+                </Box>
+              )
+            },
+          )}
         </Stack>
 
-        <Box sx={{ mt: 2 }}>
-          <Stack spacing={1}>
-            <Button
-              variant="contained"
-              color="success"
-              disabled={
-                !pushAvailable ||
-                subscriptionState === 'loading' ||
-                subscriptionState === 'success'
-              }
-              onClick={handleSubscribeClick}
-            >
-              {subscriptionState === 'success'
-                ? 'Subscription active'
-                : 'Subscribe'}
-            </Button>
-            {!pushAvailable && (
-              <Typography variant="caption" color="textSecondary">
-                Push-unavailable in current browser. 
-              </Typography>
-            )}
-            {subscriptionState === 'success' && (
-              <Alert severity="success">
-                <AlertTitle>Subscribed successfully</AlertTitle>
-                You will receive notifications when the charging point status
-                changes.
-              </Alert>
-            )}
-            {subscriptionState === 'error' && subscriptionError && (
-              <Alert severity="warning">
-                <AlertTitle>Subscription failed</AlertTitle>
-                {subscriptionError}
-              </Alert>
-            )}
-          </Stack>
-        </Box>
+        {!pushAvailable && (
+          <Typography
+            variant="caption"
+            color="textSecondary"
+            sx={{ display: 'block', mt: 1.5 }}
+          >
+            Push notifications are not supported in this browser.
+          </Typography>
+        )}
 
         <Copyright />
       </Box>

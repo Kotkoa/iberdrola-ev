@@ -28,7 +28,10 @@ export async function registerServiceWorker() {
   }
 }
 
-export async function subscribeToStationNotifications(stationId: number) {
+export async function subscribeToStationNotifications(
+  stationId: number,
+  portNumber?: number
+) {
   if (!isPushSupported()) {
     throw new Error('Push notifications are not supported in this browser.') // on english.
   }
@@ -65,7 +68,7 @@ export async function subscribeToStationNotifications(stationId: number) {
   const response = await fetch(SAVE_SUBSCRIPTION_ENDPOINT, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ stationId, subscription }),
+    body: JSON.stringify({ stationId, portNumber, subscription }),
   })
 
   if (!response.ok) {
