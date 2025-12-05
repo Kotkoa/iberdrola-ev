@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import {
   getLatestChargerStatus,
   subscribeToLatestCharger,
-} from '../api/charger'
+} from '../api/charger.ts'
 import type { ChargerStatus } from '../types/charger'
 
 export function useCharger() {
