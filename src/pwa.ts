@@ -17,6 +17,18 @@ export function isPushSupported() {
   )
 }
 
+export function isStandaloneApp() {
+  if (typeof window === 'undefined') return false
+  const isDisplayModeStandalone =
+    window.matchMedia?.('(display-mode: standalone)').matches ?? false
+  const isNavigatorStandalone =
+    typeof navigator !== 'undefined' &&
+    'standalone' in navigator &&
+    (navigator as unknown as { standalone?: boolean }).standalone === true
+
+  return isDisplayModeStandalone || isNavigatorStandalone
+}
+
 export async function registerServiceWorker() {
   if (!('serviceWorker' in navigator)) {
     console.warn('Service workers are not supported in this browser.')

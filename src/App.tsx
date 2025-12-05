@@ -16,7 +16,11 @@ import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined'
 import Copyright from './components/Copyright'
 import { PortCard } from './components/PortCard'
 import { useCharger } from '../hooks/useCharger'
-import { isPushSupported, subscribeToStationNotifications } from './pwa'
+import {
+  isPushSupported,
+  isStandaloneApp,
+  subscribeToStationNotifications,
+} from './pwa'
 
 const formatDuration = (durationMinutes: number | null) => {
   if (durationMinutes === null) return null
@@ -36,6 +40,7 @@ function App() {
   const { data: charger, loading, error } = useCharger()
   const [now, setNow] = useState(() => new Date())
   const [pushAvailable, setPushAvailable] = useState(() => isPushSupported())
+  const [isStandalone, setIsStandalone] = useState(() => isStandaloneApp())
   const [subscriptionState, setSubscriptionState] = useState<
     Record<PortNumber, 'idle' | 'loading' | 'success' | 'error'>
   >({
@@ -56,6 +61,27 @@ function App() {
 
   useEffect(() => {
     setPushAvailable(isPushSupported())
+    setIsStandalone(isStandaloneApp())
+
+    const mediaQuery =
+      typeof window !== 'undefined' && typeof window.matchMedia === 'function'
+        ? window.matchMedia('(display-mode: standalone)')
+        : null
+
+    if (!mediaQuery) return
+
+    const handleDisplayModeChange = () => {
+      setIsStandalone(isStandaloneApp())
+    }
+
+    if (typeof mediaQuery.addEventListener === 'function') {
+      mediaQuery.addEventListener('change', handleDisplayModeChange)
+      return () =>
+        mediaQuery.removeEventListener('change', handleDisplayModeChange)
+    }
+
+    mediaQuery.addListener(handleDisplayModeChange)
+    return () => mediaQuery.removeListener(handleDisplayModeChange)
   }, [])
 
   const handleSubscribeClick = async (portNumber: PortNumber) => {
@@ -334,40 +360,43 @@ function App() {
                     busyDuration={busyDuration}
                     powerKw={powerKw}
                   />
-                  <Button
-                    variant="contained"
-                    color="success"
-                    disabled={
-                      !pushAvailable ||
-                      state === 'loading' ||
-                      state === 'success'
-                    }
-                    onClick={() => handleSubscribeClick(portNumber)}
-                    sx={{
-                      textTransform: 'none',
-                      fontSize: { xs: '0.75rem', sm: '0.875rem' },
-                    }}
-                  >
-                    {state === 'loading' ? 'Subscribing...' : buttonLabel}
-                  </Button>
-                  {state === 'success' && (
-                    <Alert severity="success">
-                      Notifications enabled for port {portNumber}.
-                    </Alert>
-                  )}
-                  {state === 'error' && errorMessage && (
-                    <Alert severity="warning">
-                      <AlertTitle>Subscription error</AlertTitle>
-                      {errorMessage}
-                    </Alert>
+                  {isStandalone && (
+                    <>
+                      <Button
+                        variant="contained"
+                        color="success"
+                        disabled={
+                          !pushAvailable ||
+                          state === 'loading' ||
+                          state === 'success'
+                        }
+                        onClick={() => handleSubscribeClick(portNumber)}
+                        sx={{
+                          textTransform: 'none',
+                          fontSize: { xs: '0.75rem', sm: '0.875rem' },
+                        }}
+                      >
+                        {state === 'loading' ? 'Subscribing...' : buttonLabel}
+                      </Button>
+                      {state === 'success' && (
+                        <Alert severity="success">
+                          Notifications enabled for port {portNumber}.
+                        </Alert>
+                      )}
+                      {state === 'error' && errorMessage && (
+                        <Alert severity="warning">
+                          <AlertTitle>Subscription error</AlertTitle>
+                          {errorMessage}
+                        </Alert>
+                      )}
+                    </>
                   )}
                 </Box>
               )
             }
           )}
         </Stack>
-
-        {!pushAvailable && (
+        {isStandalone && !pushAvailable && (
           <Typography
             variant="caption"
             color="textSecondary"
