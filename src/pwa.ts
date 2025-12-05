@@ -30,11 +30,11 @@ export async function registerServiceWorker() {
 
 export async function subscribeToStationNotifications(stationId: number) {
   if (!isPushSupported()) {
-    throw new Error('Push уведомления не поддерживаются в этом браузере.')
+    throw new Error('Push notifications are not supported in this browser.') // on english.
   }
 
   if (!VAPID_PUBLIC_KEY) {
-    throw new Error('VAPID public key не настроен.')
+    throw new Error('VAPID public key not set.')
   }
 
   let permission: NotificationPermission = Notification.permission
@@ -43,12 +43,14 @@ export async function subscribeToStationNotifications(stationId: number) {
     permission = await Notification.requestPermission()
   } else if (permission === 'denied') {
     throw new Error(
-      'Уведомления заблокированы. Разрешите их в настройках браузера.'
+      'Notifications are blocked. Please allow them in browser settings.'
     )
   }
 
   if (permission !== 'granted') {
-    throw new Error('Без разрешения на уведомления подписка невозможна.')
+    throw new Error(
+      'Subscription is not possible without notification permission.'
+    )
   }
 
   const registration = await navigator.serviceWorker.ready
@@ -67,7 +69,7 @@ export async function subscribeToStationNotifications(stationId: number) {
   })
 
   if (!response.ok) {
-    throw new Error('Не удалось сохранить подписку на сервере.')
+    throw new Error('Failed to save subscription on the server.')
   }
 
   return subscription
@@ -75,9 +77,7 @@ export async function subscribeToStationNotifications(stationId: number) {
 
 function urlBase64ToUint8Array(base64String: string) {
   const padding = '='.repeat((4 - (base64String.length % 4)) % 4)
-  const base64 = (base64String + padding)
-    .replace(/-/g, '+')
-    .replace(/_/g, '/')
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/')
 
   const rawData = atob(base64)
   const outputArray = new Uint8Array(rawData.length)
