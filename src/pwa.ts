@@ -2,6 +2,11 @@ const SAVE_SUBSCRIPTION_ENDPOINT =
   import.meta.env.VITE_SAVE_SUBSCRIPTION_URL ?? '/save-subscription'
 
 const VAPID_PUBLIC_KEY = import.meta.env.VITE_VAPID_PUBLIC_KEY
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY
+
+if (!SUPABASE_ANON_KEY) {
+  console.warn('VITE_SUPABASE_ANON_KEY is not set; edge calls may fail.')
+}
 
 export function isPushSupported() {
   return (
@@ -67,7 +72,15 @@ export async function subscribeToStationNotifications(
 
   const response = await fetch(SAVE_SUBSCRIPTION_ENDPOINT, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      ...(SUPABASE_ANON_KEY
+        ? {
+            apikey: SUPABASE_ANON_KEY,
+            Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+          }
+        : {}),
+    },
     body: JSON.stringify({
       stationId: String(stationId),
       portNumber,
