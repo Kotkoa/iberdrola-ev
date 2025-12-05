@@ -68,7 +68,11 @@ export async function subscribeToStationNotifications(
   const response = await fetch(SAVE_SUBSCRIPTION_ENDPOINT, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ stationId, portNumber, subscription }),
+    body: JSON.stringify({
+      stationId: String(stationId),
+      portNumber,
+      subscription,
+    }),
   })
 
   if (!response.ok) {
