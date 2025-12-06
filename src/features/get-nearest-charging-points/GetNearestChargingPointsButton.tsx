@@ -135,6 +135,7 @@ function hasAvailablePorts(details: StationDetails | null): boolean {
 
 export function GetNearestChargingPointsButton() {
   const [stations, setStations] = useState<StationInfo[]>([])
+  const [progress, setProgress] = useState({ current: 0, total: 0 })
   const [loading, setLoading] = useState(false)
   const [logs, setLogs] = useState<string[]>([])
   const [showLogs, setShowLogs] = useState(false)
@@ -172,10 +173,13 @@ export function GetNearestChargingPointsButton() {
 
       const result = await fetchDirect(lat, lon)
       addLog(`🔍 Found ${result.length} stations`)
+      setProgress({ current: 0, total: result.length })
 
       const freeStations: StationInfo[] = []
 
       for (const s of result) {
+        setProgress((p) => ({ ...p, current: p.current + 1 }))
+
         const cpId = s.cpId
         const cuprId = s.locationData?.cuprId
 
@@ -256,6 +260,7 @@ export function GetNearestChargingPointsButton() {
         severity: 'error',
       })
     } finally {
+      setProgress({ current: 0, total: 0 })
       setLoading(false)
     }
   }
@@ -283,6 +288,12 @@ export function GetNearestChargingPointsButton() {
             'Get nearest charging points'
           )}
         </Button>
+
+        {progress.total > 0 && (
+          <Typography variant="caption" sx={{ color: '#555' }}>
+            Fetching details… {progress.current} / {progress.total}
+          </Typography>
+        )}
 
         {showLogs && logs.length > 0 && (
           <Stack
@@ -317,14 +328,15 @@ export function GetNearestChargingPointsButton() {
                   border: '1px solid #c8e6c9',
                   borderRadius: 1,
                   background: '#f1f8f4',
+                  color: '#333',
                 }}
               >
-                <Typography variant="subtitle2">{st.name}</Typography>
-                <Typography variant="body2">⚡ {st.maxPower} kW</Typography>
-                <Typography variant="body2">
+                <Typography variant="subtitle2" sx={{ color: '#333' }}>{st.name}</Typography>
+                <Typography variant="body2" sx={{ color: '#333' }}>⚡ {st.maxPower} kW</Typography>
+                <Typography variant="body2" sx={{ color: '#333' }}>
                   🟢 Free ports: {st.freePorts}
                 </Typography>
-                <Typography variant="body2" sx={{ mb: 0.5 }}>
+                <Typography variant="body2" sx={{ mb: 0.5, color: '#333' }}>
                   📍 {st.latitude.toFixed(6)}, {st.longitude.toFixed(6)}
                 </Typography>
                 <a
