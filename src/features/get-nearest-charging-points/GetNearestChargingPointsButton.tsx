@@ -65,12 +65,19 @@ export function GetNearestChargingPointsButton() {
       const result = await fetchDirect()
       setStations(result)
 
+      const ids = result
+        .map((s) => s.cpId)
+        .filter((id) => id != null)
+      const preview = ids.slice(0, 5).join(', ')
+      const more = ids.length > 5 ? ` … +${ids.length - 5} more` : ''
+      const msg =
+        ids.length > 0
+          ? `Nearby stations: ${ids.length}, IDs: ${preview}${more}`
+          : 'No stations found.'
+      
       setSnackbar({
         open: true,
-        message:
-          result.length > 0
-            ? `Nearby stations: ${result.length}`
-            : 'No stations found.',
+        message: msg,
         severity: 'success',
       })
     } catch (err) {
@@ -120,7 +127,7 @@ export function GetNearestChargingPointsButton() {
         open={snackbar.open}
         autoHideDuration={5000}
         onClose={handleClose}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+        anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
       >
         <Alert severity={snackbar.severity} onClose={handleClose}>
           {snackbar.message}
