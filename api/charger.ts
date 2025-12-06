@@ -1,6 +1,5 @@
 import { supabase, supabaseFetch } from './supabase.js'
 import type { ChargerStatus } from '../types/charger.js'
-import { isPushSupported } from '../src/pwa.js'
 
 export async function getLatestChargerStatus() {
   return supabaseFetch<ChargerStatus[]>(
