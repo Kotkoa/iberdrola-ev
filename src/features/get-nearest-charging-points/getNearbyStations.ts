@@ -11,7 +11,7 @@ type BoundingBox = {
 }
 
 const LOCAL_API_URL = import.meta.env.VITE_NEAREST_STATIONS_URL
-
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY
 const CHARGE_POINT_TYPES_CODES = ['P', 'R', 'I', 'N']
 const CONNECTOR_TYPES = ['2', '7']
 
@@ -76,6 +76,12 @@ export async function getNearbyStations(
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
+      ...(SUPABASE_ANON_KEY
+        ? {
+            apikey: SUPABASE_ANON_KEY,
+            Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+          }
+        : {}),
     },
     body: JSON.stringify(payload),
   })
