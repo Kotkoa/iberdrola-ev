@@ -36,6 +36,9 @@ interface StationDetails {
 
 interface StationListItem {
   cpId?: number
+  locationData?: {
+    cuprId?: number
+  }
 }
 
 interface StationInfo {
@@ -133,15 +136,27 @@ function hasAvailablePorts(details: StationDetails | null): boolean {
 export function GetNearestChargingPointsButton() {
   const [stations, setStations] = useState<StationInfo[]>([])
   const [loading, setLoading] = useState(false)
+  const [logs, setLogs] = useState<string[]>([])
+  const [showLogs, setShowLogs] = useState(false)
   const [snackbar, setSnackbar] = useState({
     open: false,
     message: '',
     severity: 'success' as 'success' | 'error',
   })
 
+  const addLog = (msg: string) => {
+    console.log(msg)
+    setLogs((prev) => [
+      ...prev.slice(-19),
+      `[${new Date().toLocaleTimeString()}] ${msg}`,
+    ])
+  }
+
   const handleClick = async () => {
     try {
       setLoading(true)
+      setLogs([])
+      addLog('Starting location request...')
 
       const pos = await new Promise<GeolocationPosition>((resolve, reject) => {
         navigator.geolocation.getCurrentPosition(resolve, reject, {
@@ -153,24 +168,26 @@ export function GetNearestChargingPointsButton() {
 
       const lat = pos.coords.latitude
       const lon = pos.coords.longitude
-      console.log('Current position:', { lat, lon })
+      addLog(`📍 Position: ${lat.toFixed(4)}, ${lon.toFixed(4)}`)
 
       const result = await fetchDirect(lat, lon)
-      console.log('Total stations received:', result.length)
+      addLog(`🔍 Found ${result.length} stations`)
 
       const freeStations: StationInfo[] = []
 
       for (const s of result) {
-        const id = s.cpId
-        if (!id) continue
+        const cpId = s.cpId
+        const cuprId = s.locationData?.cuprId
 
-        const details = await fetchStationDetails(id)
-        console.log(`Station ${id}:`, {
-          name: details?.locationData?.cuprName,
-          hasAvailable: hasAvailablePorts(details),
-        })
+        if (!cpId || !cuprId) {
+          addLog(`⚠️ Station without cpId or cuprId`)
+          continue
+        }
 
-        // Проверяем платность - убираем фильтр для отладки
+        addLog(`📡 Fetching details for cuprId ${cuprId} (cpId ${cpId})...`)
+        const details = await fetchStationDetails(cuprId)
+
+        const hasAvailable = hasAvailablePorts(details)
         const isPaid =
           details?.logicalSocket?.some((sock) =>
             sock.physicalSocket?.some(
@@ -180,7 +197,7 @@ export function GetNearestChargingPointsButton() {
             )
           ) ?? false
 
-        if (!isPaid && hasAvailablePorts(details)) {
+        if (!isPaid && hasAvailable) {
           const logical = details?.logicalSocket || []
           const flattened = logical.flatMap((ls) => ls.physicalSocket || [])
           const availableSockets = flattened.filter(
@@ -192,18 +209,21 @@ export function GetNearestChargingPointsButton() {
             0
 
           freeStations.push({
-            cpId: id,
+            cpId: cpId,
             name: details?.locationData?.cuprName || 'Unknown',
             latitude: details?.locationData?.latitude || 0,
             longitude: details?.locationData?.longitude || 0,
             maxPower,
             freePorts,
           })
+
+          addLog(`  ✅ Added to results!`)
         }
       }
 
-      console.log('Free stations found:', freeStations.length)
+      addLog(`✨ Total free stations: ${freeStations.length}`)
       setStations(freeStations)
+      setShowLogs(true)
 
       const ids = freeStations.map((s) => s.cpId)
       const preview = ids.slice(0, 5).join(', ')
@@ -226,6 +246,9 @@ export function GetNearestChargingPointsButton() {
           : err instanceof Error
           ? err.message
           : 'Request failed'
+
+      addLog(`❌ Error: ${errorMsg}`)
+      setShowLogs(true)
 
       setSnackbar({
         open: true,
@@ -260,6 +283,29 @@ export function GetNearestChargingPointsButton() {
             'Get nearest charging points'
           )}
         </Button>
+
+        {showLogs && logs.length > 0 && (
+          <Stack
+            sx={{
+              mt: 1,
+              p: 1,
+              background: '#f5f5f5',
+              border: '1px solid #ddd',
+              borderRadius: 1,
+              maxHeight: '200px',
+              overflowY: 'auto',
+              fontSize: '0.7rem',
+              fontFamily: 'monospace',
+              lineHeight: '1.4',
+            }}
+          >
+            {logs.map((log, i) => (
+              <Typography key={i} variant="caption" sx={{ display: 'block' }}>
+                {log}
+              </Typography>
+            ))}
+          </Stack>
+        )}
 
         {stations.length > 0 && !loading && (
           <Stack spacing={1} sx={{ mt: 1 }}>
