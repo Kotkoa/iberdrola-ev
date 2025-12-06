@@ -21,6 +21,7 @@ import {
   isStandaloneApp,
   subscribeToStationNotifications,
 } from './pwa'
+import { GetNearestChargingPointsButton } from './features/get-nearest-charging-points/GetNearestChargingPointsButton'
 
 const formatDuration = (durationMinutes: number | null) => {
   if (durationMinutes === null) return null
@@ -54,10 +55,42 @@ function App() {
     2: null,
   })
 
+  const VITE_CHECK_SUB_URL = import.meta.env.VITE_CHECK_SUB_URL
+
+  async function restoreSubscriptionState(stationId: number) {
+    if (!isPushSupported()) return
+
+    const registration = await navigator.serviceWorker.ready
+    const existing = await registration.pushManager.getSubscription()
+
+    if (!existing) return
+
+    const res = await fetch(`${VITE_CHECK_SUB_URL}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        stationId: String(stationId),
+        endpoint: existing.endpoint,
+      }),
+    })
+
+    const { ports } = await res.json()
+
+    setSubscriptionState(() => ({
+      1: ports.includes(1) ? 'success' : 'idle',
+      2: ports.includes(2) ? 'success' : 'idle',
+    }))
+  }
+
   useEffect(() => {
     const intervalId = setInterval(() => setNow(new Date()), 60000)
     return () => clearInterval(intervalId)
   }, [])
+
+  useEffect(() => {
+    if (!charger) return
+    restoreSubscriptionState(charger.cp_id)
+  }, [charger])
 
   useEffect(() => {
     setPushAvailable(isPushSupported())
@@ -405,7 +438,7 @@ function App() {
             Push notifications are not supported in this browser.
           </Typography>
         )}
-
+        <GetNearestChargingPointsButton />
         <Copyright />
       </Box>
     </Container>
