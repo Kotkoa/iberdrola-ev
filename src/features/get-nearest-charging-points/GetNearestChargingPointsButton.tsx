@@ -47,8 +47,12 @@ interface StationInfo {
   freePorts: number
 }
 
-async function fetchDirect(lat: number, lon: number): Promise<StationListItem[]> {
-  const delta = 25 / 111
+async function fetchDirect(
+  lat: number,
+  lon: number
+): Promise<StationListItem[]> {
+  const latDelta = 25 / 111
+  const lonDelta = 25 / (111 * Math.cos((lat * Math.PI) / 180))
 
   const payload = {
     dto: {
@@ -57,13 +61,23 @@ async function fetchDirect(lat: number, lon: number): Promise<StationListItem[]>
       advantageous: false,
       connectorsType: ['2', '7'],
       loadSpeed: [],
-      latitudeMax: lat + delta,
-      latitudeMin: lat - delta,
-      longitudeMax: lon + delta,
-      longitudeMin: lon - delta,
+      latitudeMax: lat + latDelta,
+      latitudeMin: lat - latDelta,
+      longitudeMax: lon + lonDelta,
+      longitudeMin: lon - lonDelta,
     },
     language: 'en',
   }
+
+  console.log('Search area:', {
+    center: { lat, lon },
+    bounds: {
+      latMin: lat - latDelta,
+      latMax: lat + latDelta,
+      lonMin: lon - lonDelta,
+      lonMax: lon + lonDelta,
+    },
+  })
 
   const res = await fetch(IBERDROLA_URL, {
     method: 'POST',
@@ -78,7 +92,8 @@ async function fetchDirect(lat: number, lon: number): Promise<StationListItem[]>
   if (!res.ok) throw new Error('Failed: ' + res.status)
 
   const data = await res.json()
-  return data.entidad
+  console.log('Stations found:', data.entidad?.length || 0)
+  return data.entidad || []
 }
 
 async function fetchStationDetails(
@@ -129,13 +144,19 @@ export function GetNearestChargingPointsButton() {
       setLoading(true)
 
       const pos = await new Promise<GeolocationPosition>((resolve, reject) => {
-        navigator.geolocation.getCurrentPosition(resolve, reject)
+        navigator.geolocation.getCurrentPosition(resolve, reject, {
+          enableHighAccuracy: true,
+          timeout: 10000,
+          maximumAge: 0,
+        })
       })
 
       const lat = pos.coords.latitude
       const lon = pos.coords.longitude
+      console.log('Current position:', { lat, lon })
 
       const result = await fetchDirect(lat, lon)
+      console.log('Total stations received:', result.length)
 
       const freeStations: StationInfo[] = []
 
@@ -144,7 +165,12 @@ export function GetNearestChargingPointsButton() {
         if (!id) continue
 
         const details = await fetchStationDetails(id)
+        console.log(`Station ${id}:`, {
+          name: details?.locationData?.cuprName,
+          hasAvailable: hasAvailablePorts(details),
+        })
 
+        // Проверяем платность - убираем фильтр для отладки
         const isPaid =
           details?.logicalSocket?.some((sock) =>
             sock.physicalSocket?.some(
@@ -162,7 +188,8 @@ export function GetNearestChargingPointsButton() {
           )
           const freePorts = availableSockets.length
           const maxPower =
-            flattened.reduce((acc, ps) => Math.max(acc, ps.maxPower || 0), 0) || 0
+            flattened.reduce((acc, ps) => Math.max(acc, ps.maxPower || 0), 0) ||
+            0
 
           freeStations.push({
             cpId: id,
@@ -175,6 +202,7 @@ export function GetNearestChargingPointsButton() {
         }
       }
 
+      console.log('Free stations found:', freeStations.length)
       setStations(freeStations)
 
       const ids = freeStations.map((s) => s.cpId)
@@ -188,13 +216,20 @@ export function GetNearestChargingPointsButton() {
       setSnackbar({
         open: true,
         message: msg,
-        severity: 'success',
+        severity: ids.length > 0 ? 'success' : 'error',
       })
     } catch (err) {
-      console.error(err)
+      console.error('Error:', err)
+      const errorMsg =
+        err instanceof GeolocationPositionError
+          ? 'Location access denied'
+          : err instanceof Error
+          ? err.message
+          : 'Request failed'
+
       setSnackbar({
         open: true,
-        message: 'Request failed',
+        message: errorMsg,
         severity: 'error',
       })
     } finally {
