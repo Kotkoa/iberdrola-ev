@@ -47,7 +47,9 @@ interface StationInfo {
   freePorts: number
 }
 
-async function fetchDirect(): Promise<StationListItem[]> {
+async function fetchDirect(lat: number, lon: number): Promise<StationListItem[]> {
+  const delta = 25 / 111
+
   const payload = {
     dto: {
       chargePointTypesCodes: ['P', 'R', 'I', 'N'],
@@ -55,10 +57,10 @@ async function fetchDirect(): Promise<StationListItem[]> {
       advantageous: false,
       connectorsType: ['2', '7'],
       loadSpeed: [],
-      latitudeMax: 38.85,
-      latitudeMin: 38.83,
-      longitudeMax: -0.1,
-      longitudeMin: -0.13,
+      latitudeMax: lat + delta,
+      latitudeMin: lat - delta,
+      longitudeMax: lon + delta,
+      longitudeMin: lon - delta,
     },
     language: 'en',
   }
@@ -125,7 +127,15 @@ export function GetNearestChargingPointsButton() {
   const handleClick = async () => {
     try {
       setLoading(true)
-      const result = await fetchDirect()
+
+      const pos = await new Promise<GeolocationPosition>((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(resolve, reject)
+      })
+
+      const lat = pos.coords.latitude
+      const lon = pos.coords.longitude
+
+      const result = await fetchDirect(lat, lon)
 
       const freeStations: StationInfo[] = []
 
@@ -152,8 +162,7 @@ export function GetNearestChargingPointsButton() {
           )
           const freePorts = availableSockets.length
           const maxPower =
-            flattened.reduce((acc, ps) => Math.max(acc, ps.maxPower || 0), 0) ||
-            0
+            flattened.reduce((acc, ps) => Math.max(acc, ps.maxPower || 0), 0) || 0
 
           freeStations.push({
             cpId: id,
