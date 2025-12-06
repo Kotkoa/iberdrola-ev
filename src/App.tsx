@@ -438,7 +438,7 @@ function App() {
             Push notifications are not supported in this browser.
           </Typography>
         )}
-        <GetNearestChargingPointsButton />
+        {isStandalone && <GetNearestChargingPointsButton />}
         <Copyright />
       </Box>
     </Container>
