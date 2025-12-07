@@ -1,6 +1,6 @@
 import './App.css'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import Typography from '@mui/material/Typography'
 import Box from '@mui/material/Box'
 import Container from '@mui/material/Container'
@@ -57,30 +57,33 @@ function App() {
 
   const VITE_CHECK_SUB_URL = import.meta.env.VITE_CHECK_SUB_URL
 
-  async function restoreSubscriptionState(stationId: number) {
-    if (!isPushSupported()) return
+  const restoreSubscriptionState = useCallback(
+    async (stationId: number) => {
+      if (!isPushSupported()) return
 
-    const registration = await navigator.serviceWorker.ready
-    const existing = await registration.pushManager.getSubscription()
+      const registration = await navigator.serviceWorker.ready
+      const existing = await registration.pushManager.getSubscription()
 
-    if (!existing) return
+      if (!existing) return
 
-    const res = await fetch(`${VITE_CHECK_SUB_URL}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        stationId: String(stationId),
-        endpoint: existing.endpoint,
-      }),
-    })
+      const res = await fetch(`${VITE_CHECK_SUB_URL}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          stationId: String(stationId),
+          endpoint: existing.endpoint,
+        }),
+      })
 
-    const { ports } = await res.json()
+      const { ports } = await res.json()
 
-    setSubscriptionState(() => ({
-      1: ports.includes(1) ? 'success' : 'idle',
-      2: ports.includes(2) ? 'success' : 'idle',
-    }))
-  }
+      setSubscriptionState(() => ({
+        1: ports.includes(1) ? 'success' : 'idle',
+        2: ports.includes(2) ? 'success' : 'idle',
+      }))
+    },
+    [VITE_CHECK_SUB_URL]
+  )
 
   useEffect(() => {
     const intervalId = setInterval(() => setNow(new Date()), 60000)
@@ -90,7 +93,7 @@ function App() {
   useEffect(() => {
     if (!charger) return
     restoreSubscriptionState(charger.cp_id)
-  }, [charger])
+  }, [charger, restoreSubscriptionState])
 
   useEffect(() => {
     setPushAvailable(isPushSupported())
@@ -103,44 +106,45 @@ function App() {
 
     if (!mediaQuery) return
 
-    const handleDisplayModeChange = () => {
-      setIsStandalone(isStandaloneApp())
+    const handleDisplayModeChange = (e: MediaQueryListEvent) => {
+      setIsStandalone(e.matches)
     }
 
-    if (typeof mediaQuery.addEventListener === 'function') {
-      mediaQuery.addEventListener('change', handleDisplayModeChange)
-      return () =>
-        mediaQuery.removeEventListener('change', handleDisplayModeChange)
-    }
+    mediaQuery.addEventListener('change', handleDisplayModeChange)
 
-    mediaQuery.addListener(handleDisplayModeChange)
-    return () => mediaQuery.removeListener(handleDisplayModeChange)
+    return () => {
+      mediaQuery.removeEventListener('change', handleDisplayModeChange)
+    }
   }, [])
 
-  const handleSubscribeClick = async (portNumber: PortNumber) => {
-    if (!charger) return
-    setSubscriptionErrors((prev) => ({ ...prev, [portNumber]: null }))
-    setSubscriptionState((prev) => ({ ...prev, [portNumber]: 'loading' }))
-    try {
-      await subscribeToStationNotifications(charger.cp_id, portNumber)
-      setSubscriptionState((prev) => ({ ...prev, [portNumber]: 'success' }))
-    } catch (err) {
-      setSubscriptionState((prev) => ({ ...prev, [portNumber]: 'error' }))
-      setSubscriptionErrors((prev) => ({
-        ...prev,
-        [portNumber]: err instanceof Error ? err.message : 'Subscribing failed',
-      }))
-    }
-  }
+  const handleSubscribeClick = useCallback(
+    async (portNumber: PortNumber) => {
+      if (!charger) return
+      setSubscriptionErrors((prev) => ({ ...prev, [portNumber]: null }))
+      setSubscriptionState((prev) => ({ ...prev, [portNumber]: 'loading' }))
+      try {
+        await subscribeToStationNotifications(charger.cp_id, portNumber)
+        setSubscriptionState((prev) => ({ ...prev, [portNumber]: 'success' }))
+      } catch (err) {
+        setSubscriptionState((prev) => ({ ...prev, [portNumber]: 'error' }))
+        setSubscriptionErrors((prev) => ({
+          ...prev,
+          [portNumber]:
+            err instanceof Error ? err.message : 'Subscribing failed',
+        }))
+      }
+    },
+    [charger]
+  )
 
   const cp_latitude = 38.839266
   const cp_longitude = -0.120815
 
-  const handleShowOnMap = () => {
+  const handleShowOnMap = useCallback(() => {
     if (!cp_latitude || !cp_longitude) return
     const mapsUrl = `https://www.google.com/maps?q=${cp_latitude},${cp_longitude}&z=15`
     window.open(mapsUrl, '_blank', 'noopener,noreferrer')
-  }
+  }, [cp_latitude, cp_longitude])
 
   if (loading) {
     return (

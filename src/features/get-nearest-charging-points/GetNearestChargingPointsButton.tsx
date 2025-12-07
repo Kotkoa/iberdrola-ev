@@ -264,6 +264,11 @@ export function GetNearestChargingPointsButton() {
               value={radius}
               onChange={(e) => setRadius(e.target.value as number)}
               disabled={loading}
+              sx={{
+                height: '40px',
+                display: 'flex',
+                alignItems: 'center',
+              }}
             >
               {RADIUS_OPTIONS.map((r) => (
                 <MenuItem key={r} value={r}>
@@ -281,6 +286,11 @@ export function GetNearestChargingPointsButton() {
             disabled={loading}
             startIcon={<RoomOutlinedIcon fontSize="small" />}
             loading={loading}
+            sx={{
+              height: '40px',
+              textTransform: 'none',
+              fontSize: { xs: '0.75rem', sm: '0.875rem' },
+            }}
           >
             Find Stations
           </Button>
