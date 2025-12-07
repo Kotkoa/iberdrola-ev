@@ -215,20 +215,6 @@ export function GetNearestChargingPointsButton() {
       }
 
       setStations(freeStations)
-
-      const ids = freeStations.map((s) => s.cpId)
-      const preview = ids.slice(0, 5).join(', ')
-      const more = ids.length > 5 ? ` … +${ids.length - 5} more` : ''
-      const msg =
-        ids.length > 0
-          ? `Nearby stations: ${ids.length}, IDs: ${preview}${more}`
-          : 'No stations found.'
-
-      setSnackbar({
-        open: true,
-        message: msg,
-        severity: ids.length > 0 ? 'success' : 'error',
-      })
     } catch (err) {
       console.error('Error:', err)
       const errorMsg =
