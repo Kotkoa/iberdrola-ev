@@ -6,6 +6,9 @@ import CircularProgress from '@mui/material/CircularProgress'
 import Stack from '@mui/material/Stack'
 import Typography from '@mui/material/Typography'
 import RoomOutlinedIcon from '@mui/icons-material/RoomOutlined'
+import Select from '@mui/material/Select'
+import MenuItem from '@mui/material/MenuItem'
+import FormControl from '@mui/material/FormControl'
 
 const IBERDROLA_URL =
   'https://corsproxy.io/?https://www.iberdrola.es/o/webclipb/iberdrola/puntosrecargacontroller/getListarPuntosRecarga'
@@ -50,12 +53,15 @@ interface StationInfo {
   freePorts: number
 }
 
+const RADIUS_OPTIONS = [3, 5, 10, 15, 25, 40]
+
 async function fetchDirect(
   lat: number,
-  lon: number
+  lon: number,
+  radiusKm: number
 ): Promise<StationListItem[]> {
-  const latDelta = 25 / 111
-  const lonDelta = 25 / (111 * Math.cos((lat * Math.PI) / 180))
+  const latDelta = radiusKm / 111
+  const lonDelta = radiusKm / (111 * Math.cos((lat * Math.PI) / 180))
 
   const payload = {
     dto: {
@@ -74,6 +80,7 @@ async function fetchDirect(
 
   console.log('Search area:', {
     center: { lat, lon },
+    radius: `${radiusKm}km`,
     bounds: {
       latMin: lat - latDelta,
       latMax: lat + latDelta,
@@ -137,27 +144,16 @@ export function GetNearestChargingPointsButton() {
   const [stations, setStations] = useState<StationInfo[]>([])
   const [progress, setProgress] = useState({ current: 0, total: 0 })
   const [loading, setLoading] = useState(false)
-  const [logs, setLogs] = useState<string[]>([])
-  const [showLogs, setShowLogs] = useState(false)
+  const [radius, setRadius] = useState(5)
   const [snackbar, setSnackbar] = useState({
     open: false,
     message: '',
     severity: 'success' as 'success' | 'error',
   })
 
-  const addLog = (msg: string) => {
-    console.log(msg)
-    setLogs((prev) => [
-      ...prev.slice(-19),
-      `[${new Date().toLocaleTimeString()}] ${msg}`,
-    ])
-  }
-
   const handleClick = async () => {
     try {
       setLoading(true)
-      setLogs([])
-      addLog('Starting location request...')
 
       const pos = await new Promise<GeolocationPosition>((resolve, reject) => {
         navigator.geolocation.getCurrentPosition(resolve, reject, {
@@ -169,10 +165,8 @@ export function GetNearestChargingPointsButton() {
 
       const lat = pos.coords.latitude
       const lon = pos.coords.longitude
-      addLog(`📍 Position: ${lat.toFixed(4)}, ${lon.toFixed(4)}`)
 
-      const result = await fetchDirect(lat, lon)
-      addLog(`🔍 Found ${result.length} stations`)
+      const result = await fetchDirect(lat, lon, radius)
       setProgress({ current: 0, total: result.length })
 
       const freeStations: StationInfo[] = []
@@ -184,11 +178,9 @@ export function GetNearestChargingPointsButton() {
         const cuprId = s.locationData?.cuprId
 
         if (!cpId || !cuprId) {
-          addLog(`⚠️ Station without cpId or cuprId`)
           continue
         }
 
-        addLog(`📡 Fetching details for cuprId ${cuprId} (cpId ${cpId})...`)
         const details = await fetchStationDetails(cuprId)
 
         const hasAvailable = hasAvailablePorts(details)
@@ -220,14 +212,10 @@ export function GetNearestChargingPointsButton() {
             maxPower,
             freePorts,
           })
-
-          addLog(`  ✅ Added to results!`)
         }
       }
 
-      addLog(`✨ Total free stations: ${freeStations.length}`)
       setStations(freeStations)
-      setShowLogs(true)
 
       const ids = freeStations.map((s) => s.cpId)
       const preview = ids.slice(0, 5).join(', ')
@@ -251,9 +239,6 @@ export function GetNearestChargingPointsButton() {
           ? err.message
           : 'Request failed'
 
-      addLog(`❌ Error: ${errorMsg}`)
-      setShowLogs(true)
-
       setSnackbar({
         open: true,
         message: errorMsg,
@@ -274,48 +259,41 @@ export function GetNearestChargingPointsButton() {
           Find charging stations near you
         </Typography>
 
-        <Button
-          size="small"
-          variant="outlined"
-          color="success"
-          onClick={handleClick}
-          disabled={loading}
-          startIcon={<RoomOutlinedIcon fontSize="small" />}
-        >
-          {loading ? (
-            <CircularProgress size={16} />
-          ) : (
-            'Get nearest charging points'
-          )}
-        </Button>
+        <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 1 }}>
+          <FormControl size="small" sx={{ minWidth: 80 }}>
+            <Select
+              value={radius}
+              onChange={(e) => setRadius(e.target.value as number)}
+              disabled={loading}
+            >
+              {RADIUS_OPTIONS.map((r) => (
+                <MenuItem key={r} value={r}>
+                  {r} km
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+
+          <Button
+            size="small"
+            variant="outlined"
+            color="success"
+            onClick={handleClick}
+            disabled={loading}
+            startIcon={<RoomOutlinedIcon fontSize="small" />}
+          >
+            {loading ? (
+              <CircularProgress size={16} />
+            ) : (
+              'Get nearest charging points'
+            )}
+          </Button>
+        </Stack>
 
         {progress.total > 0 && (
           <Typography variant="caption" sx={{ color: '#555' }}>
             Fetching details… {progress.current} / {progress.total}
           </Typography>
-        )}
-
-        {showLogs && logs.length > 0 && (
-          <Stack
-            sx={{
-              mt: 1,
-              p: 1,
-              background: '#f5f5f5',
-              border: '1px solid #ddd',
-              borderRadius: 1,
-              maxHeight: '200px',
-              overflowY: 'auto',
-              fontSize: '0.7rem',
-              fontFamily: 'monospace',
-              lineHeight: '1.4',
-            }}
-          >
-            {logs.map((log, i) => (
-              <Typography key={i} variant="caption" sx={{ display: 'block' }}>
-                {log}
-              </Typography>
-            ))}
-          </Stack>
         )}
 
         {stations.length > 0 && !loading && (
@@ -331,8 +309,12 @@ export function GetNearestChargingPointsButton() {
                   color: '#333',
                 }}
               >
-                <Typography variant="subtitle2" sx={{ color: '#333' }}>{st.name}</Typography>
-                <Typography variant="body2" sx={{ color: '#333' }}>⚡ {st.maxPower} kW</Typography>
+                <Typography variant="subtitle2" sx={{ color: '#333' }}>
+                  {st.name}
+                </Typography>
+                <Typography variant="body2" sx={{ color: '#333' }}>
+                  ⚡ {st.maxPower} kW
+                </Typography>
                 <Typography variant="body2" sx={{ color: '#333' }}>
                   🟢 Free ports: {st.freePorts}
                 </Typography>
