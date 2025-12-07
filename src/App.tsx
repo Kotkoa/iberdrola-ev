@@ -128,10 +128,18 @@ function App() {
       setSubscriptionState((prev) => ({ ...prev, [portNumber]: 'error' }))
       setSubscriptionErrors((prev) => ({
         ...prev,
-        [portNumber]:
-          err instanceof Error ? err.message : 'Не удалось подписаться.',
+        [portNumber]: err instanceof Error ? err.message : 'Subscribing failed',
       }))
     }
+  }
+
+  const cp_latitude = 38.839266
+  const cp_longitude = -0.120815
+
+  const handleShowOnMap = () => {
+    if (!cp_latitude || !cp_longitude) return
+    const mapsUrl = `https://www.google.com/maps?q=${cp_latitude},${cp_longitude}&z=15`
+    window.open(mapsUrl, '_blank', 'noopener,noreferrer')
   }
 
   if (loading) {
@@ -318,20 +326,21 @@ function App() {
         </Typography>
 
         <Stack sx={{ my: 1 }}>
-          <Chip
-            label="Show on map"
-            color="success"
-            variant="outlined"
+          <Button
+            onClick={handleShowOnMap}
+            disabled={!cp_latitude || !cp_longitude}
             size="small"
             sx={{
-              borderRadius: '4px',
-              flexDirection: 'row-reverse',
-              pr: 0.5,
               ml: 'auto',
+              textTransform: 'none',
               fontSize: { xs: '0.7rem', sm: '0.875rem' },
             }}
-            icon={<DirectionsIcon fontSize="small" />}
-          />
+            startIcon={<DirectionsIcon fontSize="small" />}
+            variant="outlined"
+            color="success"
+          >
+            Show on map
+          </Button>
         </Stack>
 
         <Stack

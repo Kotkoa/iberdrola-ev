@@ -2,7 +2,6 @@ import { useState } from 'react'
 import Button from '@mui/material/Button'
 import Snackbar from '@mui/material/Snackbar'
 import Alert from '@mui/material/Alert'
-import CircularProgress from '@mui/material/CircularProgress'
 import Stack from '@mui/material/Stack'
 import Typography from '@mui/material/Typography'
 import RoomOutlinedIcon from '@mui/icons-material/RoomOutlined'
@@ -281,8 +280,9 @@ export function GetNearestChargingPointsButton() {
             onClick={handleClick}
             disabled={loading}
             startIcon={<RoomOutlinedIcon fontSize="small" />}
+            loading={loading}
           >
-            {loading ? <CircularProgress size={16} /> : 'Find Stations'}
+            Find Stations
           </Button>
         </Stack>
 
