@@ -260,7 +260,7 @@ export function GetNearestChargingPointsButton() {
         </Typography>
 
         <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 1 }}>
-          <FormControl size="small" sx={{ minWidth: 80 }}>
+          <FormControl size="small" sx={{ minWidth: 90 }}>
             <Select
               value={radius}
               onChange={(e) => setRadius(e.target.value as number)}
@@ -282,11 +282,7 @@ export function GetNearestChargingPointsButton() {
             disabled={loading}
             startIcon={<RoomOutlinedIcon fontSize="small" />}
           >
-            {loading ? (
-              <CircularProgress size={16} />
-            ) : (
-              'Get nearest charging points'
-            )}
+            {loading ? <CircularProgress size={16} /> : 'Find Stations'}
           </Button>
         </Stack>
 
