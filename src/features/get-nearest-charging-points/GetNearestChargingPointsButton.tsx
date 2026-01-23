@@ -8,6 +8,7 @@ import RoomOutlinedIcon from '@mui/icons-material/RoomOutlined'
 import Select from '@mui/material/Select'
 import MenuItem from '@mui/material/MenuItem'
 import FormControl from '@mui/material/FormControl'
+import { generateGoogleMapsUrl } from '../../utils/maps'
 
 const IBERDROLA_URL =
   'https://corsproxy.io/?https://www.iberdrola.es/o/webclipb/iberdrola/puntosrecargacontroller/getListarPuntosRecarga'
@@ -314,7 +315,7 @@ export function GetNearestChargingPointsButton() {
                   📍 {st.latitude.toFixed(6)}, {st.longitude.toFixed(6)}
                 </Typography>
                 <a
-                  href={`https://www.google.com/maps?q=${st.latitude},${st.longitude}`}
+                  href={generateGoogleMapsUrl(st.latitude, st.longitude)}
                   target="_blank"
                   rel="noopener noreferrer"
                   style={{ fontSize: '0.8rem', color: '#2e7d32' }}

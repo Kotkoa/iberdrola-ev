@@ -16,6 +16,7 @@ import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined'
 import Copyright from './components/Copyright'
 import { PortCard } from './components/PortCard'
 import { useCharger } from '../hooks/useCharger'
+import { generateGoogleMapsUrl } from './utils/maps'
 import {
   isPushSupported,
   isStandaloneApp,
@@ -142,7 +143,7 @@ function App() {
 
   const handleShowOnMap = useCallback(() => {
     if (!cp_latitude || !cp_longitude) return
-    const mapsUrl = `https://www.google.com/maps?q=${cp_latitude},${cp_longitude}&z=15`
+    const mapsUrl = generateGoogleMapsUrl(cp_latitude, cp_longitude, 15)
     window.open(mapsUrl, '_blank', 'noopener,noreferrer')
   }, [cp_latitude, cp_longitude])
 
