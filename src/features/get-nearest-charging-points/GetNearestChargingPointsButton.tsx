@@ -84,17 +84,6 @@ async function fetchDirect(
     language: 'en',
   }
 
-  console.log('Search area:', {
-    center: { lat, lon },
-    radius: `${radiusKm}km`,
-    bounds: {
-      latMin: lat - latDelta,
-      latMax: lat + latDelta,
-      lonMin: lon - lonDelta,
-      lonMax: lon + lonDelta,
-    },
-  })
-
   const res = await fetch(API_ENDPOINTS.LIST_CHARGING_POINTS, {
     method: 'POST',
     headers: {
@@ -108,7 +97,6 @@ async function fetchDirect(
   if (!res.ok) throw new Error('Failed: ' + res.status)
 
   const data = await res.json()
-  console.log('Stations found:', data.entidad?.length || 0)
   return data.entidad || []
 }
 
@@ -223,7 +211,6 @@ export function GetNearestChargingPointsButton() {
 
       setStations(freeStations)
     } catch (err) {
-      console.error('Error:', err)
       const errorMsg =
         err instanceof GeolocationPositionError
           ? 'Location access denied'

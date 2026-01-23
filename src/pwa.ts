@@ -4,10 +4,6 @@ const SAVE_SUBSCRIPTION_ENDPOINT =
 const VAPID_PUBLIC_KEY = import.meta.env.VITE_VAPID_PUBLIC_KEY
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY
 
-if (!SUPABASE_ANON_KEY) {
-  console.warn('VITE_SUPABASE_ANON_KEY is not set; edge calls may fail.')
-}
-
 export function isPushSupported() {
   return (
     typeof window !== 'undefined' &&
@@ -31,16 +27,13 @@ export function isStandaloneApp() {
 
 export async function registerServiceWorker() {
   if (!('serviceWorker' in navigator)) {
-    console.warn('Service workers are not supported in this browser.')
     return null
   }
 
   try {
     const registration = await navigator.serviceWorker.register('/sw.js')
-    console.info('Service worker registered', registration)
     return registration
   } catch (error) {
-    console.error('Service worker registration failed', error)
     return null
   }
 }
