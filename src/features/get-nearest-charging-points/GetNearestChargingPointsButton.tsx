@@ -10,118 +10,12 @@ import MenuItem from '@mui/material/MenuItem';
 import FormControl from '@mui/material/FormControl';
 import { generateGoogleMapsUrl } from '../../utils/maps';
 import {
-  API_ENDPOINTS,
-  CHARGING_POINT_STATUS,
-  SEARCH_FILTERS,
-  GEO_CONSTANTS,
-} from '../../constants';
-
-interface PhysicalSocket {
-  status?: { statusCode?: string };
-  appliedRate?: {
-    recharge?: {
-      finalPrice?: number;
-    };
-  };
-  maxPower?: number;
-}
-
-interface LogicalSocket {
-  physicalSocket?: PhysicalSocket[];
-}
-
-interface StationDetails {
-  cpStatus?: { statusCode?: string };
-  logicalSocket?: LogicalSocket[];
-  locationData?: {
-    cuprName?: string;
-    latitude?: number;
-    longitude?: number;
-  };
-}
-
-interface StationListItem {
-  cpId?: number;
-  locationData?: {
-    cuprId?: number;
-  };
-}
-
-interface StationInfo {
-  cpId: number;
-  name: string;
-  latitude: number;
-  longitude: number;
-  maxPower: number;
-  freePorts: number;
-}
+  findNearestFreeStations,
+  getUserLocation,
+  type StationInfo,
+} from '../../services/iberdrola';
 
 const RADIUS_OPTIONS = [3, 5, 10, 15, 25, 40];
-
-async function fetchDirect(lat: number, lon: number, radiusKm: number): Promise<StationListItem[]> {
-  const latDelta = radiusKm / GEO_CONSTANTS.KM_PER_DEGREE_LAT;
-  const lonDelta =
-    radiusKm / (GEO_CONSTANTS.KM_PER_DEGREE_LAT * Math.cos(lat * GEO_CONSTANTS.DEG_TO_RAD));
-
-  const payload = {
-    dto: {
-      chargePointTypesCodes: SEARCH_FILTERS.CHARGE_POINT_TYPES,
-      socketStatus: SEARCH_FILTERS.SOCKET_STATUS,
-      advantageous: SEARCH_FILTERS.ADVANTAGEOUS,
-      connectorsType: SEARCH_FILTERS.CONNECTORS_TYPE,
-      loadSpeed: SEARCH_FILTERS.LOAD_SPEED,
-      latitudeMax: lat + latDelta,
-      latitudeMin: lat - latDelta,
-      longitudeMax: lon + lonDelta,
-      longitudeMin: lon - lonDelta,
-    },
-    language: 'en',
-  };
-
-  const res = await fetch(API_ENDPOINTS.LIST_CHARGING_POINTS, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Accept: 'application/json',
-      'X-Requested-With': 'XMLHttpRequest',
-    },
-    body: JSON.stringify(payload),
-  });
-
-  if (!res.ok) throw new Error('Failed: ' + res.status);
-
-  const data = await res.json();
-  return data.entidad || [];
-}
-
-async function fetchStationDetails(cuprId: number): Promise<StationDetails | null> {
-  const res = await fetch(API_ENDPOINTS.GET_CHARGING_POINT_DETAILS, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Accept: 'application/json',
-      'X-Requested-With': 'XMLHttpRequest',
-    },
-    body: JSON.stringify({ dto: { cuprId: [cuprId] }, language: 'en' }),
-  });
-
-  if (!res.ok) throw new Error('Failed details: ' + res.status);
-
-  const data = await res.json();
-  return data.entidad?.[0] || null;
-}
-
-function hasAvailablePorts(details: StationDetails | null): boolean {
-  if (!details) return false;
-
-  if (details.cpStatus?.statusCode === CHARGING_POINT_STATUS.AVAILABLE) return true;
-
-  return (
-    details.logicalSocket?.some((socket) =>
-      socket.physicalSocket?.some((ps) => ps.status?.statusCode === CHARGING_POINT_STATUS.AVAILABLE)
-    ) ?? false
-  );
-}
 
 export function GetNearestChargingPointsButton() {
   const [stations, setStations] = useState<StationInfo[]>([]);
@@ -138,61 +32,13 @@ export function GetNearestChargingPointsButton() {
     try {
       setLoading(true);
 
-      const pos = await new Promise<GeolocationPosition>((resolve, reject) => {
-        navigator.geolocation.getCurrentPosition(resolve, reject, {
-          enableHighAccuracy: true,
-          timeout: 10000,
-          maximumAge: 0,
-        });
-      });
-
-      const lat = pos.coords.latitude;
-      const lon = pos.coords.longitude;
-
-      const result = await fetchDirect(lat, lon, radius);
-      setProgress({ current: 0, total: result.length });
-
-      const freeStations: StationInfo[] = [];
-
-      for (const s of result) {
-        setProgress((p) => ({ ...p, current: p.current + 1 }));
-
-        const cpId = s.cpId;
-        const cuprId = s.locationData?.cuprId;
-
-        if (!cpId || !cuprId) {
-          continue;
-        }
-
-        const details = await fetchStationDetails(cuprId);
-
-        const hasAvailable = hasAvailablePorts(details);
-        const isPaid =
-          details?.logicalSocket?.some((sock) =>
-            sock.physicalSocket?.some(
-              (ps) => ps.appliedRate?.recharge?.finalPrice && ps.appliedRate.recharge.finalPrice > 0
-            )
-          ) ?? false;
-
-        if (!isPaid && hasAvailable) {
-          const logical = details?.logicalSocket || [];
-          const flattened = logical.flatMap((ls) => ls.physicalSocket || []);
-          const availableSockets = flattened.filter(
-            (ps) => ps.status?.statusCode === CHARGING_POINT_STATUS.AVAILABLE
-          );
-          const freePorts = availableSockets.length;
-          const maxPower = flattened.reduce((acc, ps) => Math.max(acc, ps.maxPower || 0), 0) || 0;
-
-          freeStations.push({
-            cpId: cpId,
-            name: details?.locationData?.cuprName || 'Unknown',
-            latitude: details?.locationData?.latitude || 0,
-            longitude: details?.locationData?.longitude || 0,
-            maxPower,
-            freePorts,
-          });
-        }
-      }
+      const pos = await getUserLocation();
+      const freeStations = await findNearestFreeStations(
+        pos.coords.latitude,
+        pos.coords.longitude,
+        radius,
+        (current, total) => setProgress({ current, total })
+      );
 
       setStations(freeStations);
     } catch (err) {
