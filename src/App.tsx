@@ -17,6 +17,7 @@ import Copyright from './components/Copyright'
 import { PortCard } from './components/PortCard'
 import { useCharger } from '../hooks/useCharger'
 import { generateGoogleMapsUrl } from './utils/maps'
+import { DEFAULT_CHARGING_POINT } from './constants'
 import {
   isPushSupported,
   isStandaloneApp,
@@ -138,8 +139,8 @@ function App() {
     [charger]
   )
 
-  const cp_latitude = 38.839266
-  const cp_longitude = -0.120815
+  const cp_latitude = DEFAULT_CHARGING_POINT.LATITUDE
+  const cp_longitude = DEFAULT_CHARGING_POINT.LONGITUDE
 
   const handleShowOnMap = useCallback(() => {
     if (!cp_latitude || !cp_longitude) return

@@ -9,9 +9,12 @@ import Select from '@mui/material/Select'
 import MenuItem from '@mui/material/MenuItem'
 import FormControl from '@mui/material/FormControl'
 import { generateGoogleMapsUrl } from '../../utils/maps'
-
-const IBERDROLA_URL =
-  'https://corsproxy.io/?https://www.iberdrola.es/o/webclipb/iberdrola/puntosrecargacontroller/getListarPuntosRecarga'
+import {
+  API_ENDPOINTS,
+  CHARGING_POINT_STATUS,
+  SEARCH_FILTERS,
+  GEO_CONSTANTS,
+} from '../../constants'
 
 interface PhysicalSocket {
   status?: { statusCode?: string }
@@ -60,16 +63,19 @@ async function fetchDirect(
   lon: number,
   radiusKm: number
 ): Promise<StationListItem[]> {
-  const latDelta = radiusKm / 111
-  const lonDelta = radiusKm / (111 * Math.cos((lat * Math.PI) / 180))
+  const latDelta = radiusKm / GEO_CONSTANTS.KM_PER_DEGREE_LAT
+  const lonDelta =
+    radiusKm /
+    (GEO_CONSTANTS.KM_PER_DEGREE_LAT *
+      Math.cos(lat * GEO_CONSTANTS.DEG_TO_RAD))
 
   const payload = {
     dto: {
-      chargePointTypesCodes: ['P', 'R', 'I', 'N'],
-      socketStatus: [],
-      advantageous: false,
-      connectorsType: ['2', '7'],
-      loadSpeed: [],
+      chargePointTypesCodes: SEARCH_FILTERS.CHARGE_POINT_TYPES,
+      socketStatus: SEARCH_FILTERS.SOCKET_STATUS,
+      advantageous: SEARCH_FILTERS.ADVANTAGEOUS,
+      connectorsType: SEARCH_FILTERS.CONNECTORS_TYPE,
+      loadSpeed: SEARCH_FILTERS.LOAD_SPEED,
       latitudeMax: lat + latDelta,
       latitudeMin: lat - latDelta,
       longitudeMax: lon + lonDelta,
@@ -89,7 +95,7 @@ async function fetchDirect(
     },
   })
 
-  const res = await fetch(IBERDROLA_URL, {
+  const res = await fetch(API_ENDPOINTS.LIST_CHARGING_POINTS, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -109,18 +115,15 @@ async function fetchDirect(
 async function fetchStationDetails(
   cuprId: number
 ): Promise<StationDetails | null> {
-  const res = await fetch(
-    'https://corsproxy.io/?https://www.iberdrola.es/o/webclipb/iberdrola/puntosrecargacontroller/getDatosPuntoRecarga',
-    {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Accept: 'application/json',
-        'X-Requested-With': 'XMLHttpRequest',
-      },
-      body: JSON.stringify({ dto: { cuprId: [cuprId] }, language: 'en' }),
-    }
-  )
+  const res = await fetch(API_ENDPOINTS.GET_CHARGING_POINT_DETAILS, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+      'X-Requested-With': 'XMLHttpRequest',
+    },
+    body: JSON.stringify({ dto: { cuprId: [cuprId] }, language: 'en' }),
+  })
 
   if (!res.ok) throw new Error('Failed details: ' + res.status)
 
@@ -131,11 +134,14 @@ async function fetchStationDetails(
 function hasAvailablePorts(details: StationDetails | null): boolean {
   if (!details) return false
 
-  if (details.cpStatus?.statusCode === 'AVAILABLE') return true
+  if (details.cpStatus?.statusCode === CHARGING_POINT_STATUS.AVAILABLE)
+    return true
 
   return (
     details.logicalSocket?.some((socket) =>
-      socket.physicalSocket?.some((ps) => ps.status?.statusCode === 'AVAILABLE')
+      socket.physicalSocket?.some(
+        (ps) => ps.status?.statusCode === CHARGING_POINT_STATUS.AVAILABLE
+      )
     ) ?? false
   )
 }
@@ -197,7 +203,7 @@ export function GetNearestChargingPointsButton() {
           const logical = details?.logicalSocket || []
           const flattened = logical.flatMap((ls) => ls.physicalSocket || [])
           const availableSockets = flattened.filter(
-            (ps) => ps.status?.statusCode === 'AVAILABLE'
+            (ps) => ps.status?.statusCode === CHARGING_POINT_STATUS.AVAILABLE
           )
           const freePorts = availableSockets.length
           const maxPower =
