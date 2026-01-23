@@ -3,7 +3,7 @@ import './App.css';
 import { useEffect, useState, useCallback } from 'react';
 import Container from '@mui/material/Container';
 import Copyright from './components/Copyright';
-import { LoadingState } from './components/LoadingState';
+import { LoadingSkeleton } from './components/LoadingSkeleton';
 import { ErrorState } from './components/ErrorState';
 import { EmptyState } from './components/EmptyState';
 import { ChargingStationInfo } from './components/ChargingStationInfo';
@@ -123,7 +123,7 @@ function App() {
   }, [cp_latitude, cp_longitude]);
 
   if (loading) {
-    return <LoadingState />;
+    return <LoadingSkeleton />;
   }
 
   if (error) {
