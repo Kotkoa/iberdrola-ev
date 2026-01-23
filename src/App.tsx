@@ -121,15 +121,6 @@ function App() {
     [charger]
   );
 
-  const cp_latitude = DEFAULT_CHARGING_POINT.LATITUDE;
-  const cp_longitude = DEFAULT_CHARGING_POINT.LONGITUDE;
-
-  const handleShowOnMap = useCallback(() => {
-    if (!cp_latitude || !cp_longitude) return;
-    const mapsUrl = generateGoogleMapsUrl(cp_latitude, cp_longitude, 15);
-    window.open(mapsUrl, '_blank', 'noopener,noreferrer');
-  }, [cp_latitude, cp_longitude]);
-
   if (loading) {
     return <LoadingSkeleton />;
   }
@@ -149,6 +140,16 @@ function App() {
       </Suspense>
     );
   }
+
+  // Use coordinates from charger data, fallback to default
+  const cp_latitude = charger.cp_latitude ?? DEFAULT_CHARGING_POINT.LATITUDE;
+  const cp_longitude = charger.cp_longitude ?? DEFAULT_CHARGING_POINT.LONGITUDE;
+
+  const handleShowOnMap = () => {
+    if (!cp_latitude || !cp_longitude) return;
+    const mapsUrl = generateGoogleMapsUrl(cp_latitude, cp_longitude, 15);
+    window.open(mapsUrl, '_blank', 'noopener,noreferrer');
+  };
 
   const port1Update = charger.port1_update_date ? new Date(charger.port1_update_date) : null;
   const port2Update = charger.port2_update_date ? new Date(charger.port2_update_date) : null;
@@ -170,12 +171,16 @@ function App() {
       isAvailable: isFirstPortAvailable,
       busyDuration: !isFirstPortAvailable ? formatDuration(port1DurationMinutes) : null,
       powerKw: charger.port1_power_kw,
+      priceKwh: charger.port1_price_kwh,
+      socketType: charger.port1_socket_type,
     },
     {
       portNumber: 2 as const,
       isAvailable: isSecondPortAvailable,
       busyDuration: !isSecondPortAvailable ? formatDuration(port2DurationMinutes) : null,
       powerKw: charger.port2_power_kw,
+      priceKwh: charger.port2_price_kwh,
+      socketType: charger.port2_socket_type,
     },
   ];
 
@@ -196,6 +201,9 @@ function App() {
         availableCount={availableCount}
         onShowOnMap={handleShowOnMap}
         hasCoordinates={Boolean(cp_latitude && cp_longitude)}
+        addressFull={charger.address_full}
+        emergencyStopPressed={charger.emergency_stop_pressed}
+        situationCode={charger.situation_code}
       />
 
       <PortsList

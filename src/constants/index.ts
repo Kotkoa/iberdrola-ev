@@ -71,3 +71,35 @@ export const TIME_INTERVALS = {
 // ========================
 export const RADIUS_OPTIONS = [5, 10, 25, 50, 100] as const;
 export type RadiusOption = (typeof RADIUS_OPTIONS)[number];
+
+// ========================
+// Station Status Codes
+// ========================
+export const STATION_SITUATION_CODES = {
+  OPERATIONAL: 'OPER',
+  MAINTENANCE: 'MAINT',
+  OUT_OF_SERVICE: 'OOS',
+} as const;
+
+export type StationSituationCode =
+  (typeof STATION_SITUATION_CODES)[keyof typeof STATION_SITUATION_CODES];
+
+// ========================
+// Socket Type Names
+// ========================
+export const SOCKET_TYPE_NAMES: Record<string, string> = {
+  '1': 'Type 1 (SAE J1772)',
+  '2': 'Type 2 (Mennekes)',
+  '4': 'CHAdeMO',
+  '27': 'CCS Combo 2',
+} as const;
+
+// ========================
+// Charge Speed Labels
+// ========================
+export const CHARGE_SPEED_LABELS: Record<number, string> = {
+  1: 'Slow (3-7 kW)',
+  2: 'Fast (11-22 kW)',
+  3: 'Rapid (43-50 kW)',
+  4: 'Ultra-rapid (150+ kW)',
+} as const;

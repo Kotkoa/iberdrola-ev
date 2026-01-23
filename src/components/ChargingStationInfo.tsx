@@ -1,6 +1,8 @@
-import { Avatar, Box, Button, Chip, Stack, Typography } from '@mui/material';
+import { Alert, Avatar, Box, Button, Chip, Stack, Typography } from '@mui/material';
 import DirectionsIcon from '@mui/icons-material/Directions';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
+import LocationOnIcon from '@mui/icons-material/LocationOn';
+import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 
 interface ChargingStationInfoProps {
   cpId: number;
@@ -9,6 +11,10 @@ interface ChargingStationInfoProps {
   availableCount: number;
   onShowOnMap: () => void;
   hasCoordinates: boolean;
+  // Extended fields
+  addressFull?: string | null;
+  emergencyStopPressed?: boolean | null;
+  situationCode?: string | null;
 }
 
 export function ChargingStationInfo({
@@ -18,6 +24,9 @@ export function ChargingStationInfo({
   availableCount,
   onShowOnMap,
   hasCoordinates,
+  addressFull,
+  emergencyStopPressed,
+  situationCode,
 }: ChargingStationInfoProps) {
   return (
     <Box
@@ -79,13 +88,22 @@ export function ChargingStationInfo({
         />
       </Stack>
 
-      <Typography
-        variant="caption"
-        color="textSecondary"
-        sx={{ mt: 0.5, fontSize: { xs: '0.65rem', sm: '0.75rem' } }}
-      >
-        PEGO, ALICANTE
-      </Typography>
+      {addressFull && (
+        <Typography
+          variant="caption"
+          color="textSecondary"
+          sx={{
+            mt: 0.5,
+            fontSize: { xs: '0.65rem', sm: '0.75rem' },
+            display: 'flex',
+            alignItems: 'center',
+            gap: 0.5,
+          }}
+        >
+          <LocationOnIcon sx={{ fontSize: '0.875rem' }} />
+          {addressFull}
+        </Typography>
+      )}
       <Typography
         variant="body1"
         color="textPrimary"
@@ -119,6 +137,29 @@ export function ChargingStationInfo({
           Show on map
         </Button>
       </Stack>
+
+      {/* Emergency stop alert */}
+      {emergencyStopPressed && (
+        <Alert
+          severity="error"
+          icon={<WarningAmberIcon />}
+          sx={{ mb: 1, fontSize: { xs: '0.7rem', sm: '0.875rem' } }}
+        >
+          Emergency stop activated - station unavailable
+        </Alert>
+      )}
+
+      {/* Station status warning */}
+      {situationCode && situationCode !== 'OPER' && (
+        <Alert severity="warning" sx={{ mb: 1, fontSize: { xs: '0.7rem', sm: '0.875rem' } }}>
+          Station status:{' '}
+          {situationCode === 'MAINT'
+            ? 'Maintenance'
+            : situationCode === 'OOS'
+              ? 'Out of Service'
+              : situationCode}
+        </Alert>
+      )}
 
       <Stack
         direction="row"

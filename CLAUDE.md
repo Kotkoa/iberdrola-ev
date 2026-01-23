@@ -22,6 +22,33 @@ Supabase (charge_logs_parsed) → useCharger hook → React state → UI
 - [hooks/useCharger.ts](hooks/useCharger.ts) - React hook wrapping API calls
 - [src/App.tsx](src/App.tsx) - Main component consuming data
 
+#### Extended Data Fields
+
+**Station metadata** (from Iberdrola API):
+
+- `address_full` - Full address string (street, number, town, region)
+- `situation_code` - Station status (OPER/MAINT/OOS)
+- `emergency_stop_pressed` - Emergency stop indicator (boolean)
+- `cp_latitude`, `cp_longitude` - Station coordinates
+
+**Port details**:
+
+- `port1_socket_type`, `port2_socket_type` - Socket type (e.g., "Mennekes (Type 2)")
+- `port1_price_kwh`, `port2_price_kwh` - Charging price (€/kWh, 0 = free)
+- `port1_power_kw`, `port2_power_kw` - Power rating (kW)
+
+**Database schema**:
+
+- `charge_logs_parsed` - Main table with latest status + extended fields
+- `station_metadata` - Reference data (rarely changes): operator, serial number, address components, socket details (JSONB)
+- `charging_stations_full` - View joining both tables (optional, for complex queries)
+
+**UI display**:
+
+- [ChargingStationInfo](src/components/ChargingStationInfo.tsx) - Shows address, emergency/maintenance alerts
+- [PortCard](src/components/PortCard.tsx) - Shows socket type, pricing (FREE chip or €X.XXXX/kWh)
+- [GetNearestChargingPointsButton](src/features/get-nearest-charging-points/GetNearestChargingPointsButton.tsx) - Uses extended fields in search results
+
 ### PWA & Push Notifications
 
 Push notifications use Web Push API + service worker pattern:

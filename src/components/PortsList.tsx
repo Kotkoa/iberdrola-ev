@@ -8,6 +8,8 @@ interface PortConfig {
   isAvailable: boolean;
   busyDuration: string | null;
   powerKw: number | null;
+  priceKwh?: number | null;
+  socketType?: string | null;
 }
 
 interface PortsListProps {
@@ -36,39 +38,43 @@ export function PortsList({
         alignItems="stretch"
         sx={{ mt: 1 }}
       >
-        {portConfigs.map(({ portNumber, isAvailable, busyDuration, powerKw }) => {
-          const state = subscriptionState[portNumber];
-          const errorMessage = subscriptionErrors[portNumber];
+        {portConfigs.map(
+          ({ portNumber, isAvailable, busyDuration, powerKw, priceKwh, socketType }) => {
+            const state = subscriptionState[portNumber];
+            const errorMessage = subscriptionErrors[portNumber];
 
-          return (
-            <Box
-              key={portNumber}
-              sx={{
-                flex: 1,
-                width: '100%',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: 1,
-              }}
-            >
-              <PortCard
-                portNumber={portNumber}
-                isAvailable={isAvailable}
-                busyDuration={busyDuration}
-                powerKw={powerKw}
-              />
-              {isStandalone && (
-                <SubscriptionPanel
+            return (
+              <Box
+                key={portNumber}
+                sx={{
+                  flex: 1,
+                  width: '100%',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 1,
+                }}
+              >
+                <PortCard
                   portNumber={portNumber}
-                  subscriptionState={state}
-                  errorMessage={errorMessage}
-                  pushAvailable={pushAvailable}
-                  onSubscribeClick={onSubscribeClick}
+                  isAvailable={isAvailable}
+                  busyDuration={busyDuration}
+                  powerKw={powerKw}
+                  priceKwh={priceKwh}
+                  socketType={socketType}
                 />
-              )}
-            </Box>
-          );
-        })}
+                {isStandalone && (
+                  <SubscriptionPanel
+                    portNumber={portNumber}
+                    subscriptionState={state}
+                    errorMessage={errorMessage}
+                    pushAvailable={pushAvailable}
+                    onSubscribeClick={onSubscribeClick}
+                  />
+                )}
+              </Box>
+            );
+          }
+        )}
       </Stack>
       {isStandalone && !pushAvailable && (
         <Typography variant="caption" color="textSecondary" sx={{ display: 'block', mt: 1.5 }}>

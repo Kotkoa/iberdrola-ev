@@ -9,6 +9,10 @@ export interface PhysicalSocket {
     };
   };
   maxPower?: number;
+  socketType?: {
+    socketName?: string;
+    socketTypeId?: string;
+  };
 }
 
 export interface LogicalSocket {
@@ -18,10 +22,21 @@ export interface LogicalSocket {
 export interface StationDetails {
   cpStatus?: { statusCode?: string };
   logicalSocket?: LogicalSocket[];
+  emergencyStopButtonPressed?: boolean;
   locationData?: {
     cuprName?: string;
     latitude?: number;
     longitude?: number;
+    cuprReservationIndicator?: boolean;
+    situationCode?: string;
+    supplyPointData?: {
+      cpAddress?: {
+        streetName?: string;
+        streetNum?: string;
+        townName?: string;
+        regionName?: string;
+      };
+    };
   };
 }
 
@@ -40,6 +55,12 @@ export interface StationInfo {
   longitude: number;
   maxPower: number;
   freePorts: number;
+  // Extended fields
+  addressFull: string;
+  socketType: string;
+  priceKwh: number;
+  emergencyStopPressed: boolean;
+  supportsReservation: boolean;
 }
 
 /**
@@ -149,6 +170,24 @@ function extractStationInfo(cpId: number, details: StationDetails | null): Stati
   const freePorts = availableSockets.length;
   const maxPower = flattened.reduce((acc, ps) => Math.max(acc, ps.maxPower || 0), 0) || 0;
 
+  // Extract address
+  const addr = details.locationData?.supplyPointData?.cpAddress;
+  const addressFull = addr
+    ? `${addr.streetName || ''} ${addr.streetNum || ''}, ${addr.townName || ''}, ${addr.regionName || ''}`.trim()
+    : 'Address unknown';
+
+  // Extract socket type (from first available physical socket)
+  const firstSocket = flattened[0];
+  const socketType = firstSocket?.socketType?.socketName
+    ? `${firstSocket.socketType.socketName} (Type ${firstSocket.socketType.socketTypeId})`
+    : 'Unknown';
+
+  // Extract price (minimum price across all sockets)
+  const prices = flattened
+    .map((ps) => ps.appliedRate?.recharge?.finalPrice)
+    .filter((p): p is number => typeof p === 'number');
+  const priceKwh = prices.length > 0 ? Math.min(...prices) : 0;
+
   return {
     cpId,
     name: details.locationData?.cuprName || 'Unknown',
@@ -156,6 +195,12 @@ function extractStationInfo(cpId: number, details: StationDetails | null): Stati
     longitude: details.locationData?.longitude || 0,
     maxPower,
     freePorts,
+    // Extended fields
+    addressFull,
+    socketType,
+    priceKwh,
+    emergencyStopPressed: details.emergencyStopButtonPressed || false,
+    supportsReservation: details.locationData?.cuprReservationIndicator || false,
   };
 }
 

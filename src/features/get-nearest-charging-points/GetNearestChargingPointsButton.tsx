@@ -129,14 +129,23 @@ export default function GetNearestChargingPointsButton() {
                 <Typography variant="subtitle2" sx={{ color: '#333' }}>
                   {st.name}
                 </Typography>
+                <Typography variant="body2" sx={{ color: '#555' }}>
+                  📍 {st.addressFull || `${st.latitude.toFixed(6)}, ${st.longitude.toFixed(6)}`}
+                </Typography>
+                <Typography variant="body2" sx={{ color: '#333' }}>
+                  🔌 {st.socketType}
+                </Typography>
                 <Typography variant="body2" sx={{ color: '#333' }}>
                   ⚡ {st.maxPower} kW
                 </Typography>
                 <Typography variant="body2" sx={{ color: '#333' }}>
                   🟢 Free ports: {st.freePorts}
                 </Typography>
-                <Typography variant="body2" sx={{ mb: 0.5, color: '#333' }}>
-                  📍 {st.latitude.toFixed(6)}, {st.longitude.toFixed(6)}
+                <Typography
+                  variant="body2"
+                  sx={{ mb: 0.5, color: st.priceKwh === 0 ? '#2e7d32' : '#333' }}
+                >
+                  {st.priceKwh === 0 ? '💰 FREE' : `💰 €${st.priceKwh.toFixed(4)}/kWh`}
                 </Typography>
                 <a
                   href={generateGoogleMapsUrl(st.latitude, st.longitude)}
