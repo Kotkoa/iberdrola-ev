@@ -242,7 +242,7 @@ export function GetNearestChargingPointsButton() {
           <FormControl size="small" sx={{ minWidth: 90 }}>
             <Select
               value={radius}
-              onChange={(e) => setRadius(e.target.value as number)}
+              onChange={(e) => setRadius(Number(e.target.value))}
               disabled={loading}
               sx={{
                 height: '40px',

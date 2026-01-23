@@ -4,6 +4,10 @@ const SAVE_SUBSCRIPTION_ENDPOINT =
 const VAPID_PUBLIC_KEY = import.meta.env.VITE_VAPID_PUBLIC_KEY
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY
 
+interface NavigatorStandalone extends Navigator {
+  standalone?: boolean
+}
+
 export function isPushSupported() {
   return (
     typeof window !== 'undefined' &&
@@ -20,7 +24,7 @@ export function isStandaloneApp() {
   const isNavigatorStandalone =
     typeof navigator !== 'undefined' &&
     'standalone' in navigator &&
-    (navigator as unknown as { standalone?: boolean }).standalone === true
+    (navigator as NavigatorStandalone).standalone === true
 
   return isDisplayModeStandalone || isNavigatorStandalone
 }
