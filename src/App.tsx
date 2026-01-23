@@ -1,11 +1,9 @@
 import './App.css';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, lazy, Suspense } from 'react';
 import Container from '@mui/material/Container';
 import Copyright from './components/Copyright';
 import { LoadingSkeleton } from './components/LoadingSkeleton';
-import { ErrorState } from './components/ErrorState';
-import { EmptyState } from './components/EmptyState';
 import { ChargingStationInfo } from './components/ChargingStationInfo';
 import { PortsList } from './components/PortsList';
 import { useCharger } from '../hooks/useCharger';
@@ -13,8 +11,18 @@ import { generateGoogleMapsUrl } from './utils/maps';
 import { formatDuration } from './utils/time';
 import { DEFAULT_CHARGING_POINT } from './constants';
 import { isPushSupported, isStandaloneApp, subscribeToStationNotifications } from './pwa';
-import { GetNearestChargingPointsButton } from './features/get-nearest-charging-points/GetNearestChargingPointsButton';
 import type { PortNumber, SubscriptionStatus } from './types';
+
+// Lazy load rarely used components
+const ErrorState = lazy(() =>
+  import('./components/ErrorState').then((module) => ({ default: module.ErrorState }))
+);
+const EmptyState = lazy(() =>
+  import('./components/EmptyState').then((module) => ({ default: module.EmptyState }))
+);
+const GetNearestChargingPointsButton = lazy(
+  () => import('./features/get-nearest-charging-points/GetNearestChargingPointsButton')
+);
 
 function App() {
   const { data: charger, loading, error } = useCharger();
@@ -127,11 +135,19 @@ function App() {
   }
 
   if (error) {
-    return <ErrorState error={error} />;
+    return (
+      <Suspense fallback={<LoadingSkeleton />}>
+        <ErrorState error={error} />
+      </Suspense>
+    );
   }
 
   if (!charger) {
-    return <EmptyState />;
+    return (
+      <Suspense fallback={<LoadingSkeleton />}>
+        <EmptyState />
+      </Suspense>
+    );
   }
 
   const port1Update = charger.port1_update_date ? new Date(charger.port1_update_date) : null;
@@ -191,7 +207,11 @@ function App() {
         onSubscribeClick={handleSubscribeClick}
       />
 
-      {isStandalone && <GetNearestChargingPointsButton />}
+      {isStandalone && (
+        <Suspense fallback={null}>
+          <GetNearestChargingPointsButton />
+        </Suspense>
+      )}
       <Copyright />
     </Container>
   );

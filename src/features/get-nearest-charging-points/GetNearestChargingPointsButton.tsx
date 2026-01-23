@@ -17,7 +17,7 @@ import {
 
 const RADIUS_OPTIONS = [3, 5, 10, 15, 25, 40];
 
-export function GetNearestChargingPointsButton() {
+export default function GetNearestChargingPointsButton() {
   const [stations, setStations] = useState<StationInfo[]>([]);
   const [progress, setProgress] = useState({ current: 0, total: 0 });
   const [loading, setLoading] = useState(false);
