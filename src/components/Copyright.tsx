@@ -1,5 +1,5 @@
-import Typography from '@mui/material/Typography'
-import Link from '@mui/material/Link'
+import Typography from '@mui/material/Typography';
+import Link from '@mui/material/Link';
 
 function Copyright() {
   return (
@@ -12,16 +12,12 @@ function Copyright() {
       }}
     >
       {'Copyright © '}
-      <Link
-        color="inherit"
-        href="https://github.com/Kotkoa"
-        className="no-underline"
-      >
+      <Link color="inherit" href="https://github.com/Kotkoa" className="no-underline">
         Kotkoa
       </Link>{' '}
       {new Date().getFullYear()}.
     </Typography>
-  )
+  );
 }
 
-export default Copyright
+export default Copyright;

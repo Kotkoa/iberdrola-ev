@@ -1,72 +1,64 @@
-import './App.css'
+import './App.css';
 
-import { useEffect, useState, useCallback } from 'react'
-import Typography from '@mui/material/Typography'
-import Box from '@mui/material/Box'
-import Container from '@mui/material/Container'
-import Stack from '@mui/material/Stack'
-import Chip from '@mui/material/Chip'
-import Avatar from '@mui/material/Avatar'
-import Button from '@mui/material/Button'
-import CircularProgress from '@mui/material/CircularProgress'
-import Alert from '@mui/material/Alert'
-import AlertTitle from '@mui/material/AlertTitle'
-import DirectionsIcon from '@mui/icons-material/Directions'
-import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined'
-import Copyright from './components/Copyright'
-import { PortCard } from './components/PortCard'
-import { useCharger } from '../hooks/useCharger'
-import { generateGoogleMapsUrl } from './utils/maps'
-import { DEFAULT_CHARGING_POINT } from './constants'
-import {
-  isPushSupported,
-  isStandaloneApp,
-  subscribeToStationNotifications,
-} from './pwa'
-import { GetNearestChargingPointsButton } from './features/get-nearest-charging-points/GetNearestChargingPointsButton'
+import { useEffect, useState, useCallback } from 'react';
+import Typography from '@mui/material/Typography';
+import Box from '@mui/material/Box';
+import Container from '@mui/material/Container';
+import Stack from '@mui/material/Stack';
+import Chip from '@mui/material/Chip';
+import Avatar from '@mui/material/Avatar';
+import Button from '@mui/material/Button';
+import CircularProgress from '@mui/material/CircularProgress';
+import Alert from '@mui/material/Alert';
+import AlertTitle from '@mui/material/AlertTitle';
+import DirectionsIcon from '@mui/icons-material/Directions';
+import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
+import Copyright from './components/Copyright';
+import { PortCard } from './components/PortCard';
+import { useCharger } from '../hooks/useCharger';
+import { generateGoogleMapsUrl } from './utils/maps';
+import { DEFAULT_CHARGING_POINT } from './constants';
+import { isPushSupported, isStandaloneApp, subscribeToStationNotifications } from './pwa';
+import { GetNearestChargingPointsButton } from './features/get-nearest-charging-points/GetNearestChargingPointsButton';
 
 const formatDuration = (durationMinutes: number | null) => {
-  if (durationMinutes === null) return null
-  if (durationMinutes < 1) return '< 1 min'
+  if (durationMinutes === null) return null;
+  if (durationMinutes < 1) return '< 1 min';
 
-  const hours = Math.floor(durationMinutes / 60)
-  const minutes = durationMinutes % 60
+  const hours = Math.floor(durationMinutes / 60);
+  const minutes = durationMinutes % 60;
 
-  return hours > 0
-    ? `${hours}h${minutes > 0 ? ` ${minutes}m` : ''}`
-    : `${minutes}m`
-}
+  return hours > 0 ? `${hours}h${minutes > 0 ? ` ${minutes}m` : ''}` : `${minutes}m`;
+};
 
-type PortNumber = 1 | 2
+type PortNumber = 1 | 2;
 
 function App() {
-  const { data: charger, loading, error } = useCharger()
-  const [now, setNow] = useState(() => new Date())
-  const [pushAvailable, setPushAvailable] = useState(() => isPushSupported())
-  const [isStandalone, setIsStandalone] = useState(() => isStandaloneApp())
+  const { data: charger, loading, error } = useCharger();
+  const [now, setNow] = useState(() => new Date());
+  const [pushAvailable, setPushAvailable] = useState(() => isPushSupported());
+  const [isStandalone, setIsStandalone] = useState(() => isStandaloneApp());
   const [subscriptionState, setSubscriptionState] = useState<
     Record<PortNumber, 'idle' | 'loading' | 'success' | 'error'>
   >({
     1: 'idle',
     2: 'idle',
-  })
-  const [subscriptionErrors, setSubscriptionErrors] = useState<
-    Record<PortNumber, string | null>
-  >({
+  });
+  const [subscriptionErrors, setSubscriptionErrors] = useState<Record<PortNumber, string | null>>({
     1: null,
     2: null,
-  })
+  });
 
-  const VITE_CHECK_SUB_URL = import.meta.env.VITE_CHECK_SUB_URL
+  const VITE_CHECK_SUB_URL = import.meta.env.VITE_CHECK_SUB_URL;
 
   const restoreSubscriptionState = useCallback(
     async (stationId: number) => {
-      if (!isPushSupported()) return
+      if (!isPushSupported()) return;
 
-      const registration = await navigator.serviceWorker.ready
-      const existing = await registration.pushManager.getSubscription()
+      const registration = await navigator.serviceWorker.ready;
+      const existing = await registration.pushManager.getSubscription();
 
-      if (!existing) return
+      if (!existing) return;
 
       const res = await fetch(`${VITE_CHECK_SUB_URL}`, {
         method: 'POST',
@@ -75,85 +67,81 @@ function App() {
           stationId: String(stationId),
           endpoint: existing.endpoint,
         }),
-      })
+      });
 
-      const { ports } = await res.json()
+      const { ports } = await res.json();
 
       setSubscriptionState(() => ({
         1: ports.includes(1) ? 'success' : 'idle',
         2: ports.includes(2) ? 'success' : 'idle',
-      }))
+      }));
     },
     [VITE_CHECK_SUB_URL]
-  )
+  );
 
   useEffect(() => {
-    const intervalId = setInterval(() => setNow(new Date()), 60000)
-    return () => clearInterval(intervalId)
-  }, [])
+    const intervalId = setInterval(() => setNow(new Date()), 60000);
+    return () => clearInterval(intervalId);
+  }, []);
 
   useEffect(() => {
-    if (!charger) return
-    restoreSubscriptionState(charger.cp_id)
-  }, [charger, restoreSubscriptionState])
+    if (!charger) return;
+    restoreSubscriptionState(charger.cp_id);
+  }, [charger, restoreSubscriptionState]);
 
   useEffect(() => {
-    setPushAvailable(isPushSupported())
-    setIsStandalone(isStandaloneApp())
+    setPushAvailable(isPushSupported());
+    setIsStandalone(isStandaloneApp());
 
     const mediaQuery =
       typeof window !== 'undefined' && typeof window.matchMedia === 'function'
         ? window.matchMedia('(display-mode: standalone)')
-        : null
+        : null;
 
-    if (!mediaQuery) return
+    if (!mediaQuery) return;
 
     const handleDisplayModeChange = (e: MediaQueryListEvent) => {
-      setIsStandalone(e.matches)
-    }
+      setIsStandalone(e.matches);
+    };
 
-    mediaQuery.addEventListener('change', handleDisplayModeChange)
+    mediaQuery.addEventListener('change', handleDisplayModeChange);
 
     return () => {
-      mediaQuery.removeEventListener('change', handleDisplayModeChange)
-    }
-  }, [])
+      mediaQuery.removeEventListener('change', handleDisplayModeChange);
+    };
+  }, []);
 
   const handleSubscribeClick = useCallback(
     async (portNumber: PortNumber) => {
-      if (!charger) return
-      setSubscriptionErrors((prev) => ({ ...prev, [portNumber]: null }))
-      setSubscriptionState((prev) => ({ ...prev, [portNumber]: 'loading' }))
+      if (!charger) return;
+      setSubscriptionErrors((prev) => ({ ...prev, [portNumber]: null }));
+      setSubscriptionState((prev) => ({ ...prev, [portNumber]: 'loading' }));
       try {
-        await subscribeToStationNotifications(charger.cp_id, portNumber)
-        setSubscriptionState((prev) => ({ ...prev, [portNumber]: 'success' }))
+        await subscribeToStationNotifications(charger.cp_id, portNumber);
+        setSubscriptionState((prev) => ({ ...prev, [portNumber]: 'success' }));
       } catch (err) {
-        setSubscriptionState((prev) => ({ ...prev, [portNumber]: 'error' }))
+        setSubscriptionState((prev) => ({ ...prev, [portNumber]: 'error' }));
         setSubscriptionErrors((prev) => ({
           ...prev,
-          [portNumber]:
-            err instanceof Error ? err.message : 'Subscribing failed',
-        }))
+          [portNumber]: err instanceof Error ? err.message : 'Subscribing failed',
+        }));
       }
     },
     [charger]
-  )
+  );
 
-  const cp_latitude = DEFAULT_CHARGING_POINT.LATITUDE
-  const cp_longitude = DEFAULT_CHARGING_POINT.LONGITUDE
+  const cp_latitude = DEFAULT_CHARGING_POINT.LATITUDE;
+  const cp_longitude = DEFAULT_CHARGING_POINT.LONGITUDE;
 
   const handleShowOnMap = useCallback(() => {
-    if (!cp_latitude || !cp_longitude) return
-    const mapsUrl = generateGoogleMapsUrl(cp_latitude, cp_longitude, 15)
-    window.open(mapsUrl, '_blank', 'noopener,noreferrer')
-  }, [cp_latitude, cp_longitude])
+    if (!cp_latitude || !cp_longitude) return;
+    const mapsUrl = generateGoogleMapsUrl(cp_latitude, cp_longitude, 15);
+    window.open(mapsUrl, '_blank', 'noopener,noreferrer');
+  }, [cp_latitude, cp_longitude]);
 
   if (loading) {
     return (
-      <Container
-        maxWidth="sm"
-        className="border border-gray-200 rounded-xl shadow-md bg-white"
-      >
+      <Container maxWidth="sm" className="rounded-xl border border-gray-200 bg-white shadow-md">
         <Box sx={{ m: 4 }}>
           <Stack alignItems="center" spacing={1} sx={{ my: 4 }}>
             <CircularProgress size={28} />
@@ -163,15 +151,12 @@ function App() {
           </Stack>
         </Box>
       </Container>
-    )
+    );
   }
 
   if (error) {
     return (
-      <Container
-        maxWidth="sm"
-        className="border border-gray-200 rounded-xl shadow-md bg-white"
-      >
+      <Container maxWidth="sm" className="rounded-xl border border-gray-200 bg-white shadow-md">
         <Box sx={{ m: 4 }}>
           <Alert severity="error" sx={{ mb: 2 }}>
             <AlertTitle>Failed to load data</AlertTitle>
@@ -179,70 +164,58 @@ function App() {
           </Alert>
         </Box>
       </Container>
-    )
+    );
   }
 
   if (!charger) {
     return (
-      <Container
-        maxWidth="sm"
-        className="border border-gray-200 rounded-xl shadow-md bg-white"
-      >
+      <Container maxWidth="sm" className="rounded-xl border border-gray-200 bg-white shadow-md">
         <Box sx={{ m: 4 }}>
           <Typography variant="body2" color="textSecondary">
             No data available.
           </Typography>
         </Box>
       </Container>
-    )
+    );
   }
 
-  const port1Update = charger.port1_update_date
-    ? new Date(charger.port1_update_date)
-    : null
-  const port2Update = charger.port2_update_date
-    ? new Date(charger.port2_update_date)
-    : null
+  const port1Update = charger.port1_update_date ? new Date(charger.port1_update_date) : null;
+  const port2Update = charger.port2_update_date ? new Date(charger.port2_update_date) : null;
 
   const port1DurationMinutes = port1Update
     ? Math.floor((now.getTime() - port1Update.getTime()) / 60000)
-    : null
+    : null;
   const port2DurationMinutes = port2Update
     ? Math.floor((now.getTime() - port2Update.getTime()) / 60000)
-    : null
+    : null;
 
-  const isFirstPortAvailable = charger.port1_status === 'AVAILABLE'
-  const isSecondPortAvailable = charger.port2_status === 'AVAILABLE'
-  const availableCount =
-    (isFirstPortAvailable ? 1 : 0) + (isSecondPortAvailable ? 1 : 0)
+  const isFirstPortAvailable = charger.port1_status === 'AVAILABLE';
+  const isSecondPortAvailable = charger.port2_status === 'AVAILABLE';
+  const availableCount = (isFirstPortAvailable ? 1 : 0) + (isSecondPortAvailable ? 1 : 0);
   const portConfigs: Array<{
-    portNumber: PortNumber
-    isAvailable: boolean
-    busyDuration: string | null
-    powerKw: number | null
+    portNumber: PortNumber;
+    isAvailable: boolean;
+    busyDuration: string | null;
+    powerKw: number | null;
   }> = [
     {
       portNumber: 1 as const,
       isAvailable: isFirstPortAvailable,
-      busyDuration: !isFirstPortAvailable
-        ? formatDuration(port1DurationMinutes)
-        : null,
+      busyDuration: !isFirstPortAvailable ? formatDuration(port1DurationMinutes) : null,
       powerKw: charger.port1_power_kw,
     },
     {
       portNumber: 2 as const,
       isAvailable: isSecondPortAvailable,
-      busyDuration: !isSecondPortAvailable
-        ? formatDuration(port2DurationMinutes)
-        : null,
+      busyDuration: !isSecondPortAvailable ? formatDuration(port2DurationMinutes) : null,
       powerKw: charger.port2_power_kw,
     },
-  ]
+  ];
 
   return (
     <Container
       maxWidth="sm"
-      className="border border-gray-200 rounded-xl shadow-md bg-white py-4"
+      className="rounded-xl border border-gray-200 bg-white py-4 shadow-md"
       sx={{
         px: { xs: 2, sm: 3 },
         maxWidth: { xs: '100vw', sm: '600px' },
@@ -380,76 +353,64 @@ function App() {
           alignItems="stretch"
           sx={{ mt: 1 }}
         >
-          {portConfigs.map(
-            ({ portNumber, isAvailable, busyDuration, powerKw }) => {
-              const state = subscriptionState[portNumber]
-              const errorMessage = subscriptionErrors[portNumber]
-              const buttonLabel =
-                state === 'success'
-                  ? 'Notifications enabled'
-                  : state === 'error'
+          {portConfigs.map(({ portNumber, isAvailable, busyDuration, powerKw }) => {
+            const state = subscriptionState[portNumber];
+            const errorMessage = subscriptionErrors[portNumber];
+            const buttonLabel =
+              state === 'success'
+                ? 'Notifications enabled'
+                : state === 'error'
                   ? 'Error enabling notifications'
-                  : 'Notify me when free'
+                  : 'Notify me when free';
 
-              return (
-                <Box
-                  key={portNumber}
-                  sx={{
-                    flex: 1,
-                    width: '100%',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: 1,
-                  }}
-                >
-                  <PortCard
-                    portNumber={portNumber}
-                    isAvailable={isAvailable}
-                    busyDuration={busyDuration}
-                    powerKw={powerKw}
-                  />
-                  {isStandalone && (
-                    <>
-                      <Button
-                        variant="contained"
-                        color="success"
-                        disabled={
-                          !pushAvailable ||
-                          state === 'loading' ||
-                          state === 'success'
-                        }
-                        onClick={() => handleSubscribeClick(portNumber)}
-                        sx={{
-                          textTransform: 'none',
-                          fontSize: { xs: '0.75rem', sm: '0.875rem' },
-                        }}
-                      >
-                        {state === 'loading' ? 'Subscribing...' : buttonLabel}
-                      </Button>
-                      {state === 'success' && (
-                        <Alert severity="success">
-                          Notifications enabled for port {portNumber}.
-                        </Alert>
-                      )}
-                      {state === 'error' && errorMessage && (
-                        <Alert severity="warning">
-                          <AlertTitle>Subscription error</AlertTitle>
-                          {errorMessage}
-                        </Alert>
-                      )}
-                    </>
-                  )}
-                </Box>
-              )
-            }
-          )}
+            return (
+              <Box
+                key={portNumber}
+                sx={{
+                  flex: 1,
+                  width: '100%',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 1,
+                }}
+              >
+                <PortCard
+                  portNumber={portNumber}
+                  isAvailable={isAvailable}
+                  busyDuration={busyDuration}
+                  powerKw={powerKw}
+                />
+                {isStandalone && (
+                  <>
+                    <Button
+                      variant="contained"
+                      color="success"
+                      disabled={!pushAvailable || state === 'loading' || state === 'success'}
+                      onClick={() => handleSubscribeClick(portNumber)}
+                      sx={{
+                        textTransform: 'none',
+                        fontSize: { xs: '0.75rem', sm: '0.875rem' },
+                      }}
+                    >
+                      {state === 'loading' ? 'Subscribing...' : buttonLabel}
+                    </Button>
+                    {state === 'success' && (
+                      <Alert severity="success">Notifications enabled for port {portNumber}.</Alert>
+                    )}
+                    {state === 'error' && errorMessage && (
+                      <Alert severity="warning">
+                        <AlertTitle>Subscription error</AlertTitle>
+                        {errorMessage}
+                      </Alert>
+                    )}
+                  </>
+                )}
+              </Box>
+            );
+          })}
         </Stack>
         {isStandalone && !pushAvailable && (
-          <Typography
-            variant="caption"
-            color="textSecondary"
-            sx={{ display: 'block', mt: 1.5 }}
-          >
+          <Typography variant="caption" color="textSecondary" sx={{ display: 'block', mt: 1.5 }}>
             Push notifications are not supported in this browser.
           </Typography>
         )}
@@ -457,7 +418,7 @@ function App() {
         <Copyright />
       </Box>
     </Container>
-  )
+  );
 }
 
-export default App
+export default App;

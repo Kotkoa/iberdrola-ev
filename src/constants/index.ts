@@ -9,10 +9,10 @@ export const CHARGING_POINT_STATUS = {
   AVAILABLE: 'AVAILABLE',
   BUSY: 'BUSY',
   CLOSED: 'CLOSED',
-} as const
+} as const;
 
 export type ChargingPointStatus =
-  (typeof CHARGING_POINT_STATUS)[keyof typeof CHARGING_POINT_STATUS]
+  (typeof CHARGING_POINT_STATUS)[keyof typeof CHARGING_POINT_STATUS];
 
 // ========================
 // Default Coordinates
@@ -20,19 +20,18 @@ export type ChargingPointStatus =
 export const DEFAULT_CHARGING_POINT = {
   LATITUDE: 38.839266,
   LONGITUDE: -0.120815,
-} as const
+} as const;
 
 // ========================
 // API Configuration
 // ========================
-const CORS_PROXY = 'https://corsproxy.io/?'
-const IBERDROLA_BASE_URL =
-  'https://www.iberdrola.es/o/webclipb/iberdrola/puntosrecargacontroller'
+const CORS_PROXY = 'https://corsproxy.io/?';
+const IBERDROLA_BASE_URL = 'https://www.iberdrola.es/o/webclipb/iberdrola/puntosrecargacontroller';
 
 export const API_ENDPOINTS = {
   LIST_CHARGING_POINTS: `${CORS_PROXY}${IBERDROLA_BASE_URL}/getListarPuntosRecarga`,
   GET_CHARGING_POINT_DETAILS: `${CORS_PROXY}${IBERDROLA_BASE_URL}/getDatosPuntoRecarga`,
-} as const
+} as const;
 
 // ========================
 // Search Filters
@@ -43,7 +42,7 @@ export const SEARCH_FILTERS = {
   ADVANTAGEOUS: false,
   CONNECTORS_TYPE: ['2', '7'] as const, // Type 2 connectors
   LOAD_SPEED: [] as string[],
-} as const
+} as const;
 
 // ========================
 // Geographic Calculations
@@ -53,7 +52,7 @@ export const GEO_CONSTANTS = {
   KM_PER_DEGREE_LAT: 111,
   /** Converts degrees to radians */
   DEG_TO_RAD: Math.PI / 180,
-} as const
+} as const;
 
 // ========================
 // Time Intervals (milliseconds)
@@ -65,10 +64,10 @@ export const TIME_INTERVALS = {
   GEOLOCATION_TIMEOUT_MS: 10000,
   /** Snackbar auto-hide duration (5 seconds) */
   SNACKBAR_AUTO_HIDE_MS: 5000,
-} as const
+} as const;
 
 // ========================
 // Search Radius Options (km)
 // ========================
-export const RADIUS_OPTIONS = [5, 10, 25, 50, 100] as const
-export type RadiusOption = (typeof RADIUS_OPTIONS)[number]
+export const RADIUS_OPTIONS = [5, 10, 25, 50, 100] as const;
+export type RadiusOption = (typeof RADIUS_OPTIONS)[number];

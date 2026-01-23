@@ -1,11 +1,11 @@
 const SAVE_SUBSCRIPTION_ENDPOINT =
-  import.meta.env.VITE_SAVE_SUBSCRIPTION_URL ?? '/save-subscription'
+  import.meta.env.VITE_SAVE_SUBSCRIPTION_URL ?? '/save-subscription';
 
-const VAPID_PUBLIC_KEY = import.meta.env.VITE_VAPID_PUBLIC_KEY
-const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY
+const VAPID_PUBLIC_KEY = import.meta.env.VITE_VAPID_PUBLIC_KEY;
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
 interface NavigatorStandalone extends Navigator {
-  standalone?: boolean
+  standalone?: boolean;
 }
 
 export function isPushSupported() {
@@ -14,70 +14,63 @@ export function isPushSupported() {
     'Notification' in window &&
     'serviceWorker' in navigator &&
     'PushManager' in window
-  )
+  );
 }
 
 export function isStandaloneApp() {
-  if (typeof window === 'undefined') return false
+  if (typeof window === 'undefined') return false;
   const isDisplayModeStandalone =
-    window.matchMedia?.('(display-mode: standalone)').matches ?? false
+    window.matchMedia?.('(display-mode: standalone)').matches ?? false;
   const isNavigatorStandalone =
     typeof navigator !== 'undefined' &&
     'standalone' in navigator &&
-    (navigator as NavigatorStandalone).standalone === true
+    (navigator as NavigatorStandalone).standalone === true;
 
-  return isDisplayModeStandalone || isNavigatorStandalone
+  return isDisplayModeStandalone || isNavigatorStandalone;
 }
 
 export async function registerServiceWorker() {
   if (!('serviceWorker' in navigator)) {
-    return null
+    return null;
   }
 
   try {
-    const registration = await navigator.serviceWorker.register('/sw.js')
-    return registration
-  } catch (error) {
-    return null
+    const registration = await navigator.serviceWorker.register('/sw.js');
+    return registration;
+  } catch {
+    return null;
   }
 }
 
-export async function subscribeToStationNotifications(
-  stationId: number,
-  portNumber?: number
-) {
+export async function subscribeToStationNotifications(stationId: number, portNumber?: number) {
   if (!isPushSupported()) {
-    throw new Error('Push notifications are not supported in this browser.') // on english.
+    throw new Error('Push notifications are not supported in this browser.'); // on english.
   }
 
   if (!VAPID_PUBLIC_KEY) {
-    throw new Error('VAPID public key not set.')
+    throw new Error('VAPID public key not set.');
   }
 
-  let permission: NotificationPermission = Notification.permission
+  let permission: NotificationPermission = Notification.permission;
 
   if (permission === 'default') {
-    permission = await Notification.requestPermission()
+    permission = await Notification.requestPermission();
   } else if (permission === 'denied') {
-    throw new Error(
-      'Notifications are blocked. Please allow them in browser settings.'
-    )
+    throw new Error('Notifications are blocked. Please allow them in browser settings.');
   }
 
   if (permission !== 'granted') {
-    throw new Error(
-      'Subscription is not possible without notification permission.'
-    )
+    throw new Error('Subscription is not possible without notification permission.');
   }
 
-  const registration = await navigator.serviceWorker.ready
-  const existing = await registration.pushManager.getSubscription()
+  const registration = await navigator.serviceWorker.ready;
+  const existing = await registration.pushManager.getSubscription();
   const subscription =
     existing ??
     (await registration.pushManager.subscribe({
       userVisibleOnly: true,
       applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
-    }))
+    }));
 
   const response = await fetch(SAVE_SUBSCRIPTION_ENDPOINT, {
     method: 'POST',
@@ -95,25 +88,25 @@ export async function subscribeToStationNotifications(
       portNumber,
       subscription,
     }),
-  })
+  });
 
   if (!response.ok) {
-    throw new Error('Failed to save subscription on the server.')
+    throw new Error('Failed to save subscription on the server.');
   }
 
-  return subscription
+  return subscription;
 }
 
 function urlBase64ToUint8Array(base64String: string) {
-  const padding = '='.repeat((4 - (base64String.length % 4)) % 4)
-  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/')
+  const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
 
-  const rawData = atob(base64)
-  const outputArray = new Uint8Array(rawData.length)
+  const rawData = atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
 
   for (let i = 0; i < rawData.length; ++i) {
-    outputArray[i] = rawData.charCodeAt(i)
+    outputArray[i] = rawData.charCodeAt(i);
   }
 
-  return outputArray
+  return outputArray;
 }

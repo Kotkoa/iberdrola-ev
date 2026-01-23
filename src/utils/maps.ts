@@ -10,6 +10,6 @@ export const generateGoogleMapsUrl = (
   longitude: number,
   zoom?: number
 ): string => {
-  const baseUrl = `https://www.google.com/maps?q=${latitude},${longitude}`
-  return zoom ? `${baseUrl}&z=${zoom}` : baseUrl
-}
+  const baseUrl = `https://www.google.com/maps?q=${latitude},${longitude}`;
+  return zoom ? `${baseUrl}&z=${zoom}` : baseUrl;
+};

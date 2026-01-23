@@ -31,15 +31,15 @@ yarn test:coverage
 ### Unit Tests (Utilities)
 
 ```typescript
-import { describe, it, expect } from 'vitest'
-import { generateGoogleMapsUrl } from './maps'
+import { describe, it, expect } from 'vitest';
+import { generateGoogleMapsUrl } from './maps';
 
 describe('generateGoogleMapsUrl', () => {
   it('should generate URL without zoom', () => {
-    const url = generateGoogleMapsUrl(38.839266, -0.120815)
-    expect(url).toBe('https://www.google.com/maps?q=38.839266,-0.120815')
-  })
-})
+    const url = generateGoogleMapsUrl(38.839266, -0.120815);
+    expect(url).toBe('https://www.google.com/maps?q=38.839266,-0.120815');
+  });
+});
 ```
 
 ### Component Tests

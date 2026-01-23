@@ -1,0 +1,33 @@
+# Dependencies
+node_modules
+.yarn
+
+# Build outputs
+dist
+dist-ssr
+build
+.next
+out
+
+# Coverage
+coverage
+
+# Misc
+.DS_Store
+*.log
+.env
+.env.local
+.env.*.local
+
+# Package manager
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# IDE
+.vscode
+.idea
+
+# Git
+.git
+.gitignore

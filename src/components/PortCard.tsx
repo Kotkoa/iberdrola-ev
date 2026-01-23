@@ -1,20 +1,15 @@
-import Box from '@mui/material/Box'
-import Stack from '@mui/material/Stack'
-import Typography from '@mui/material/Typography'
+import Box from '@mui/material/Box';
+import Stack from '@mui/material/Stack';
+import Typography from '@mui/material/Typography';
 
 export interface PortCardProps {
-  portNumber: 1 | 2
-  isAvailable: boolean
-  busyDuration: string | null
-  powerKw: number | null
+  portNumber: 1 | 2;
+  isAvailable: boolean;
+  busyDuration: string | null;
+  powerKw: number | null;
 }
 
-export function PortCard({
-  portNumber,
-  isAvailable,
-  busyDuration,
-  powerKw,
-}: PortCardProps) {
+export function PortCard({ portNumber, isAvailable, busyDuration, powerKw }: PortCardProps) {
   return (
     <Box
       sx={{
@@ -60,11 +55,7 @@ export function PortCard({
             {portNumber}
           </Typography>
         </Box>
-        <Stack
-          direction="row"
-          alignItems="center"
-          sx={{ mr: 2, ml: 'auto', textAlign: 'right' }}
-        >
+        <Stack direction="row" alignItems="center" sx={{ mr: 2, ml: 'auto', textAlign: 'right' }}>
           <Box
             component="img"
             src="/tipo-2.svg"
@@ -82,5 +73,5 @@ export function PortCard({
         </Stack>
       </Stack>
     </Box>
-  )
+  );
 }
