@@ -54,7 +54,10 @@ export function StationTab({ onNavigateToSearch }: StationTabProps) {
         }),
       });
 
-      const { ports } = await res.json();
+      if (!res.ok) return;
+
+      const data = await res.json();
+      const ports: number[] = data.ports ?? [];
 
       setSubscriptionState(() => ({
         1: ports.includes(1) ? 'success' : 'idle',
