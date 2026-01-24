@@ -13,7 +13,8 @@ export function SubscriptionPanel({
   portNumber,
   subscriptionState,
   errorMessage,
-  pushAvailable,
+  // TODO: Re-enable when subscriptions are available
+  // pushAvailable,
   onSubscribeClick,
 }: SubscriptionPanelProps) {
   const buttonLabel =
@@ -28,9 +29,8 @@ export function SubscriptionPanel({
       <Button
         variant="contained"
         color="success"
-        disabled={
-          !pushAvailable || subscriptionState === 'loading' || subscriptionState === 'success'
-        }
+        // TODO: Re-enable: !pushAvailable || subscriptionState === 'loading' || subscriptionState === 'success'
+        disabled
         onClick={() => onSubscribeClick(portNumber)}
         sx={{
           textTransform: 'none',
