@@ -1,191 +1,192 @@
 # Iberdrola EV Charger Monitor
 
-Real-time monitoring dashboard for Iberdrola electric vehicle charging stations, displaying live availability status, connector types, and charging duration.
+Real-time PWA for monitoring Iberdrola EV charging stations with push notifications when ports become available.
 
 <img width="1480" height="652" alt="Screenshot" src="https://github.com/user-attachments/assets/0f67510d-cd41-47a2-b80f-94003f53f3e6" />
 
-## Overview
+## Features
 
-**Iberdrola EV Charger Monitor** is a modern React-based web application that provides real-time monitoring of Iberdrola EV charging points. Built with Material-UI and TypeScript, it fetches live data from a Supabase backend to display charging port availability, power ratings, connector types, and occupancy duration. The application helps EV drivers quickly determine if their preferred charging station is available without visiting the physical location.
+- **Real-Time Status** — Live port availability via Supabase Realtime subscriptions
+- **Push Notifications** — Get notified when an occupied port becomes free (PWA only)
+- **Pricing Display** — Shows charging cost per kWh or FREE badge
+- **Duration Tracking** — How long a port has been occupied
+- **Location Details** — Full address, coordinates, emergency status
+- **Installable PWA** — Add to home screen for native app experience
 
-## Key Features
+## Tech Stack
 
-- **Real-Time Status Display**: Monitor availability of two charging ports simultaneously
-- **Smart Duration Tracking**: Automatic calculation and display of how long a port has been occupied
-- **Visual Status Indicators**: Color-coded cards (green for available, orange for busy)
-- **Connector Information**: Type 2 connector details with power ratings (kW)
-- **Location Details**: Station name, address, and operating schedule
-- **Responsive Design**: Clean Material-UI interface optimized for mobile and desktop
-- **Auto-Refresh**: Time updates every minute to maintain accuracy
-
-## Technology Stack
-
-- **Frontend**: React 19 with TypeScript
-- **UI Framework**: Material-UI (MUI) v7
-- **Styling**: Tailwind CSS v4
-- **Build Tool**: Vite
-- **Backend**: Supabase (PostgreSQL database with REST API)
-- **Deployment**: Netlify
+| Layer         | Technology                                    |
+| ------------- | --------------------------------------------- |
+| Frontend      | React 19, TypeScript 5.9, Vite 7              |
+| UI            | Material-UI 7, Tailwind CSS 4                 |
+| Backend       | Supabase (Postgres, Realtime, Edge Functions) |
+| Notifications | Web Push API, VAPID                           |
+| Deployment    | Vercel                                        |
 
 ## Architecture
 
-### Data Flow
-
 ```
-Supabase Database → REST API → React Frontend → User Interface
-     ↓
-charge_logs_parsed table (stores charging station status)
-```
-
-### Component Structure
-
-```
-App.tsx (main component)
-  ├─ useCharger() hook → fetches latest charger status
-  ├─ Material-UI Components (Typography, Box, Stack, Chip, etc.)
-  └─ Copyright component
-```
-
-### API Layer
-
-- **`api/supabase.ts`**: Core Supabase client with authenticated fetch wrapper
-- **`api/charger.ts`**: Charger-specific API calls (fetch latest status)
-- **`hooks/useCharger.ts`**: React hook for data fetching with loading/error states
-
-### Data Model
-
-The `ChargerStatus` type includes:
-
-- Station metadata (ID, name, schedule)
-- Two ports with individual status, power ratings, and update timestamps
-- Overall status tracking
-
-## Backend: Iberdrola Scraper
-
-Short summary
-
-`iberdrola-scraper` is a lightweight Node.js script that automates collection of charging-point data from Iberdrola's public site using Playwright and stores results in Supabase. It captures the raw JSON responses and inserts parsed, normalized fields for the frontend.
-
-Essentials (what the scraper does)
-
-- Launches Chromium via Playwright and loads the public charging page.
-- Saves the full JSON response into `charge_logs` and inserts normalized rows into `charge_logs_parsed` for the app to consume.
-
-## How It Works
-
-### 1. Data Fetching
-
-The application uses the `useCharger` hook to fetch the latest charging station data from Supabase on component mount:
-
-The hook queries the `charge_logs_parsed` table, retrieving the most recent record sorted by creation date.
-
-### 2. Real-Time Duration Calculation
-
-The app maintains a local timer that updates every minute to calculate how long each port has been busy:
-
-### 3. Status Visualization
-
-Each of the two charging ports is displayed in a dedicated card showing:
-
-- **Availability status** (Available/Busy) with color coding
-- **Duration** of current session if occupied
-- **Connector type** (Type 2) with visual icon
-- **Power rating** in kilowatts
-
-### 4. Smart Status Summary
-
-The application calculates a summary showing how many ports are available out of two:
-
-### 5. User Interface Features
-
-- **Header**: Large status indicator showing available ports count
-- **Metadata Section**: Iberdrola branding, location, station details
-- **Info Banner**: Displays station ID and power limitation notice
-- **Charging Cards**: Two side-by-side cards for each port with detailed information
-- **Map Integration**: "Show on map" button for navigation (UI element)
-
-## Quick Start
-
-### Prerequisites
-
-- Node.js 18+
-- npm or yarn
-- Supabase account with configured database
-
-### Installation
-
-```bash
-git clone https://github.com/Kotkoa/iberdrola-ev.git
-cd iberdrola-ev
-npm install
-```
-
-### Environment Setup
-
-Create a `.env` file in the root directory:
-
-```env
-VITE_SUPABASE_URL=your_supabase_project_url
-VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
-```
-
-### Development
-
-```bash
-npm run dev
-```
-
-The application will be available at `http://localhost:5173`
-
-### Build for Production
-
-```bash
-npm run build
-npm run preview
+┌─────────────────────────────────────────────────────────────────┐
+│                        Frontend (PWA)                           │
+│  React App ←── Supabase Realtime ←── charge_logs_parsed table  │
+│      │                                                          │
+│      └── Service Worker (sw.js) ←── Web Push notifications     │
+└─────────────────────────────────────────────────────────────────┘
+                              ↑
+┌─────────────────────────────────────────────────────────────────┐
+│                     Supabase Backend                            │
+│                                                                 │
+│  ┌──────────────────┐    INSERT    ┌──────────────────┐        │
+│  │ charge_logs_parsed│ ──────────→ │ Database Webhook │        │
+│  └──────────────────┘              └────────┬─────────┘        │
+│                                             │                   │
+│  ┌──────────────────┐              ┌────────▼─────────┐        │
+│  │  subscriptions   │ ←─────────── │  Edge Function   │        │
+│  │     table        │   query      │ (send Web Push)  │        │
+│  └──────────────────┘              └──────────────────┘        │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
 ## Database Schema
 
-The application expects a table in Supabase with the following structure:
+### charge_logs_parsed
 
-```sql
-CREATE TABLE charge_logs_parsed (
-  id UUID PRIMARY KEY,
-  created_at TIMESTAMP,
-  cp_id INTEGER,
-  cp_name TEXT,
-  schedule TEXT,
-  port1_status TEXT,
-  port2_status TEXT,
-  port1_power_kw NUMERIC,
-  port1_update_date TIMESTAMP,
-  port2_power_kw NUMERIC,
-  port2_update_date TIMESTAMP,
-  overall_status TEXT,
-  overall_update_date TIMESTAMP
-);
+Main table storing charging station status. Populated by an external scraper that polls the Iberdrola API.
+
+**Station identification:**
+
+- `cp_id` — Unique station identifier from Iberdrola
+- `cp_name` — Human-readable station name
+
+**Port status** (each station has 2 ports):
+
+- `port1_status`, `port2_status` — Current state: `AVAILABLE` or `OCCUPIED`
+- `port1_update_date`, `port2_update_date` — When the port status last changed (used to calculate busy duration)
+
+**Port specifications:**
+
+- `port1_power_kw`, `port2_power_kw` — Charging power in kilowatts (e.g., 22)
+- `port1_price_kwh`, `port2_price_kwh` — Price per kWh in euros (0 = free charging)
+- `port1_socket_type`, `port2_socket_type` — Connector type (e.g., "Mennekes")
+
+**Station metadata:**
+
+- `address_full` — Complete address string
+- `cp_latitude`, `cp_longitude` — GPS coordinates for map integration
+- `situation_code` — Operational status: `OPER` (operational), `MAINT` (maintenance), `OOS` (out of service)
+- `emergency_stop_pressed` — Safety indicator
+
+### subscriptions
+
+Stores Web Push subscriptions for notification delivery. When a user subscribes to notifications for a specific port, their browser's push subscription details are saved here.
+
+**Subscription target:**
+
+- `station_id` — Which charging station to monitor
+- `port_number` — Which port (1 or 2) to watch for availability
+
+**Push credentials** (from browser's PushSubscription object):
+
+- `endpoint` — Push service URL (e.g., FCM endpoint)
+- `p256dh` — Public encryption key
+- `auth` — Authentication secret
+
+**Lifecycle management:**
+
+- `is_active` — Set to `false` after notification is sent (one-time alert)
+- `last_notified_at` — Timestamp of last notification (used for deduplication)
+
+## Push Notification Flow
+
+1. **User subscribes** (PWA only, when port is occupied)
+   - Frontend requests notification permission
+   - Registers service worker and creates push subscription
+   - Saves subscription to `subscriptions` table via Edge Function
+
+2. **Port becomes available**
+   - Scraper inserts new record with `port_status = 'AVAILABLE'`
+   - Database Webhook triggers Edge Function
+
+3. **Notification sent**
+   - Edge Function queries active subscriptions for that station/port
+   - Sends Web Push to each subscriber
+   - Marks subscription as inactive (one-time notification)
+
+### Database Webhooks
+
+Two webhooks trigger `on-station-available` Edge Function:
+
+| Webhook          | Condition                              |
+| ---------------- | -------------------------------------- |
+| Port 1 Available | `port1_status = 'AVAILABLE'` on INSERT |
+| Port 2 Available | `port2_status = 'AVAILABLE'` on INSERT |
+
+### Edge Functions
+
+| Function               | Purpose                                    |
+| ---------------------- | ------------------------------------------ |
+| `save-subscription`    | Stores new push subscription               |
+| `check-subscription`   | Checks if user already subscribed          |
+| `on-station-available` | Sends push notifications when port is free |
+
+## Environment Variables
+
+```env
+# Supabase
+VITE_SUPABASE_URL=https://xxx.supabase.co
+VITE_SUPABASE_ANON_KEY=eyJ...
+
+# Web Push (VAPID)
+VITE_VAPID_PUBLIC_KEY=BJ...
+
+# Edge Function URLs
+VITE_SAVE_SUBSCRIPTION_URL=https://xxx.supabase.co/functions/v1/save-subscription
+VITE_CHECK_SUB_URL=https://xxx.supabase.co/functions/v1/check-subscription
 ```
 
-## Deployment
+Edge Functions require these secrets (set in Supabase Dashboard):
 
-The application is configured for Netlify deployment with the included `netlify.toml` configuration file. Simply connect your GitHub repository to Netlify and set the environment variables in the Netlify dashboard.
+- `SUPABASE_SERVICE_ROLE_KEY`
+- `VAPID_PUBLIC_KEY`
+- `VAPID_PRIVATE_KEY`
+- `EDGE_TRIGGER_SECRET` (for webhook authorization)
 
-## Use Cases
+## Development
 
-- **EV Drivers**: Check station availability before driving to the location
-- **Fleet Managers**: Monitor charging infrastructure usage
-- **Station Operators**: Track utilization patterns and port status
-- **Mobile Users**: Quick mobile-friendly interface for on-the-go checks
+```bash
+# Install dependencies
+npm install
 
-## Future Enhancements
+# Start dev server
+npm run dev
 
-- [ ] Multiple station support
-- [ ] Historical usage analytics and graphs
-- [ ] Push notifications when a port becomes available
-- [ ] Interactive map integration with navigation
-- [ ] Reservation system integration
-- [ ] Real-time WebSocket updates instead of polling
+# Run tests
+npm run test
+
+# Build for production
+npm run build
+```
+
+## Project Structure
+
+```
+├── api/
+│   ├── charger.ts          # Supabase queries + Realtime subscription
+│   └── supabase.ts         # Supabase client
+├── src/
+│   ├── components/
+│   │   ├── PortCard.tsx    # Port status card with pricing
+│   │   ├── PortsList.tsx   # Ports container + subscription panel
+│   │   └── SubscriptionPanel.tsx
+│   ├── pwa.ts              # Push notification utilities
+│   ├── constants/          # API endpoints, status enums
+│   └── App.tsx             # Main component
+├── public/
+│   └── sw.js               # Service worker for push events
+└── types/
+    └── charger.ts          # TypeScript interfaces
+```
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+MIT
