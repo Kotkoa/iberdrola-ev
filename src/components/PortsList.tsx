@@ -26,7 +26,6 @@ export function PortsList({
   subscriptionState,
   subscriptionErrors,
   pushAvailable,
-  isStandalone,
   onSubscribeClick,
 }: PortsListProps) {
   return (
@@ -62,7 +61,7 @@ export function PortsList({
                   priceKwh={priceKwh}
                   socketType={socketType}
                 />
-                {isStandalone && !isAvailable && (
+                {!isAvailable && (
                   <SubscriptionPanel
                     portNumber={portNumber}
                     subscriptionState={state}
@@ -76,7 +75,7 @@ export function PortsList({
           }
         )}
       </Stack>
-      {isStandalone && !pushAvailable && (
+      {!pushAvailable && (
         <Typography variant="caption" color="textSecondary" sx={{ display: 'block', mt: 1.5 }}>
           Push notifications are not supported in this browser.
         </Typography>
