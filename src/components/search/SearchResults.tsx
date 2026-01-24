@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import Box from '@mui/material/Box';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
@@ -23,6 +24,36 @@ export function SearchResults({
   onSetPrimary,
   userLocation,
 }: SearchResultsProps) {
+  const getDistanceKm = (station: StationInfo): number | null => {
+    if (!userLocation) return null;
+    return calculateDistance(
+      userLocation.latitude,
+      userLocation.longitude,
+      station.latitude,
+      station.longitude
+    );
+  };
+
+  const sortedStations = useMemo(() => {
+    if (!userLocation) return stations;
+
+    return [...stations].sort((a, b) => {
+      const distA = calculateDistance(
+        userLocation.latitude,
+        userLocation.longitude,
+        a.latitude,
+        a.longitude
+      );
+      const distB = calculateDistance(
+        userLocation.latitude,
+        userLocation.longitude,
+        b.latitude,
+        b.longitude
+      );
+      return distA - distB;
+    });
+  }, [stations, userLocation]);
+
   if (stations.length === 0) {
     return (
       <Box sx={{ py: 4, textAlign: 'center' }}>
@@ -36,22 +67,12 @@ export function SearchResults({
     );
   }
 
-  const getDistanceKm = (station: StationInfo): number | null => {
-    if (!userLocation) return null;
-    return calculateDistance(
-      userLocation.latitude,
-      userLocation.longitude,
-      station.latitude,
-      station.longitude
-    );
-  };
-
   return (
     <Stack spacing={1}>
       <Typography variant="caption" color="text.secondary">
         {stations.length} station{stations.length !== 1 ? 's' : ''} found
       </Typography>
-      {stations.map((station) => (
+      {sortedStations.map((station) => (
         <StationResultCard
           key={station.cpId}
           station={station}

@@ -8,6 +8,7 @@ import Snackbar from '@mui/material/Snackbar';
 import RoomOutlinedIcon from '@mui/icons-material/RoomOutlined';
 import { RadiusSelector } from './RadiusSelector';
 import { SearchResults } from './SearchResults';
+import { SearchProgressBar } from './SearchProgressBar';
 import { useStationSearch } from '../../hooks/useStationSearch';
 import { usePrimaryStation } from '../../context/PrimaryStationContext';
 import { useUserLocation } from '../../hooks/useUserLocation';
@@ -68,9 +69,7 @@ export function SearchTab({ onStationSelected }: SearchTabProps) {
         </Stack>
 
         {progress.total > 0 && (
-          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
-            Fetching details… {progress.current} / {progress.total}
-          </Typography>
+          <SearchProgressBar current={progress.current} total={progress.total} />
         )}
 
         {error && (
