@@ -29,7 +29,6 @@ export function PortCard({
         border: 1,
         borderColor: isAvailable ? 'success.main' : 'warning.main',
         borderRadius: 2,
-        height: 100,
         display: 'flex',
         flexDirection: 'column',
         overflow: 'hidden',
@@ -41,7 +40,7 @@ export function PortCard({
           bgcolor: isAvailable ? 'success.main' : 'warning.main',
           color: 'primary.contrastText',
           px: 2,
-          py: 0.5,
+          height: 50,
         }}
       >
         <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>

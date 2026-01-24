@@ -61,7 +61,7 @@ export function LoadingSkeleton() {
         />
       </Box>
 
-      {/* Ports row - 328x100px container, each port 158x100px */}
+      {/* Ports row - each port 187x117px */}
       <Stack
         direction={{ xs: 'column', sm: 'row' }}
         spacing={1.5}
@@ -70,13 +70,13 @@ export function LoadingSkeleton() {
         sx={{ mt: 1 }}
       >
         {/* Port 1 */}
-        <Box sx={{ flex: 1, width: '100%' }}>
-          <Skeleton variant="rounded" width="100%" height={100} sx={{ borderRadius: 2 }} />
+        <Box sx={{ width: { xs: '100%', sm: 187 } }}>
+          <Skeleton variant="rounded" width="100%" height={117} sx={{ borderRadius: 2 }} />
         </Box>
 
         {/* Port 2 */}
-        <Box sx={{ flex: 1, width: '100%' }}>
-          <Skeleton variant="rounded" width="100%" height={100} sx={{ borderRadius: 2 }} />
+        <Box sx={{ width: { xs: '100%', sm: 187 } }}>
+          <Skeleton variant="rounded" width="100%" height={117} sx={{ borderRadius: 2 }} />
         </Box>
       </Stack>
 
