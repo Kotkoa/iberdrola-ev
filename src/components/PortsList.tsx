@@ -62,7 +62,7 @@ export function PortsList({
                   priceKwh={priceKwh}
                   socketType={socketType}
                 />
-                {isStandalone && (
+                {isStandalone && !isAvailable && (
                   <SubscriptionPanel
                     portNumber={portNumber}
                     subscriptionState={state}

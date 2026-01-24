@@ -73,10 +73,10 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
                 }}
               />
               <Typography variant="h4" component="h1" gutterBottom>
-                Что-то пошло не так
+                Who-ops
               </Typography>
               <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
-                Произошла непредвиденная ошибка. Пожалуйста, попробуйте обновить страницу.
+                Something went wrong. Please try again later.
               </Typography>
 
               {import.meta.env.DEV && this.state.error && (
@@ -105,7 +105,7 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
                 onClick={this.handleReset}
                 sx={{ mt: 3 }}
               >
-                Вернуться на главную
+                Go to Home
               </Button>
             </Paper>
           </Box>

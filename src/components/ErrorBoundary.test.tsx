@@ -39,10 +39,8 @@ describe('ErrorBoundary', () => {
       </ErrorBoundary>
     );
 
-    expect(screen.getByText('Что-то пошло не так')).toBeInTheDocument();
-    expect(
-      screen.getByText('Произошла непредвиденная ошибка. Пожалуйста, попробуйте обновить страницу.')
-    ).toBeInTheDocument();
+    expect(screen.getByText('Who-ops')).toBeInTheDocument();
+    expect(screen.getByText('Something went wrong. Please try again later.')).toBeInTheDocument();
   });
 
   it('should show error icon when error occurs', () => {
@@ -63,7 +61,7 @@ describe('ErrorBoundary', () => {
       </ErrorBoundary>
     );
 
-    const resetButton = screen.getByRole('button', { name: /вернуться на главную/i });
+    const resetButton = screen.getByRole('button', { name: /Go to Home/i });
     expect(resetButton).toBeInTheDocument();
   });
 
@@ -83,7 +81,7 @@ describe('ErrorBoundary', () => {
       </ErrorBoundary>
     );
 
-    const resetButton = screen.getByRole('button', { name: /вернуться на главную/i });
+    const resetButton = screen.getByRole('button', { name: /Go to Home/i });
     await user.click(resetButton);
 
     expect(window.location.href).toBe('/');
