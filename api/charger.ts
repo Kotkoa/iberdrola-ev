@@ -48,11 +48,22 @@ export function subscribeToLatestCharger(onUpdate: (charger: ChargerStatus) => v
       },
       (payload) => {
         const rawData = payload.new as RawChargerStatus;
+        console.log('[Realtime:latest] Raw payload:', JSON.stringify(rawData, null, 2));
+
         if (rawData && rawData.cp_id && rawData.cp_name && rawData.overall_status) {
-          const normalizedData = normalizeChargerData(rawData);
-          onUpdate(normalizedData);
+          try {
+            const normalizedData = normalizeChargerData(rawData);
+            console.log('[Realtime:latest] Normalized:', {
+              cp_id: normalizedData.cp_id,
+              port1_status: normalizedData.port1_status,
+              port2_status: normalizedData.port2_status,
+            });
+            onUpdate(normalizedData);
+          } catch (err) {
+            console.error('[Realtime:latest] Normalize error:', err);
+          }
         } else {
-          console.warn('Received incomplete charger data from Realtime, ignoring:', rawData);
+          console.warn('[Realtime:latest] Incomplete data, ignoring:', rawData);
         }
       }
     )
@@ -76,11 +87,22 @@ export function subscribeToCharger(cpId: number, onUpdate: (charger: ChargerStat
       },
       (payload) => {
         const rawData = payload.new as RawChargerStatus;
+        console.log(`[Realtime:${cpId}] Raw payload:`, JSON.stringify(rawData, null, 2));
+
         if (rawData && rawData.cp_id && rawData.cp_name && rawData.overall_status) {
-          const normalizedData = normalizeChargerData(rawData);
-          onUpdate(normalizedData);
+          try {
+            const normalizedData = normalizeChargerData(rawData);
+            console.log(`[Realtime:${cpId}] Normalized:`, {
+              cp_id: normalizedData.cp_id,
+              port1_status: normalizedData.port1_status,
+              port2_status: normalizedData.port2_status,
+            });
+            onUpdate(normalizedData);
+          } catch (err) {
+            console.error(`[Realtime:${cpId}] Normalize error:`, err);
+          }
         } else {
-          console.warn('Received incomplete charger data from Realtime, ignoring:', rawData);
+          console.warn(`[Realtime:${cpId}] Incomplete data, ignoring:`, rawData);
         }
       }
     )
