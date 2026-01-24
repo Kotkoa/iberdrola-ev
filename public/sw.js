@@ -29,27 +29,18 @@ self.addEventListener('push', (event) => {
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
 
-  const urlToOpen = new URL('/', self.location.origin).href;
-
   event.waitUntil(
-    (async () => {
-      const allClients = await clients.matchAll({
-        type: 'window',
-        includeUncontrolled: true,
-      });
-
-      // Try to find and focus existing client
-      for (const client of allClients) {
-        if ('focus' in client) {
-          await client.focus();
-          return;
+    clients.matchAll({ type: 'window' }).then((clientList) => {
+      // If a window is already open, focus it
+      for (const client of clientList) {
+        if (client.url === self.registration.scope && 'focus' in client) {
+          return client.focus();
         }
       }
-
-      // No existing client found, open new window at root
+      // If no window is open, open a new one
       if (clients.openWindow) {
-        await clients.openWindow(urlToOpen);
+        return clients.openWindow('/');
       }
-    })()
+    })
   );
 });
