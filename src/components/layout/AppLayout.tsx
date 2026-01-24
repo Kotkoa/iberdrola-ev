@@ -13,7 +13,8 @@ export function AppLayout({ children }: AppLayoutProps) {
         bgcolor: 'background.paper',
         width: { xs: '100%', sm: '450px' },
         minWidth: { xs: 'auto', sm: '450px' },
-        minHeight: { xs: '100vh', sm: '651px' },
+        height: { xs: '100vh', sm: '651px' },
+        maxHeight: { xs: '100vh', sm: '651px' },
         px: 3,
         py: { xs: 0, sm: 2 },
         mx: { xs: 0, sm: 'auto' },
@@ -24,6 +25,7 @@ export function AppLayout({ children }: AppLayoutProps) {
         borderColor: { xs: 'transparent', sm: 'divider' },
         display: 'flex',
         flexDirection: 'column',
+        overflow: 'hidden',
       }}
     >
       {children}

@@ -30,7 +30,7 @@ function App() {
       <AppLayout>
         <TabNavigation activeTab={activeTab} onTabChange={setActiveTab} />
 
-        <Box sx={{ flex: 1, width: '100%' }}>
+        <Box sx={{ flex: 1, width: '100%', minHeight: 0, overflow: 'hidden' }}>
           {activeTab === 'station' ? (
             <StationTab onNavigateToSearch={handleNavigateToSearch} />
           ) : (
