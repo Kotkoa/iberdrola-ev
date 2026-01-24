@@ -2,7 +2,8 @@
 
 Real-time Progressive Web App (PWA) for monitoring Iberdrola EV charging stations with live status updates and push notifications when charging ports become available.
 
-<img width="1480" height="652" alt="Screenshot" src="https://github.com/user-attachments/assets/0f67510d-cd41-47a2-b80f-94003f53f3e6" />
+<img width="1337" height="684" alt="Screenshot 2026-01-24 at 22 47 34" src="https://github.com/user-attachments/assets/909823d4-5de0-4d5f-8ee7-8a637363e03d" />
+
 
 ---
 
