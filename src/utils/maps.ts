@@ -1,15 +1,29 @@
 /**
- * Generates a Google Maps URL for the given coordinates
- * @param latitude - Latitude coordinate
- * @param longitude - Longitude coordinate
- * @param zoom - Optional zoom level (1-21, default: no zoom)
- * @returns Google Maps URL
+ * Generates a Google Maps directions URL
  */
-export const generateGoogleMapsUrl = (
-  latitude: number,
-  longitude: number,
-  zoom?: number
-): string => {
-  const baseUrl = `https://www.google.com/maps?q=${latitude},${longitude}`;
-  return zoom ? `${baseUrl}&z=${zoom}` : baseUrl;
+export const generateGoogleMapsDirectionsUrl = (latitude: number, longitude: number): string => {
+  return `https://www.google.com/maps/search/?api=1&query=${latitude},${longitude}`;
+};
+
+/**
+ * Calculates the distance between two coordinates using the Haversine formula
+ * @returns Distance in kilometers
+ */
+export const calculateDistance = (
+  lat1: number,
+  lon1: number,
+  lat2: number,
+  lon2: number
+): number => {
+  const R = 6371;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLon = ((lon2 - lon1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
 };

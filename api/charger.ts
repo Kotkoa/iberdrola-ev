@@ -28,6 +28,14 @@ export async function getLatestChargerStatus() {
   return data?.map(normalizeChargerData);
 }
 
+export async function getChargerStatusById(cpId: number): Promise<ChargerStatus | null> {
+  const data = await supabaseFetch<ChargerStatus[]>(
+    `charge_logs_parsed?select=*&cp_id=eq.${cpId}&order=created_at.desc&limit=1`
+  );
+  if (!data || data.length === 0) return null;
+  return normalizeChargerData(data[0] as RawChargerStatus);
+}
+
 export function subscribeToLatestCharger(onUpdate: (charger: ChargerStatus) => void) {
   const channel = supabase
     .channel('charge_logs_latest')
@@ -40,7 +48,34 @@ export function subscribeToLatestCharger(onUpdate: (charger: ChargerStatus) => v
       },
       (payload) => {
         const rawData = payload.new as RawChargerStatus;
-        // Validate essential fields before updating to prevent crashes from partial data
+        if (rawData && rawData.cp_id && rawData.cp_name && rawData.overall_status) {
+          const normalizedData = normalizeChargerData(rawData);
+          onUpdate(normalizedData);
+        } else {
+          console.warn('Received incomplete charger data from Realtime, ignoring:', rawData);
+        }
+      }
+    )
+    .subscribe();
+
+  return () => {
+    channel.unsubscribe();
+  };
+}
+
+export function subscribeToCharger(cpId: number, onUpdate: (charger: ChargerStatus) => void) {
+  const channel = supabase
+    .channel(`charge_logs_${cpId}`)
+    .on(
+      'postgres_changes',
+      {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'charge_logs_parsed',
+        filter: `cp_id=eq.${cpId}`,
+      },
+      (payload) => {
+        const rawData = payload.new as RawChargerStatus;
         if (rawData && rawData.cp_id && rawData.cp_name && rawData.overall_status) {
           const normalizedData = normalizeChargerData(rawData);
           onUpdate(normalizedData);

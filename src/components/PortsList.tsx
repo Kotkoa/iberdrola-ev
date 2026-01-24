@@ -32,7 +32,7 @@ export function PortsList({
   return (
     <>
       <Stack
-        direction={{ xs: 'column', sm: 'row' }}
+        direction="row"
         spacing={1.5}
         justifyContent="space-between"
         alignItems="stretch"

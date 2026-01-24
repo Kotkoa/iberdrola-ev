@@ -50,6 +50,7 @@ export interface StationListItem {
 // Domain Types
 export interface StationInfo {
   cpId: number;
+  cuprId: number;
   name: string;
   latitude: number;
   longitude: number;
@@ -109,7 +110,7 @@ async function fetchStationsInRadius(
 /**
  * Fetches detailed information for a specific charging station
  */
-async function fetchStationDetails(cuprId: number): Promise<StationDetails | null> {
+export async function fetchStationDetails(cuprId: number): Promise<StationDetails | null> {
   const res = await fetch(API_ENDPOINTS.GET_CHARGING_POINT_DETAILS, {
     method: 'POST',
     headers: {
@@ -159,7 +160,11 @@ function hasPaidPorts(details: StationDetails | null): boolean {
 /**
  * Extracts station information from detailed data
  */
-function extractStationInfo(cpId: number, details: StationDetails | null): StationInfo | null {
+export function extractStationInfo(
+  cpId: number,
+  cuprId: number,
+  details: StationDetails | null
+): StationInfo | null {
   if (!details) return null;
 
   const logical = details.logicalSocket || [];
@@ -190,6 +195,7 @@ function extractStationInfo(cpId: number, details: StationDetails | null): Stati
 
   return {
     cpId,
+    cuprId,
     name: details.locationData?.cuprName || 'Unknown',
     latitude: details.locationData?.latitude || 0,
     longitude: details.locationData?.longitude || 0,
@@ -240,7 +246,7 @@ export async function findNearestFreeStations(
     const isPaid = hasPaidPorts(details);
 
     if (!isPaid && hasAvailable) {
-      const stationInfo = extractStationInfo(cpId, details);
+      const stationInfo = extractStationInfo(cpId, cuprId, details);
       if (stationInfo) {
         freeStations.push(stationInfo);
       }
@@ -263,4 +269,78 @@ export async function getUserLocation(): Promise<GeolocationPosition> {
       maximumAge: 0,
     });
   });
+}
+
+/**
+ * Fetches station and converts to ChargerStatus-compatible format (for API fallback)
+ */
+export interface ChargerStatusFromApi {
+  id: string;
+  created_at: string;
+  cp_id: number;
+  cp_name: string;
+  schedule: string | null;
+  port1_status: string | null;
+  port2_status: string | null;
+  port1_power_kw: number | null;
+  port1_update_date: string | null;
+  port2_power_kw: number | null;
+  port2_update_date: string | null;
+  overall_status: string | null;
+  overall_update_date: string | null;
+  cp_latitude?: number | null;
+  cp_longitude?: number | null;
+  address_full?: string | null;
+  port1_price_kwh?: number | null;
+  port2_price_kwh?: number | null;
+  port1_socket_type?: string | null;
+  port2_socket_type?: string | null;
+  emergency_stop_pressed?: boolean | null;
+  situation_code?: string | null;
+}
+
+export async function fetchStationAsChargerStatus(
+  cuprId: number,
+  cpId: number
+): Promise<ChargerStatusFromApi | null> {
+  const details = await fetchStationDetails(cuprId);
+  if (!details) return null;
+
+  const logical = details.logicalSocket || [];
+  const flattened = logical.flatMap((ls) => ls.physicalSocket || []);
+
+  const port1 = flattened[0];
+  const port2 = flattened[1];
+
+  const addr = details.locationData?.supplyPointData?.cpAddress;
+  const addressFull = addr
+    ? `${addr.streetName || ''} ${addr.streetNum || ''}, ${addr.townName || ''}, ${addr.regionName || ''}`.trim()
+    : null;
+
+  const now = new Date().toISOString();
+
+  return {
+    id: `api-${cpId}`,
+    created_at: now,
+    cp_id: cpId,
+    cp_name: details.locationData?.cuprName || 'Unknown',
+    schedule: '24/7',
+    port1_status: port1?.status?.statusCode || null,
+    port2_status: port2?.status?.statusCode || null,
+    port1_power_kw: port1?.maxPower || null,
+    port1_update_date: now,
+    port2_power_kw: port2?.maxPower || null,
+    port2_update_date: now,
+    overall_status: details.cpStatus?.statusCode || null,
+    overall_update_date: now,
+    cp_latitude: details.locationData?.latitude || null,
+    cp_longitude: details.locationData?.longitude || null,
+    address_full: addressFull,
+    port1_price_kwh: port1?.appliedRate?.recharge?.finalPrice || 0,
+    port2_price_kwh: port2?.appliedRate?.recharge?.finalPrice || 0,
+    port1_socket_type: port1?.socketType?.socketName || null,
+    port2_socket_type: port2?.socketType?.socketName || null,
+    emergency_stop_pressed: details.emergencyStopButtonPressed || false,
+    situation_code: details.locationData?.situationCode || null,
+  };
 }

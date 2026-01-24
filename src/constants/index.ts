@@ -103,3 +103,18 @@ export const CHARGE_SPEED_LABELS: Record<number, string> = {
   3: 'Rapid (43-50 kW)',
   4: 'Ultra-rapid (150+ kW)',
 } as const;
+
+// ========================
+// Storage Keys
+// ========================
+export const STORAGE_KEYS = {
+  PRIMARY_STATION_ID: 'iberdrola_primary_station_id',
+} as const;
+
+// ========================
+// Tab Names
+// ========================
+export const TAB_NAMES = {
+  STATION: 'station',
+  SEARCH: 'search',
+} as const;

@@ -1,49 +1,55 @@
-import { Alert, Avatar, Box, Button, Chip, Stack, Typography } from '@mui/material';
-import DirectionsIcon from '@mui/icons-material/Directions';
+import { Alert, Avatar, Box, Chip, Stack, Typography } from '@mui/material';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import LocationOnIcon from '@mui/icons-material/LocationOn';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
+import { DistanceBadge } from '../common/DistanceBadge';
 
-interface ChargingStationInfoProps {
+interface StationDetailsProps {
   cpId: number;
   cpName: string;
   schedule: string | null;
   availableCount: number;
-  onShowOnMap: () => void;
-  hasCoordinates: boolean;
-  // Extended fields
   addressFull?: string | null;
   emergencyStopPressed?: boolean | null;
   situationCode?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  distanceKm?: number | null;
+  hasRealtime?: boolean;
 }
 
-export function ChargingStationInfo({
+export function StationDetails({
   cpId,
   cpName,
   schedule,
   availableCount,
-  onShowOnMap,
-  hasCoordinates,
   addressFull,
   emergencyStopPressed,
   situationCode,
-}: ChargingStationInfoProps) {
+  latitude,
+  longitude,
+  distanceKm,
+  hasRealtime = true,
+}: StationDetailsProps) {
+  const hasCoordinates = Boolean(latitude && longitude);
+
   return (
     <Box
       sx={{
         textAlign: 'start',
         width: '100%',
-        maxWidth: { xs: '100%', sm: '400px' },
       }}
     >
-      <Typography
-        variant="h5"
-        component="h1"
-        sx={{ mb: 1, fontSize: { xs: '1.1rem', sm: '1.5rem' } }}
-        color={availableCount > 0 ? 'success' : 'warning'}
-      >
-        Available {availableCount}/2
-      </Typography>
+      <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 1 }}>
+        <Typography
+          variant="h5"
+          component="h1"
+          sx={{ fontSize: { xs: '1.1rem', sm: '1.5rem' } }}
+          color={availableCount > 0 ? 'success' : 'warning'}
+        >
+          Available {availableCount}/2
+        </Typography>
+      </Stack>
 
       <Stack direction="row" gap={0.5} sx={{ mb: 1.5, flexWrap: 'wrap' }}>
         <Chip
@@ -86,6 +92,18 @@ export function ChargingStationInfo({
             fontSize: { xs: '0.7rem', sm: '0.813rem' },
           }}
         />
+        {!hasRealtime && (
+          <Chip
+            label="No tracking"
+            color="error"
+            variant="outlined"
+            size="small"
+            sx={{
+              borderRadius: '4px',
+              fontSize: { xs: '0.7rem', sm: '0.813rem' },
+            }}
+          />
+        )}
       </Stack>
 
       {addressFull && (
@@ -112,46 +130,37 @@ export function ChargingStationInfo({
       >
         {cpName}
       </Typography>
-      <Typography
-        variant="caption"
-        color="textSecondary"
-        sx={{ fontSize: { xs: '0.65rem', sm: '0.75rem' } }}
-      >
-        Level: 0 / Spot: 1{schedule ? ` / ${schedule}` : ''}
-      </Typography>
 
-      <Stack sx={{ my: 1 }}>
-        <Button
-          onClick={onShowOnMap}
-          disabled={!hasCoordinates}
-          size="small"
-          sx={{
-            ml: 'auto',
-            textTransform: 'none',
-            fontSize: { xs: '0.7rem', sm: '0.875rem' },
-          }}
-          startIcon={<DirectionsIcon fontSize="small" />}
-          variant="outlined"
-          color="success"
+      <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mt: 0.5 }}>
+        <Typography
+          variant="caption"
+          color="textSecondary"
+          sx={{ fontSize: { xs: '0.65rem', sm: '0.75rem' } }}
         >
-          Show on map
-        </Button>
+          Level: 0 / Spot: 1{schedule ? ` / ${schedule}` : ''}
+        </Typography>
+        {hasCoordinates && (
+          <DistanceBadge
+            distanceKm={distanceKm ?? null}
+            latitude={latitude!}
+            longitude={longitude!}
+            size="small"
+          />
+        )}
       </Stack>
 
-      {/* Emergency stop alert */}
       {emergencyStopPressed && (
         <Alert
           severity="error"
           icon={<WarningAmberIcon />}
-          sx={{ mb: 1, fontSize: { xs: '0.7rem', sm: '0.875rem' } }}
+          sx={{ mt: 1, mb: 1, fontSize: { xs: '0.7rem', sm: '0.875rem' } }}
         >
           Emergency stop activated - station unavailable
         </Alert>
       )}
 
-      {/* Station status warning */}
       {situationCode && situationCode !== 'OPER' && (
-        <Alert severity="warning" sx={{ mb: 1, fontSize: { xs: '0.7rem', sm: '0.875rem' } }}>
+        <Alert severity="warning" sx={{ mt: 1, mb: 1, fontSize: { xs: '0.7rem', sm: '0.875rem' } }}>
           Station status:{' '}
           {situationCode === 'MAINT'
             ? 'Maintenance'
@@ -167,6 +176,7 @@ export function ChargingStationInfo({
         sx={{
           border: '1px solid #ccc',
           borderRadius: 2,
+          mt: 1,
           mb: 1,
           px: 1,
           py: 0.5,

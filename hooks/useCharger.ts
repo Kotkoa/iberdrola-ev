@@ -1,50 +1,74 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState } from 'react';
 import {
   getLatestChargerStatus,
+  getChargerStatusById,
   subscribeToLatestCharger,
-} from '../api/charger.js'
-import type { ChargerStatus } from '../types/charger'
+  subscribeToCharger,
+} from '../api/charger.js';
+import type { ChargerStatus } from '../types/charger';
 
-export function useCharger() {
-  const [data, setData] = useState<ChargerStatus | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+export function useCharger(cpId?: number | null) {
+  const [data, setData] = useState<ChargerStatus | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    let active = true
-    let unsubscribe: (() => void) | null = null
+    let active = true;
+    let unsubscribe: (() => void) | null = null;
 
     const load = async () => {
-      try {
-        setLoading(true)
-        const rows = await getLatestChargerStatus()
-        if (active) {
-          setData(rows?.[0] ?? null)
-        }
+      if (cpId === null) {
+        setData(null);
+        setLoading(false);
+        setError(null);
+        return;
+      }
 
-        unsubscribe = subscribeToLatestCharger((newCharger) => {
+      try {
+        setLoading(true);
+        setError(null);
+
+        if (cpId !== undefined) {
+          const charger = await getChargerStatusById(cpId);
           if (active) {
-            setData(newCharger)
+            setData(charger);
           }
-        })
+
+          unsubscribe = subscribeToCharger(cpId, (newCharger) => {
+            if (active) {
+              setData(newCharger);
+            }
+          });
+        } else {
+          const rows = await getLatestChargerStatus();
+          if (active) {
+            setData(rows?.[0] ?? null);
+          }
+
+          unsubscribe = subscribeToLatestCharger((newCharger) => {
+            if (active) {
+              setData(newCharger);
+            }
+          });
+        }
       } catch (e) {
         if (active) {
-          setError(e instanceof Error ? e.message : 'Unknown error')
+          setError(e instanceof Error ? e.message : 'Unknown error');
         }
       } finally {
         if (active) {
-          setLoading(false)
+          setLoading(false);
         }
       }
-    }
+    };
 
-    load()
+    load();
 
     return () => {
-      active = false
-      unsubscribe?.()
-    }
-  }, [])
+      active = false;
+      unsubscribe?.();
+    };
+  }, [cpId]);
 
-  return { data, loading, error }
+  return { data, loading, error };
 }
