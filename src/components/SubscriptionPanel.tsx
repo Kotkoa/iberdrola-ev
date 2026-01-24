@@ -13,6 +13,7 @@ export function SubscriptionPanel({
   portNumber,
   subscriptionState,
   errorMessage,
+  pushAvailable,
   onSubscribeClick,
 }: SubscriptionPanelProps) {
   const buttonLabel =
@@ -22,12 +23,15 @@ export function SubscriptionPanel({
         ? 'Error enabling notifications'
         : 'Notify me when free';
 
+  const isDisabled =
+    !pushAvailable || subscriptionState === 'loading' || subscriptionState === 'success';
+
   return (
     <>
       <Button
         variant="contained"
         color="success"
-        disabled={subscriptionState === 'loading' || subscriptionState === 'success'}
+        disabled={isDisabled}
         onClick={() => onSubscribeClick(portNumber)}
         sx={{
           textTransform: 'none',
