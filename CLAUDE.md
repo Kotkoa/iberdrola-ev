@@ -237,7 +237,7 @@ npm run lint     # ESLint check
 npm run format   # Prettier format
 ```
 
-**Note**: Package manager is yarn (not yarn like CLAUDE.md suggests for different project)
+**Note**: Package manager is yarn
 
 ## Code Comments
 
