@@ -170,6 +170,16 @@ Automatically runs on `git commit`:
 
 **Skip**: `git commit --no-verify` (not recommended)
 
+### Post-Development Verification
+
+After making code changes, always run TypeScript type checking on modified files:
+
+```bash
+npm run check-types
+```
+
+This ensures no type errors were introduced. Fix all errors before committing.
+
 ### Constants Pattern
 
 All magic values go in [src/constants/index.ts](src/constants/index.ts):

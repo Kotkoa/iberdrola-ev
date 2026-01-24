@@ -3,6 +3,12 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import ErrorBoundary from './ErrorBoundary';
 
+vi.mock('../../api/charger.js', () => ({
+  unsubscribeAllChannels: vi.fn(),
+}));
+
+import { unsubscribeAllChannels } from '../../api/charger.js';
+
 // Component that throws an error
 const ThrowError = ({ shouldThrow }: { shouldThrow: boolean }) => {
   if (shouldThrow) {
@@ -61,14 +67,15 @@ describe('ErrorBoundary', () => {
       </ErrorBoundary>
     );
 
-    const resetButton = screen.getByRole('button', { name: /Go to Home/i });
+    const resetButton = screen.getByRole('button', { name: /Close/i });
     expect(resetButton).toBeInTheDocument();
   });
 
-  it('should reload page when reset button is clicked', async () => {
+  it('should unsubscribe from all channels and reload page when reset button is clicked', async () => {
     const user = userEvent.setup();
+    const mockUnsubscribe = vi.mocked(unsubscribeAllChannels);
+    mockUnsubscribe.mockClear();
 
-    // Mock window.location.href
     const originalHref = window.location.href;
     Object.defineProperty(window, 'location', {
       writable: true,
@@ -81,12 +88,12 @@ describe('ErrorBoundary', () => {
       </ErrorBoundary>
     );
 
-    const resetButton = screen.getByRole('button', { name: /Go to Home/i });
+    const resetButton = screen.getByRole('button', { name: /Close/i });
     await user.click(resetButton);
 
+    expect(mockUnsubscribe).toHaveBeenCalledOnce();
     expect(window.location.href).toBe('/');
 
-    // Restore window.location
     Object.defineProperty(window, 'location', {
       writable: true,
       value: { href: originalHref },

@@ -33,3 +33,7 @@ export function subscribeToLatestCharger(onUpdate: (charger: ChargerStatus) => v
     channel.unsubscribe();
   };
 }
+
+export function unsubscribeAllChannels(): void {
+  supabase.removeAllChannels();
+}

@@ -2,6 +2,7 @@ import { Component } from 'react';
 import type { ErrorInfo, ReactNode } from 'react';
 import { Box, Button, Container, Typography, Paper } from '@mui/material';
 import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
+import { unsubscribeAllChannels } from '../../api/charger.js';
 
 interface ErrorBoundaryProps {
   children: ReactNode;
@@ -35,6 +36,7 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
   }
 
   handleReset = (): void => {
+    unsubscribeAllChannels();
     this.setState({
       hasError: false,
       error: null,
@@ -105,7 +107,7 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
                 onClick={this.handleReset}
                 sx={{ mt: 3 }}
               >
-                Go to Home
+                Close
               </Button>
             </Paper>
           </Box>
