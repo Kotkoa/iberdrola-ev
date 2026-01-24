@@ -29,6 +29,8 @@ self.addEventListener('push', (event) => {
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
 
+  const urlToOpen = new URL('/', self.location.origin).href;
+
   event.waitUntil(
     (async () => {
       const allClients = await clients.matchAll({
@@ -46,7 +48,7 @@ self.addEventListener('notificationclick', (event) => {
 
       // No existing client found, open new window at root
       if (clients.openWindow) {
-        await clients.openWindow('/');
+        await clients.openWindow(urlToOpen);
       }
     })()
   );
