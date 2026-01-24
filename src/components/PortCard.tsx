@@ -105,7 +105,7 @@ export function PortCard({
                     sx={{ display: 'flex', alignItems: 'center', gap: 0.25, fontSize: '0.7rem' }}
                   >
                     <EuroIcon sx={{ fontSize: '0.75rem' }} />
-                    {priceKwh.toFixed(4)}/kWh
+                    {Number(priceKwh).toFixed(4)}/kWh
                   </Typography>
                 )}
               </Box>

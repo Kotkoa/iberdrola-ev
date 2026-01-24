@@ -78,7 +78,17 @@ describe('charger API', () => {
       };
       capturedCallback({ new: validData });
 
-      expect(onUpdate).toHaveBeenCalledWith(validData);
+      expect(onUpdate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          cp_id: '123',
+          cp_name: 'Test Station',
+          overall_status: 'AVAILABLE',
+          port1_price_kwh: null,
+          port2_price_kwh: null,
+          cp_latitude: null,
+          cp_longitude: null,
+        })
+      );
     });
 
     it('should not call onUpdate with incomplete charger data', () => {
