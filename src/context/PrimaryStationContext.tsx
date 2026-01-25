@@ -15,7 +15,8 @@ import {
   clearPrimaryStation as clearFromStorage,
   type PrimaryStationData,
 } from '../services/localStorage';
-import { fetchStationAsChargerStatus, type ChargerStatusFromApi } from '../services/iberdrola';
+import { fetchStationViaEdge } from '../services/stationApi';
+import type { ChargerStatusFromApi } from '../services/iberdrola';
 import type { ChargerStatus } from '../../types/charger';
 
 interface ApiFetchResult {
@@ -79,7 +80,7 @@ export function PrimaryStationProvider({ children }: PrimaryStationProviderProps
     const currentFetchId = ++fetchIdRef.current;
     const cpIdToFetch = stationData.cpId;
 
-    fetchStationAsChargerStatus(stationData.cuprId, stationData.cpId)
+    fetchStationViaEdge(stationData.cpId, stationData.cuprId)
       .then((data) => {
         if (fetchIdRef.current !== currentFetchId) return;
         setApiFetchResult({

@@ -25,26 +25,28 @@ vi.mock('./supabase.js', () => ({
   supabaseFetch: vi.fn(),
 }));
 
-import { subscribeToLatestCharger, unsubscribeAllChannels } from './charger.js';
+import { subscribeToSnapshots, unsubscribeAllChannels } from './charger.js';
 
 describe('charger API', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  describe('subscribeToLatestCharger', () => {
-    it('should create a channel and subscribe to postgres_changes', () => {
+  describe('subscribeToSnapshots', () => {
+    it('should create a channel and subscribe to postgres_changes on station_snapshots', () => {
       const onUpdate = vi.fn();
+      const cpId = 12345;
 
-      subscribeToLatestCharger(onUpdate);
+      subscribeToSnapshots(cpId, onUpdate);
 
-      expect(mockChannel).toHaveBeenCalledWith('charge_logs_latest');
+      expect(mockChannel).toHaveBeenCalledWith(`station_snapshots_${cpId}`);
       expect(mockOn).toHaveBeenCalledWith(
         'postgres_changes',
         {
           event: 'INSERT',
           schema: 'public',
-          table: 'charge_logs_parsed',
+          table: 'station_snapshots',
+          filter: `cp_id=eq.${cpId}`,
         },
         expect.any(Function)
       );
@@ -54,13 +56,13 @@ describe('charger API', () => {
     it('should return unsubscribe function that calls channel.unsubscribe', () => {
       const onUpdate = vi.fn();
 
-      const unsubscribe = subscribeToLatestCharger(onUpdate);
+      const unsubscribe = subscribeToSnapshots(12345, onUpdate);
       unsubscribe();
 
       expect(mockUnsubscribe).toHaveBeenCalledOnce();
     });
 
-    it('should call onUpdate with valid charger data', () => {
+    it('should call onUpdate with valid snapshot data', () => {
       const onUpdate = vi.fn();
       let capturedCallback!: (payload: { new: unknown }) => void;
 
@@ -69,31 +71,45 @@ describe('charger API', () => {
         return { subscribe: mockSubscribe };
       });
 
-      subscribeToLatestCharger(onUpdate);
+      subscribeToSnapshots(12345, onUpdate);
 
       const validData = {
-        cp_id: '123',
-        cp_name: 'Test Station',
+        id: 'test-id',
+        cp_id: 12345,
+        source: 'user_station',
+        observed_at: '2024-01-01T00:00:00Z',
+        payload_hash: 'hash123',
+        port1_status: 'AVAILABLE',
+        port1_power_kw: '22',
+        port1_price_kwh: '0',
+        port1_update_date: null,
+        port2_status: 'OCCUPIED',
+        port2_power_kw: '22',
+        port2_price_kwh: '0',
+        port2_update_date: null,
         overall_status: 'AVAILABLE',
+        emergency_stop_pressed: false,
+        situation_code: 'OPER',
+        created_at: '2024-01-01T00:00:00Z',
       };
       capturedCallback({ new: validData });
 
       expect(onUpdate).toHaveBeenCalledWith(
         expect.objectContaining({
-          cp_id: '123',
-          cp_name: 'Test Station',
-          overall_status: 'AVAILABLE',
-          port1_price_kwh: null,
-          port2_price_kwh: null,
-          cp_latitude: null,
-          cp_longitude: null,
+          cp_id: 12345,
+          source: 'user_station',
+          port1_status: 'AVAILABLE',
+          port1_power_kw: 22,
+          port1_price_kwh: 0,
+          port2_status: 'OCCUPIED',
+          port2_power_kw: 22,
+          port2_price_kwh: 0,
         })
       );
     });
 
-    it('should not call onUpdate with incomplete charger data', () => {
+    it('should not call onUpdate when cp_id is missing', () => {
       const onUpdate = vi.fn();
-      const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
       let capturedCallback!: (payload: { new: unknown }) => void;
 
       mockOn.mockImplementation((_event, _config, callback) => {
@@ -101,18 +117,12 @@ describe('charger API', () => {
         return { subscribe: mockSubscribe };
       });
 
-      subscribeToLatestCharger(onUpdate);
+      subscribeToSnapshots(12345, onUpdate);
 
-      const incompleteData = { cp_id: '123' };
+      const incompleteData = { id: 'test-id' };
       capturedCallback({ new: incompleteData });
 
       expect(onUpdate).not.toHaveBeenCalled();
-      expect(consoleWarn).toHaveBeenCalledWith(
-        '[Realtime:latest] Incomplete data, ignoring:',
-        incompleteData
-      );
-
-      consoleWarn.mockRestore();
     });
   });
 

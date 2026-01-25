@@ -1,4 +1,4 @@
-import type { StationInfo, StationDetails } from './iberdrola';
+import type { StationInfo, StationDetails, ChargerStatusFromApi } from './iberdrola';
 import { supabase } from '../../api/supabase';
 import { CHARGING_POINT_STATUS } from '../constants';
 
@@ -220,3 +220,25 @@ export function detailsToSnapshotData(details: StationDetails): SaveSnapshotRequ
 }
 
 export { type SaveSnapshotRequest };
+
+export async function fetchStationViaEdge(
+  cpId: number,
+  cuprId: number
+): Promise<ChargerStatusFromApi | null> {
+  const response = await fetch(`${EDGE_BASE}/station-details`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+    },
+    body: JSON.stringify({ cpId, cuprId }),
+  });
+
+  if (!response.ok) {
+    console.error('Edge function error:', response.status);
+    return null;
+  }
+
+  const data = await response.json();
+  return data.station;
+}

@@ -11,16 +11,19 @@ React + TypeScript PWA for monitoring Iberdrola EV charging stations. Real-time 
 ### Data Flow
 
 ```
-Supabase (charge_logs_parsed) → useCharger hook → React state → UI
+Supabase (station_snapshots + station_metadata) → useCharger hook → React state → UI
                                 ↓
-                         Real-time subscription
+                         Real-time subscription (station_snapshots)
+                                ↓
+                    API Fallback (Edge Function) → saves to snapshots
 ```
 
 **Key files**:
 
-- [api/charger.ts](api/charger.ts) - Supabase queries + real-time subscriptions
+- [api/charger.ts](api/charger.ts) - Supabase queries + real-time subscriptions for station_snapshots
 - [hooks/useCharger.ts](hooks/useCharger.ts) - React hook wrapping API calls
-- [src/App.tsx](src/App.tsx) - Main component consuming data
+- [src/context/PrimaryStationContext.tsx](src/context/PrimaryStationContext.tsx) - Station context with API fallback
+- [src/services/stationApi.ts](src/services/stationApi.ts) - Edge Function client + snapshot caching
 
 #### Extended Data Fields
 
@@ -39,9 +42,9 @@ Supabase (charge_logs_parsed) → useCharger hook → React state → UI
 
 **Database schema**:
 
-- `charge_logs_parsed` - Main table with latest status + extended fields
-- `station_metadata` - Reference data (rarely changes): operator, serial number, address components, socket details (JSONB)
-- `charging_stations_full` - View joining both tables (optional, for complex queries)
+- `station_snapshots` - Primary table for station status (port statuses, power, prices, emergency stop)
+- `station_metadata` - Reference data (rarely changes): coordinates, address, cupr_id mapping
+- `snapshot_throttle` - Deduplication table for snapshot storage (5-min TTL)
 
 **UI display**:
 
@@ -87,20 +90,20 @@ subscribeToStationNotifications(stationId, portNumber)
 
 ### CORS Proxy Limitations
 
-This project uses `corsproxy.io` as a third-party CORS proxy for Iberdrola API calls.
+This project uses `corsproxy.io` as a third-party CORS proxy for Iberdrola API calls in Search feature.
 
 **Important limitations:**
 
 - Free tier is intended for development only
 - Production use may require a paid subscription
-- Rate limits exist (unspecified)
+- Rate limits exist (60 req/min per IP)
 - Privacy: user geolocation passes through third-party
-- Iberdrola blocks direct server-to-server requests (Edge Functions don't work)
 
-**Alternatives considered:**
+**Station Tab uses Edge Functions:**
 
-- Supabase Edge Functions: Blocked by Iberdrola
-- Own Cloudflare Worker: Possible future migration
+- `station-details` Edge Function fetches from Iberdrola API (server-side, no CORS)
+- Automatically saves snapshots to database
+- Falls back to Edge Function only when no snapshot exists in DB
 
 ## TypeScript Rules
 
@@ -230,7 +233,7 @@ if (status === 'AVAILABLE') { ... }
 1. **Environment Variables**: Must prefix with `VITE_` to expose to client code
 2. **Supabase Auth**: [api/supabase.ts](api/supabase.ts) requires `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`
 3. **PWA Detection**: `isStandaloneApp()` checks both `display-mode: standalone` and `navigator.standalone`
-4. **Real-time Updates**: [useCharger](hooks/useCharger.ts) subscribes to INSERT events on `charge_logs_parsed` table
+4. **Real-time Updates**: [useCharger](hooks/useCharger.ts) subscribes to INSERT events on `station_snapshots` table
 5. **Duration Calculation**: UI updates every minute via `setInterval` - implemented in [App.tsx](src/App.tsx)
 
 ## Key Files Reference

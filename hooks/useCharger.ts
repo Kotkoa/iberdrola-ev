@@ -1,9 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import {
-  getLatestChargerStatus,
-  getChargerStatusById,
-  subscribeToLatestCharger,
-  subscribeToCharger,
+  getLatestSnapshot,
+  getStationMetadata,
+  subscribeToSnapshots,
+  snapshotToChargerStatus,
+  type StationSnapshot,
+  type StationMetadata,
 } from '../api/charger.js';
 import type { ChargerStatus } from '../types/charger';
 
@@ -11,13 +13,14 @@ export function useCharger(cpId?: number | null) {
   const [data, setData] = useState<ChargerStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const metadataRef = useRef<StationMetadata | null>(null);
 
   useEffect(() => {
     let active = true;
     let unsubscribe: (() => void) | null = null;
 
     const load = async () => {
-      if (cpId === null) {
+      if (cpId === null || cpId === undefined) {
         setData(null);
         setLoading(false);
         setError(null);
@@ -28,29 +31,39 @@ export function useCharger(cpId?: number | null) {
         setLoading(true);
         setError(null);
 
-        if (cpId !== undefined) {
-          const charger = await getChargerStatusById(cpId);
-          if (active) {
-            setData(charger);
-          }
+        const [snapshot, metadata] = await Promise.all([
+          getLatestSnapshot(cpId),
+          getStationMetadata(cpId),
+        ]);
 
-          unsubscribe = subscribeToCharger(cpId, (newCharger) => {
-            if (active) {
-              setData(newCharger);
-            }
-          });
-        } else {
-          const rows = await getLatestChargerStatus();
-          if (active) {
-            setData(rows?.[0] ?? null);
-          }
+        metadataRef.current = metadata;
 
-          unsubscribe = subscribeToLatestCharger((newCharger) => {
-            if (active) {
-              setData(newCharger);
-            }
-          });
+        if (active) {
+          if (snapshot) {
+            const chargerStatus = snapshotToChargerStatus(snapshot, {
+              cp_name: metadata?.address_full?.split(',')[0] || 'Unknown',
+              cp_latitude: metadata?.latitude ?? undefined,
+              cp_longitude: metadata?.longitude ?? undefined,
+              address_full: metadata?.address_full ?? undefined,
+            });
+            setData(chargerStatus);
+          } else {
+            setData(null);
+          }
         }
+
+        unsubscribe = subscribeToSnapshots(cpId, (newSnapshot: StationSnapshot) => {
+          if (active) {
+            const meta = metadataRef.current;
+            const chargerStatus = snapshotToChargerStatus(newSnapshot, {
+              cp_name: meta?.address_full?.split(',')[0] || 'Unknown',
+              cp_latitude: meta?.latitude ?? undefined,
+              cp_longitude: meta?.longitude ?? undefined,
+              address_full: meta?.address_full ?? undefined,
+            });
+            setData(chargerStatus);
+          }
+        });
       } catch (e) {
         if (active) {
           setError(e instanceof Error ? e.message : 'Unknown error');
