@@ -2,7 +2,7 @@ import { API_ENDPOINTS, CHARGING_POINT_STATUS, SEARCH_FILTERS, GEO_CONSTANTS } f
 
 // API Response Types
 export interface PhysicalSocket {
-  status?: { statusCode?: string };
+  status?: { statusCode?: string; updateDate?: string };
   appliedRate?: {
     recharge?: {
       finalPrice?: number;
@@ -312,9 +312,9 @@ export async function fetchStationAsChargerStatus(
     port1_status: port1?.status?.statusCode || null,
     port2_status: port2?.status?.statusCode || null,
     port1_power_kw: port1?.maxPower || null,
-    port1_update_date: now,
+    port1_update_date: port1?.status?.updateDate || now,
     port2_power_kw: port2?.maxPower || null,
-    port2_update_date: now,
+    port2_update_date: port2?.status?.updateDate || now,
     overall_status: details.cpStatus?.statusCode || null,
     overall_update_date: now,
     cp_latitude: details.locationData?.latitude || null,
