@@ -71,7 +71,7 @@ export function PrimaryStationProvider({ children }: PrimaryStationProviderProps
 
   const primaryStation: ChargerStatus | null = supabaseStation ?? apiFallbackData;
   const loading = supabaseLoading || apiFallbackLoading;
-  const error = supabaseError ?? apiFallbackError;
+  const error = supabaseStation !== null ? null : (supabaseError ?? apiFallbackError);
 
   useEffect(() => {
     if (!shouldFetchFromApi || !stationData) return;
