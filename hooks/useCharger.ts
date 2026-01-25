@@ -14,6 +14,12 @@ export function useCharger(cpId?: number | null) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const metadataRef = useRef<StationMetadata | null>(null);
+  const prevCpIdRef = useRef<number | null | undefined>(cpId);
+
+  const cpIdChanged = prevCpIdRef.current !== cpId;
+  if (cpIdChanged) {
+    prevCpIdRef.current = cpId;
+  }
 
   useEffect(() => {
     let active = true;
@@ -83,5 +89,11 @@ export function useCharger(cpId?: number | null) {
     };
   }, [cpId]);
 
-  return { data, loading, error };
+  const isLoadingDuringTransition = cpIdChanged && cpId !== null && cpId !== undefined;
+
+  return {
+    data: isLoadingDuringTransition ? null : data,
+    loading: isLoadingDuringTransition || loading,
+    error: isLoadingDuringTransition ? null : error,
+  };
 }
