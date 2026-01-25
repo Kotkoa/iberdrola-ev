@@ -128,21 +128,6 @@ export async function fetchStationDetails(cuprId: number): Promise<StationDetail
 }
 
 /**
- * Checks if a station has any available ports
- */
-function hasAvailablePorts(details: StationDetails | null): boolean {
-  if (!details) return false;
-
-  if (details.cpStatus?.statusCode === CHARGING_POINT_STATUS.AVAILABLE) return true;
-
-  return (
-    details.logicalSocket?.some((socket) =>
-      socket.physicalSocket?.some((ps) => ps.status?.statusCode === CHARGING_POINT_STATUS.AVAILABLE)
-    ) ?? false
-  );
-}
-
-/**
  * Checks if a station has any paid charging ports
  */
 function hasPaidPorts(details: StationDetails | null): boolean {
@@ -242,10 +227,9 @@ export async function findNearestFreeStations(
 
     const details = await fetchStationDetails(cuprId);
 
-    const hasAvailable = hasAvailablePorts(details);
     const isPaid = hasPaidPorts(details);
 
-    if (!isPaid && hasAvailable) {
+    if (!isPaid) {
       const stationInfo = extractStationInfo(cpId, cuprId, details);
       if (stationInfo) {
         freeStations.push(stationInfo);

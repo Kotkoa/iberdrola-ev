@@ -1,4 +1,4 @@
-import { Alert, AlertTitle, Button } from '@mui/material';
+import { Alert, AlertTitle, Box, Button } from '@mui/material';
 import type { PortNumber, SubscriptionStatus } from '../types';
 
 interface SubscriptionPanelProps {
@@ -18,19 +18,20 @@ export function SubscriptionPanel({
 }: SubscriptionPanelProps) {
   const buttonLabel =
     subscriptionState === 'success'
-      ? 'Notifications enabled'
+      ? 'Waiting'
       : subscriptionState === 'error'
-        ? 'Error enabling notifications'
-        : 'Notify me when free';
+        ? 'Try again'
+        : 'Get notified';
 
   const isDisabled =
     !pushAvailable || subscriptionState === 'loading' || subscriptionState === 'success';
 
   return (
-    <>
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
       <Button
         variant="contained"
         color="success"
+        fullWidth
         disabled={isDisabled}
         onClick={() => onSubscribeClick(portNumber)}
         sx={{
@@ -49,6 +50,6 @@ export function SubscriptionPanel({
           {errorMessage}
         </Alert>
       )}
-    </>
+    </Box>
   );
 }

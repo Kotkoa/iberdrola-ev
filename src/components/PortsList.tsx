@@ -75,6 +75,11 @@ export function PortsList({
           }
         )}
       </Stack>
+      {portConfigs.some((p) => !p.isAvailable) && pushAvailable && (
+        <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', mt: 1.5 }}>
+          No waiting. No checking. Just come when it's free.
+        </Typography>
+      )}
       {!pushAvailable && (
         <Typography variant="caption" color="textSecondary" sx={{ display: 'block', mt: 1.5 }}>
           Push notifications are not supported in this browser.

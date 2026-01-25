@@ -47,7 +47,7 @@ export function StationDetails({
           sx={{ fontSize: { xs: '1.1rem', sm: '1.5rem' } }}
           color={availableCount > 0 ? 'success' : 'warning'}
         >
-          Available {availableCount}/2
+          {availableCount > 0 ? `Available: ${availableCount} of 2` : 'All ports are busy'}
         </Typography>
       </Stack>
 

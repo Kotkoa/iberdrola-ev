@@ -47,7 +47,16 @@ export function PortCard({
           Semi-fast
         </Typography>
         <Typography variant="caption">
-          {isAvailable ? 'Free charging point' : `Busy for ${busyDuration}`}
+          {isAvailable ? (
+            'Free charging point'
+          ) : (
+            <>
+              Occupied for{' '}
+              <Box component="span" fontWeight={600}>
+                {busyDuration}
+              </Box>
+            </>
+          )}
         </Typography>
       </Box>
       <Stack direction="row" alignItems="center" height="100%">
