@@ -18,7 +18,7 @@ export function SubscriptionPanel({
 }: SubscriptionPanelProps) {
   const buttonLabel =
     subscriptionState === 'success'
-      ? 'Waiting'
+      ? 'Alert active'
       : subscriptionState === 'error'
         ? 'Try again'
         : 'Get notified';
@@ -41,9 +41,6 @@ export function SubscriptionPanel({
       >
         {subscriptionState === 'loading' ? 'Subscribing...' : buttonLabel}
       </Button>
-      {subscriptionState === 'success' && (
-        <Alert severity="success">Notifications enabled for port {portNumber}.</Alert>
-      )}
       {subscriptionState === 'error' && errorMessage && (
         <Alert severity="warning">
           <AlertTitle>Subscription error</AlertTitle>

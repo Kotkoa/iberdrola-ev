@@ -13,6 +13,8 @@ import { useUserLocation } from '../../hooks/useUserLocation';
 import { CHARGING_POINT_STATUS } from '../../constants';
 import type { PortNumber, SubscriptionStatus } from '../../types';
 
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
 interface StationTabProps {
   onNavigateToSearch: () => void;
 }
@@ -47,7 +49,13 @@ export function StationTab({ onNavigateToSearch }: StationTabProps) {
 
       const res = await fetch(`${VITE_CHECK_SUB_URL}`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(SUPABASE_ANON_KEY && {
+            apikey: SUPABASE_ANON_KEY,
+            Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+          }),
+        },
         body: JSON.stringify({
           stationId: String(stationId),
           endpoint: existing.endpoint,

@@ -1,4 +1,4 @@
-import { Box, Stack, Typography } from '@mui/material';
+import { Alert, Box, Stack, Typography } from '@mui/material';
 import { PortCard } from './PortCard';
 import { SubscriptionPanel } from './SubscriptionPanel';
 import type { PortNumber, SubscriptionStatus } from '../types';
@@ -28,6 +28,13 @@ export function PortsList({
   pushAvailable,
   onSubscribeClick,
 }: PortsListProps) {
+  const subscribedCount = Object.values(subscriptionState).filter((s) => s === 'success').length;
+
+  const alertMessage =
+    subscribedCount === 2
+      ? "We'll alert you as soon as this station is available"
+      : "We'll alert you as soon as this port is available";
+
   return (
     <>
       <Stack
@@ -75,7 +82,12 @@ export function PortsList({
           }
         )}
       </Stack>
-      {portConfigs.some((p) => !p.isAvailable) && pushAvailable && (
+      {subscribedCount > 0 && (
+        <Alert severity="success" sx={{ mt: 1.5 }}>
+          {alertMessage}
+        </Alert>
+      )}
+      {portConfigs.some((p) => !p.isAvailable) && pushAvailable && subscribedCount === 0 && (
         <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', mt: 1.5 }}>
           No waiting. No checking. Just come when it's free.
         </Typography>
