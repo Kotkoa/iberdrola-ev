@@ -99,9 +99,10 @@ export function StationDetails({
 
       <Typography
         variant="body1"
-        color="text.secondary"
+        color="text.primary"
         sx={{
           fontSize: { xs: '0.9rem', sm: '1rem' },
+          fontWeight: 600,
           display: 'flex',
           alignItems: 'center',
           gap: 0.5,
