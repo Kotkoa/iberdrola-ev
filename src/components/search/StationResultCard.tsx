@@ -81,16 +81,20 @@ export function StationResultCard({
           ) : (
             <Skeleton variant="rounded" width={36} height={24} sx={{ borderRadius: '16px' }} />
           )}
-          {station.priceKwh === 0 && (
-            <IconButton
-              size="small"
-              onClick={handleStarClick}
-              color={isPrimary ? 'primary' : 'default'}
-              aria-label={isPrimary ? 'Primary station' : 'Set as primary'}
-            >
-              {isPrimary ? <StarIcon fontSize="small" /> : <StarBorderIcon fontSize="small" />}
-            </IconButton>
-          )}
+          <Box sx={{ width: 28, minWidth: 28, display: 'flex', justifyContent: 'center' }}>
+            {station.priceKwh === undefined ? (
+              <Skeleton variant="circular" width={28} height={28} />
+            ) : station.priceKwh === 0 ? (
+              <IconButton
+                size="small"
+                onClick={handleStarClick}
+                color={isPrimary ? 'primary' : 'default'}
+                aria-label={isPrimary ? 'Primary station' : 'Set as primary'}
+              >
+                {isPrimary ? <StarIcon fontSize="small" /> : <StarBorderIcon fontSize="small" />}
+              </IconButton>
+            ) : null}
+          </Box>
         </Stack>
       </Stack>
 
