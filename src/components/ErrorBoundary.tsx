@@ -81,7 +81,7 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
                 Something went wrong. Please try again later.
               </Typography>
 
-              {this.state.error && (
+              {import.meta.env.DEV && this.state.error && (
                 <Box
                   sx={{
                     mt: 2,

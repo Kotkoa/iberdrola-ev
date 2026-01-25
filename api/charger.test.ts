@@ -108,7 +108,7 @@ describe('charger API', () => {
 
       expect(onUpdate).not.toHaveBeenCalled();
       expect(consoleWarn).toHaveBeenCalledWith(
-        'Received incomplete charger data from Realtime, ignoring:',
+        '[Realtime:latest] Incomplete data, ignoring:',
         incompleteData
       );
 

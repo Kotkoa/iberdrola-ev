@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react';
-import { findNearestFreeStations, getUserLocation, type StationInfo } from '../services/iberdrola';
+import { getUserLocation, type StationInfo } from '../services/iberdrola';
+import { searchNearbyStations } from '../services/stationApi';
 
 export interface SearchProgress {
   current: number;
@@ -26,16 +27,14 @@ export function useStationSearch(): UseStationSearchReturn {
       setLoading(true);
       setError(null);
       setStations([]);
+      setProgress({ current: 0, total: 1 });
 
       const pos = await getUserLocation();
-      const freeStations = await findNearestFreeStations(
-        pos.coords.latitude,
-        pos.coords.longitude,
-        radius,
-        (current, total) => setProgress({ current, total })
-      );
 
-      setStations(freeStations);
+      const results = await searchNearbyStations(pos.coords.latitude, pos.coords.longitude, radius);
+
+      setStations(results);
+      setProgress({ current: 1, total: 1 });
     } catch (err) {
       const errorMsg =
         err instanceof GeolocationPositionError
