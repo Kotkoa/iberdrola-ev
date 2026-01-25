@@ -28,7 +28,7 @@ export function StationResultCard({
   };
 
   const addressParts = station.addressFull?.split(',').map((p) => p.trim()) ?? [];
-  const streetAddress = addressParts.length > 2 ? addressParts.slice(0, -2).join(', ') + ',' : '';
+  const streetAddress = addressParts.length > 2 ? addressParts.slice(0, -2).join(', ') : '';
   const cityRegion =
     addressParts.length >= 2 ? addressParts.slice(-2).join(', ') : station.addressFull;
 
@@ -99,14 +99,6 @@ export function StationResultCard({
           variant={station.priceKwh === 0 ? 'filled' : 'outlined'}
           sx={{ fontSize: '0.7rem', height: 20 }}
         />
-        {!station.supportsReservation && (
-          <Chip
-            label="Not reservable"
-            size="small"
-            variant="outlined"
-            sx={{ fontSize: '0.7rem', height: 20 }}
-          />
-        )}
         <Box sx={{ ml: 'auto' }}>
           <DistanceBadge
             distanceKm={distanceKm}

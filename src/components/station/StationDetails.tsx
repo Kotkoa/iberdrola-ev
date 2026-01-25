@@ -3,6 +3,7 @@ import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import LocationOnIcon from '@mui/icons-material/LocationOn';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import { DistanceBadge } from '../common/DistanceBadge';
+import { formatAddress } from '../../utils/address';
 
 interface StationDetailsProps {
   cpId: number;
@@ -73,16 +74,6 @@ export function StationDetails({
           }
         />
         <Chip
-          label="Not reservable"
-          color="default"
-          variant="outlined"
-          size="small"
-          sx={{
-            borderRadius: '4px',
-            fontSize: { xs: '0.7rem', sm: '0.813rem' },
-          }}
-        />
-        <Chip
           label={`ID.${cpId}`}
           color="default"
           variant="outlined"
@@ -106,29 +97,18 @@ export function StationDetails({
         )}
       </Stack>
 
-      {addressFull && (
-        <Typography
-          variant="caption"
-          color="textSecondary"
-          sx={{
-            mt: 0.5,
-            fontSize: { xs: '0.65rem', sm: '0.75rem' },
-            display: 'flex',
-            alignItems: 'center',
-            gap: 0.5,
-          }}
-        >
-          <LocationOnIcon sx={{ fontSize: '0.875rem' }} />
-          {addressFull}
-        </Typography>
-      )}
       <Typography
         variant="body1"
-        color="textPrimary"
-        fontWeight={600}
-        sx={{ fontSize: { xs: '0.9rem', sm: '1rem' } }}
+        color="text.secondary"
+        sx={{
+          fontSize: { xs: '0.9rem', sm: '1rem' },
+          display: 'flex',
+          alignItems: 'center',
+          gap: 0.5,
+        }}
       >
-        {cpName}
+        <LocationOnIcon sx={{ fontSize: '1rem' }} />
+        {formatAddress(addressFull) ?? cpName}
       </Typography>
 
       <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mt: 0.5 }}>
