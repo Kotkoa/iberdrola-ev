@@ -1,5 +1,4 @@
 import { Alert, Avatar, Box, Chip, Stack, Typography } from '@mui/material';
-import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import LocationOnIcon from '@mui/icons-material/LocationOn';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import { DistanceBadge } from '../common/DistanceBadge';
@@ -150,31 +149,6 @@ export function StationDetails({
               : situationCode}
         </Alert>
       )}
-
-      <Stack
-        direction="row"
-        alignItems="center"
-        sx={{
-          border: '1px solid #ccc',
-          borderRadius: 2,
-          mt: 1,
-          mb: 1,
-          px: 1,
-          py: 0.5,
-        }}
-      >
-        <InfoOutlinedIcon
-          fontSize="small"
-          sx={{ width: { xs: 16, sm: 20 }, height: { xs: 16, sm: 20 } }}
-        />
-        <Typography
-          variant="body2"
-          color="textPrimary"
-          sx={{ fontSize: { xs: '0.7rem', sm: '0.875rem' } }}
-        >
-          Charging point with limited power
-        </Typography>
-      </Stack>
     </Box>
   );
 }

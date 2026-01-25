@@ -27,9 +27,37 @@ function notifySubscribers() {
   subscribers.forEach((callback) => callback());
 }
 
+function handleVisibilityChange() {
+  if (document.visibilityState === 'visible' && state.location !== null) {
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        state = {
+          location: {
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude,
+          },
+          loading: false,
+          error: null,
+        };
+        notifySubscribers();
+      },
+      () => {},
+      {
+        enableHighAccuracy: false,
+        timeout: 5000,
+        maximumAge: 60000,
+      }
+    );
+  }
+}
+
 function initializeLocation() {
   if (isInitialized) return;
   isInitialized = true;
+
+  if (typeof document !== 'undefined') {
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+  }
 
   if (!navigator.geolocation) {
     state = { ...state, error: 'Geolocation is not supported', loading: false };

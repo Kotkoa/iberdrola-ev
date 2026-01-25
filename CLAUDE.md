@@ -85,6 +85,23 @@ subscribeToStationNotifications(stationId, portNumber)
 
 **CORS Proxy**: All Iberdrola API calls use `https://corsproxy.io/?` prefix (see [API_ENDPOINTS](src/constants/index.ts))
 
+### CORS Proxy Limitations
+
+This project uses `corsproxy.io` as a third-party CORS proxy for Iberdrola API calls.
+
+**Important limitations:**
+
+- Free tier is intended for development only
+- Production use may require a paid subscription
+- Rate limits exist (unspecified)
+- Privacy: user geolocation passes through third-party
+- Iberdrola blocks direct server-to-server requests (Edge Functions don't work)
+
+**Alternatives considered:**
+
+- Supabase Edge Functions: Blocked by Iberdrola
+- Own Cloudflare Worker: Possible future migration
+
 ## TypeScript Rules
 
 **Strict mode enabled** - check [tsconfig.app.json](tsconfig.app.json):
