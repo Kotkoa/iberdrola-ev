@@ -1,5 +1,15 @@
 import { API_ENDPOINTS, CHARGING_POINT_STATUS, SEARCH_FILTERS, GEO_CONSTANTS } from '../constants';
 
+const CONCURRENCY_LIMIT = 5;
+
+function chunkArray<T>(array: T[], size: number): T[][] {
+  const chunks: T[][] = [];
+  for (let i = 0; i < array.length; i += size) {
+    chunks.push(array.slice(i, i + size));
+  }
+  return chunks;
+}
+
 // API Response Types
 export interface PhysicalSocket {
   status?: { statusCode?: string; updateDate?: string };
@@ -201,38 +211,63 @@ export function extractStationInfo(
  * @param longitude - User's longitude
  * @param radiusKm - Search radius in kilometers
  * @param onProgress - Optional callback for progress updates
+ * @param signal - Optional AbortSignal for cancellation
  * @returns Array of free charging stations
  */
 export async function findNearestFreeStations(
   latitude: number,
   longitude: number,
   radiusKm: number,
-  onProgress?: (current: number, total: number) => void
+  onProgress?: (current: number, total: number) => void,
+  signal?: AbortSignal
 ): Promise<StationInfo[]> {
   const stationsList = await fetchStationsInRadius(latitude, longitude, radiusKm);
 
+  if (signal?.aborted) return [];
+
   const freeStations: StationInfo[] = [];
+  let completed = 0;
   const total = stationsList.length;
 
-  for (let i = 0; i < stationsList.length; i++) {
-    onProgress?.(i + 1, total);
+  const chunks = chunkArray(stationsList, CONCURRENCY_LIMIT);
 
-    const station = stationsList[i];
-    const cpId = station.cpId;
-    const cuprId = station.locationData?.cuprId;
+  for (const chunk of chunks) {
+    if (signal?.aborted) break;
 
-    if (!cpId || !cuprId) {
-      continue;
-    }
+    const results = await Promise.allSettled(
+      chunk.map(async (station) => {
+        if (signal?.aborted) return null;
 
-    const details = await fetchStationDetails(cuprId);
+        const cpId = station.cpId;
+        const cuprId = station.locationData?.cuprId;
 
-    const isPaid = hasPaidPorts(details);
+        if (!cpId || !cuprId) {
+          completed++;
+          onProgress?.(completed, total);
+          return null;
+        }
 
-    if (!isPaid) {
-      const stationInfo = extractStationInfo(cpId, cuprId, details);
-      if (stationInfo) {
-        freeStations.push(stationInfo);
+        try {
+          const details = await fetchStationDetails(cuprId);
+          completed++;
+          onProgress?.(completed, total);
+
+          if (!hasPaidPorts(details)) {
+            return extractStationInfo(cpId, cuprId, details);
+          }
+        } catch (err) {
+          console.warn(`Failed to fetch station ${cpId}:`, err);
+          completed++;
+          onProgress?.(completed, total);
+        }
+
+        return null;
+      })
+    );
+
+    for (const result of results) {
+      if (result.status === 'fulfilled' && result.value) {
+        freeStations.push(result.value);
       }
     }
   }
