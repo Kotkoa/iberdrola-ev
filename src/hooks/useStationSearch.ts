@@ -1,6 +1,11 @@
 import { useState, useCallback } from 'react';
-import { getUserLocation, type StationInfo } from '../services/iberdrola';
-import { searchNearbyStations } from '../services/stationApi';
+import {
+  getUserLocation,
+  findNearestFreeStations,
+  fetchStationDetails,
+  type StationInfo,
+} from '../services/iberdrola';
+import { saveSnapshot, detailsToSnapshotData } from '../services/stationApi';
 
 export interface SearchProgress {
   current: number;
@@ -27,14 +32,34 @@ export function useStationSearch(): UseStationSearchReturn {
       setLoading(true);
       setError(null);
       setStations([]);
-      setProgress({ current: 0, total: 1 });
+      setProgress({ current: 0, total: 0 });
 
       const pos = await getUserLocation();
 
-      const results = await searchNearbyStations(pos.coords.latitude, pos.coords.longitude, radius);
+      const results = await findNearestFreeStations(
+        pos.coords.latitude,
+        pos.coords.longitude,
+        radius,
+        (current, total) => setProgress({ current, total })
+      );
 
       setStations(results);
-      setProgress({ current: 1, total: 1 });
+
+      for (const station of results) {
+        try {
+          const details = await fetchStationDetails(station.cuprId);
+          if (details) {
+            saveSnapshot({
+              cpId: station.cpId,
+              cuprId: station.cuprId,
+              source: 'user_nearby',
+              stationData: detailsToSnapshotData(details),
+            }).catch((err) => console.error('Failed to save snapshot:', err));
+          }
+        } catch (err) {
+          console.error('Failed to fetch details for saving:', err);
+        }
+      }
     } catch (err) {
       const errorMsg =
         err instanceof GeolocationPositionError
