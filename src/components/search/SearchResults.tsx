@@ -78,10 +78,6 @@ export function SearchResults({
 
   return (
     <Stack spacing={1}>
-      <Typography variant="caption" color="text.secondary">
-        {filteredStations.length} {showPaid ? 'paid' : 'free'} station
-        {filteredStations.length !== 1 ? 's' : ''} found
-      </Typography>
       {sortedStations.map((station) => (
         <StationResultCard
           key={station.cpId}
