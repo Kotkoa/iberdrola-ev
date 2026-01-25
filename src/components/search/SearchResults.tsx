@@ -14,7 +14,7 @@ interface UserLocation {
 interface SearchResultsProps {
   stations: StationInfoPartial[];
   primaryStationId: number | null;
-  onSetPrimary: (cpId: number, cuprId: number) => void;
+  onSetPrimary: (station: StationInfoPartial) => void;
   userLocation: UserLocation | null;
   showPaid: boolean;
 }

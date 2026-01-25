@@ -16,8 +16,9 @@ import {
   type PrimaryStationData,
 } from '../services/localStorage';
 import { fetchStationViaEdge } from '../services/stationApi';
-import type { ChargerStatusFromApi } from '../services/iberdrola';
+import type { ChargerStatusFromApi, StationInfoPartial } from '../services/iberdrola';
 import type { ChargerStatus } from '../../types/charger';
+import { CHARGING_POINT_STATUS } from '../constants';
 
 interface ApiFetchResult {
   forCpId: number;
@@ -31,11 +32,45 @@ interface PrimaryStationContextValue {
   loading: boolean;
   error: string | null;
   hasRealtime: boolean;
-  setPrimaryStation: (cpId: number, cuprId: number) => void;
+  setPrimaryStation: (station: StationInfoPartial) => void;
   clearPrimaryStation: () => void;
 }
 
 const PrimaryStationContext = createContext<PrimaryStationContextValue | null>(null);
+
+function stationPartialToChargerStatus(station: StationInfoPartial): ChargerStatus {
+  const now = new Date().toISOString();
+  return {
+    id: `pending-${station.cpId}`,
+    created_at: now,
+    cp_id: station.cpId,
+    cp_name: station.name,
+    schedule: '24/7',
+    port1_status:
+      station.freePorts !== undefined && station.freePorts > 0
+        ? CHARGING_POINT_STATUS.AVAILABLE
+        : CHARGING_POINT_STATUS.BUSY,
+    port2_status:
+      station.freePorts !== undefined && station.freePorts > 1
+        ? CHARGING_POINT_STATUS.AVAILABLE
+        : null,
+    port1_power_kw: station.maxPower ?? null,
+    port1_update_date: now,
+    port2_power_kw: station.maxPower ?? null,
+    port2_update_date: now,
+    overall_status: station.overallStatus,
+    overall_update_date: now,
+    cp_latitude: station.latitude,
+    cp_longitude: station.longitude,
+    address_full: station.addressFull,
+    port1_price_kwh: station.priceKwh ?? 0,
+    port2_price_kwh: station.priceKwh ?? 0,
+    port1_socket_type: station.socketType ?? null,
+    port2_socket_type: station.socketType ?? null,
+    emergency_stop_pressed: station.emergencyStopPressed ?? false,
+    situation_code: null,
+  };
+}
 
 interface PrimaryStationProviderProps {
   children: ReactNode;
@@ -46,6 +81,7 @@ export function PrimaryStationProvider({ children }: PrimaryStationProviderProps
     getPrimaryStation()
   );
   const [apiFetchResult, setApiFetchResult] = useState<ApiFetchResult | null>(null);
+  const [pendingStationData, setPendingStationData] = useState<StationInfoPartial | null>(null);
   const fetchIdRef = useRef(0);
 
   const {
@@ -54,10 +90,14 @@ export function PrimaryStationProvider({ children }: PrimaryStationProviderProps
     error: supabaseError,
   } = useCharger(stationData?.cpId ?? null);
 
+  const hasPendingData =
+    pendingStationData !== null && pendingStationData.cpId === stationData?.cpId;
+
   const shouldFetchFromApi =
     stationData !== null &&
     !supabaseLoading &&
     supabaseStation === null &&
+    !hasPendingData &&
     stationData.cuprId !== undefined;
 
   const hasRealtime = supabaseStation !== null;
@@ -69,7 +109,13 @@ export function PrimaryStationProvider({ children }: PrimaryStationProviderProps
   const apiFallbackData = hasFetchedForCurrentStation ? apiFetchResult.data : null;
   const apiFallbackError = hasFetchedForCurrentStation ? apiFetchResult.error : null;
 
-  const primaryStation: ChargerStatus | null = supabaseStation ?? apiFallbackData;
+  const pendingChargerStatus =
+    pendingStationData && pendingStationData.cpId === stationData?.cpId
+      ? stationPartialToChargerStatus(pendingStationData)
+      : null;
+
+  const primaryStation: ChargerStatus | null =
+    supabaseStation ?? pendingChargerStatus ?? apiFallbackData;
   const loading = supabaseLoading || apiFallbackLoading;
   const error = supabaseStation !== null ? null : (supabaseError ?? apiFallbackError);
 
@@ -99,15 +145,17 @@ export function PrimaryStationProvider({ children }: PrimaryStationProviderProps
       });
   }, [shouldFetchFromApi, stationData, hasFetchedForCurrentStation]);
 
-  const setPrimaryStation = useCallback((cpId: number, cuprId: number) => {
-    saveToStorage(cpId, cuprId);
-    setStationData({ cpId, cuprId });
+  const setPrimaryStation = useCallback((station: StationInfoPartial) => {
+    saveToStorage(station.cpId, station.cuprId);
+    setStationData({ cpId: station.cpId, cuprId: station.cuprId });
+    setPendingStationData(station);
     setApiFetchResult(null);
   }, []);
 
   const clearPrimaryStation = useCallback(() => {
     clearFromStorage();
     setStationData(null);
+    setPendingStationData(null);
     setApiFetchResult(null);
   }, []);
 

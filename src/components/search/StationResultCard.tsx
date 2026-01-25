@@ -13,7 +13,7 @@ import { DistanceBadge } from '../common/DistanceBadge';
 interface StationResultCardProps {
   station: StationInfoPartial;
   isPrimary: boolean;
-  onSetPrimary: (cpId: number, cuprId: number) => void;
+  onSetPrimary: (station: StationInfoPartial) => void;
   distanceKm: number | null;
 }
 
@@ -25,7 +25,7 @@ export function StationResultCard({
 }: StationResultCardProps) {
   const handleStarClick = (e: React.MouseEvent) => {
     e.stopPropagation();
-    onSetPrimary(station.cpId, station.cuprId);
+    onSetPrimary(station);
   };
 
   const addressParts = station.addressFull?.split(',').map((p) => p.trim()) ?? [];

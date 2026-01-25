@@ -13,6 +13,7 @@ import { SearchProgressBar } from './SearchProgressBar';
 import { useStationSearch } from '../../hooks/useStationSearch';
 import { usePrimaryStation } from '../../context/PrimaryStationContext';
 import { useUserLocation } from '../../hooks/useUserLocation';
+import type { StationInfoPartial } from '../../services/iberdrola';
 
 interface SearchTabProps {
   onStationSelected?: () => void;
@@ -31,8 +32,8 @@ export function SearchTab({ onStationSelected }: SearchTabProps) {
     search(radius);
   };
 
-  const handleSetPrimary = (cpId: number, cuprId: number) => {
-    setPrimaryStation(cpId, cuprId);
+  const handleSetPrimary = (station: StationInfoPartial) => {
+    setPrimaryStation(station);
     setSnackbarOpen(true);
     if (onStationSelected) {
       onStationSelected();
