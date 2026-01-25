@@ -41,6 +41,10 @@ export function StationTab({ onNavigateToSearch }: StationTabProps) {
   const restoreSubscriptionState = useCallback(
     async (stationId: number) => {
       if (!isPushSupported()) return;
+      if (!VITE_CHECK_SUB_URL) {
+        console.warn('VITE_CHECK_SUB_URL is not configured');
+        return;
+      }
 
       const registration = await navigator.serviceWorker.ready;
       const existing = await registration.pushManager.getSubscription();

@@ -70,7 +70,7 @@ export function PrimaryStationProvider({ children }: PrimaryStationProviderProps
 
   const primaryStation: ChargerStatus | null = supabaseStation ?? apiFallbackData;
   const loading = supabaseLoading || apiFallbackLoading;
-  const error = hasRealtime ? supabaseError : apiFallbackError;
+  const error = supabaseError ?? apiFallbackError;
 
   useEffect(() => {
     if (!shouldFetchFromApi || !stationData) return;

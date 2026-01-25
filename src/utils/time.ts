@@ -1,5 +1,5 @@
 export const formatDuration = (durationMinutes: number | null): string | null => {
-  if (durationMinutes === null) return null;
+  if (durationMinutes === null || !Number.isFinite(durationMinutes)) return null;
   if (durationMinutes < 1) return '< 1 min';
 
   const hours = Math.floor(durationMinutes / 60);

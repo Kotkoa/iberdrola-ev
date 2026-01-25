@@ -32,10 +32,10 @@ self.addEventListener('notificationclick', (event) => {
   event.notification.close();
 
   event.waitUntil(
-    clients.matchAll({ type: 'window' }).then((clientList) => {
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
       // If a window is already open, focus it
       for (const client of clientList) {
-        if (client.url === self.registration.scope && 'focus' in client) {
+        if (client.url.startsWith(self.registration.scope) && 'focus' in client) {
           return client.focus();
         }
       }
