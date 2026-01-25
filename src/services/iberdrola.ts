@@ -1,4 +1,5 @@
 import { API_ENDPOINTS, CHARGING_POINT_STATUS, SEARCH_FILTERS, GEO_CONSTANTS } from '../constants';
+import { getStationsFromCache, type CachedStationInfo } from './stationApi';
 
 const CONCURRENCY_LIMIT = 5;
 
@@ -205,14 +206,16 @@ export function extractStationInfo(
   };
 }
 
+function cachedToStationInfo(cached: CachedStationInfo): StationInfo {
+  return {
+    ...cached,
+    supportsReservation: false,
+  };
+}
+
 /**
- * Finds free (unpaid and available) charging stations near a location
- * @param latitude - User's latitude
- * @param longitude - User's longitude
- * @param radiusKm - Search radius in kilometers
- * @param onProgress - Optional callback for progress updates
- * @param signal - Optional AbortSignal for cancellation
- * @returns Array of free charging stations
+ * Finds free (unpaid and available) charging stations near a location.
+ * Uses cache from DB when available (5 min TTL), fetches from API only for uncached stations.
  */
 export async function findNearestFreeStations(
   latitude: number,
@@ -225,11 +228,34 @@ export async function findNearestFreeStations(
 
   if (signal?.aborted) return [];
 
-  const freeStations: StationInfo[] = [];
-  let completed = 0;
-  const total = stationsList.length;
+  const validStations = stationsList.filter(
+    (s): s is { cpId: number; locationData: { cuprId: number } } =>
+      s.cpId !== undefined && s.locationData?.cuprId !== undefined
+  );
 
-  const chunks = chunkArray(stationsList, CONCURRENCY_LIMIT);
+  const cpIds = validStations.map((s) => s.cpId);
+
+  const cached = await getStationsFromCache(cpIds);
+
+  if (signal?.aborted) return [];
+
+  const toFetch = validStations.filter((s) => !cached.has(s.cpId));
+
+  const freeStations: StationInfo[] = [];
+
+  for (const [, station] of cached) {
+    freeStations.push(cachedToStationInfo(station));
+  }
+
+  if (toFetch.length === 0) {
+    return freeStations;
+  }
+
+  let completed = cached.size;
+  const total = validStations.length;
+  onProgress?.(completed, total);
+
+  const chunks = chunkArray(toFetch, CONCURRENCY_LIMIT);
 
   for (const chunk of chunks) {
     if (signal?.aborted) break;
@@ -239,13 +265,7 @@ export async function findNearestFreeStations(
         if (signal?.aborted) return null;
 
         const cpId = station.cpId;
-        const cuprId = station.locationData?.cuprId;
-
-        if (!cpId || !cuprId) {
-          completed++;
-          onProgress?.(completed, total);
-          return null;
-        }
+        const cuprId = station.locationData.cuprId;
 
         try {
           const details = await fetchStationDetails(cuprId);
