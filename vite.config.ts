@@ -24,7 +24,6 @@ export default defineConfig({
         manualChunks: {
           'mui-core': ['@mui/material', '@mui/system'],
           'mui-icons': ['@mui/icons-material'],
-          'react-vendor': ['react', 'react-dom'],
         },
       },
     },
