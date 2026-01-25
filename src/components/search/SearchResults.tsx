@@ -3,7 +3,7 @@ import Box from '@mui/material/Box';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 import { StationResultCard } from './StationResultCard';
-import type { StationInfo } from '../../services/iberdrola';
+import type { StationInfoPartial } from '../../services/iberdrola';
 import { calculateDistance } from '../../utils/maps';
 
 interface UserLocation {
@@ -12,10 +12,11 @@ interface UserLocation {
 }
 
 interface SearchResultsProps {
-  stations: StationInfo[];
+  stations: StationInfoPartial[];
   primaryStationId: number | null;
   onSetPrimary: (cpId: number, cuprId: number) => void;
   userLocation: UserLocation | null;
+  showPaid: boolean;
 }
 
 export function SearchResults({
@@ -23,8 +24,9 @@ export function SearchResults({
   primaryStationId,
   onSetPrimary,
   userLocation,
+  showPaid,
 }: SearchResultsProps) {
-  const getDistanceKm = (station: StationInfo): number | null => {
+  const getDistanceKm = (station: StationInfoPartial): number | null => {
     if (!userLocation) return null;
     return calculateDistance(
       userLocation.latitude,
@@ -34,10 +36,17 @@ export function SearchResults({
     );
   };
 
-  const sortedStations = useMemo(() => {
-    if (!userLocation) return stations;
+  const filteredStations = useMemo(() => {
+    return stations.filter((s) => {
+      if (s.priceKwh === undefined) return true;
+      return showPaid ? s.priceKwh > 0 : s.priceKwh === 0;
+    });
+  }, [stations, showPaid]);
 
-    return [...stations].sort((a, b) => {
+  const sortedStations = useMemo(() => {
+    if (!userLocation) return filteredStations;
+
+    return [...filteredStations].sort((a, b) => {
       const distA = calculateDistance(
         userLocation.latitude,
         userLocation.longitude,
@@ -52,16 +61,16 @@ export function SearchResults({
       );
       return distA - distB;
     });
-  }, [stations, userLocation]);
+  }, [filteredStations, userLocation]);
 
-  if (stations.length === 0) {
+  if (filteredStations.length === 0) {
     return (
       <Box sx={{ py: 4, textAlign: 'center' }}>
         <Typography color="text.secondary">
-          No free charging stations found in this area.
+          No {showPaid ? 'paid' : 'free'} charging stations found in this area.
         </Typography>
         <Typography variant="caption" color="text.secondary">
-          Try increasing the search radius.
+          Try {showPaid ? 'switching to free stations or ' : ''}increasing the search radius.
         </Typography>
       </Box>
     );
@@ -70,7 +79,8 @@ export function SearchResults({
   return (
     <Stack spacing={1}>
       <Typography variant="caption" color="text.secondary">
-        {stations.length} station{stations.length !== 1 ? 's' : ''} found
+        {filteredStations.length} {showPaid ? 'paid' : 'free'} station
+        {filteredStations.length !== 1 ? 's' : ''} found
       </Typography>
       {sortedStations.map((station) => (
         <StationResultCard

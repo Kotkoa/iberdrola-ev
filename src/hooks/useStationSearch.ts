@@ -1,11 +1,15 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import {
   getUserLocation,
-  findNearestFreeStations,
-  fetchStationDetails,
-  type StationInfo,
+  fetchStationsPartial,
+  enrichStationDetails,
+  type StationInfoPartial,
 } from '../services/iberdrola';
 import { saveSnapshot, detailsToSnapshotData } from '../services/stationApi';
+import { fetchStationDetails } from '../services/iberdrola';
+import { shouldSaveStationToCache } from '../utils/station';
+
+const CONCURRENCY_LIMIT = 5;
 
 export interface SearchProgress {
   current: number;
@@ -13,8 +17,9 @@ export interface SearchProgress {
 }
 
 export interface UseStationSearchReturn {
-  stations: StationInfo[];
+  stations: StationInfoPartial[];
   loading: boolean;
+  enriching: boolean;
   progress: SearchProgress;
   error: string | null;
   search: (radius: number) => Promise<void>;
@@ -22,8 +27,9 @@ export interface UseStationSearchReturn {
 }
 
 export function useStationSearch(): UseStationSearchReturn {
-  const [stations, setStations] = useState<StationInfo[]>([]);
+  const [stations, setStations] = useState<StationInfoPartial[]>([]);
   const [loading, setLoading] = useState(false);
+  const [enriching, setEnriching] = useState(false);
   const [progress, setProgress] = useState<SearchProgress>({ current: 0, total: 0 });
   const [error, setError] = useState<string | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -35,42 +41,82 @@ export function useStationSearch(): UseStationSearchReturn {
 
     try {
       setLoading(true);
+      setEnriching(false);
       setError(null);
       setStations([]);
       setProgress({ current: 0, total: 0 });
 
       const pos = await getUserLocation();
+      if (controller.signal.aborted) return;
 
-      const results = await findNearestFreeStations(
+      const partialResults = await fetchStationsPartial(
         pos.coords.latitude,
         pos.coords.longitude,
-        radius,
-        (current, total) => {
-          if (!controller.signal.aborted) {
-            setProgress({ current, total });
-          }
-        },
-        controller.signal
+        radius
       );
 
       if (controller.signal.aborted) return;
 
-      setStations(results);
+      setStations(partialResults);
+      setLoading(false);
 
-      for (const station of results) {
+      if (partialResults.length === 0) return;
+
+      setEnriching(true);
+      setProgress({ current: 0, total: partialResults.length });
+
+      let completed = 0;
+
+      const chunks: StationInfoPartial[][] = [];
+      for (let i = 0; i < partialResults.length; i += CONCURRENCY_LIMIT) {
+        chunks.push(partialResults.slice(i, i + CONCURRENCY_LIMIT));
+      }
+
+      for (const chunk of chunks) {
         if (controller.signal.aborted) break;
-        fetchStationDetails(station.cuprId)
-          .then((details) => {
-            if (details && !controller.signal.aborted) {
-              saveSnapshot({
-                cpId: station.cpId,
-                cuprId: station.cuprId,
-                source: 'user_nearby',
-                stationData: detailsToSnapshotData(details),
-              }).catch((err) => console.error('Failed to save snapshot:', err));
+
+        const enrichedChunk = await Promise.all(
+          chunk.map(async (station) => {
+            if (controller.signal.aborted) return station;
+
+            const enriched = await enrichStationDetails(station);
+            completed++;
+
+            if (!controller.signal.aborted) {
+              setProgress({ current: completed, total: partialResults.length });
             }
+
+            if (shouldSaveStationToCache(enriched.priceKwh)) {
+              fetchStationDetails(station.cuprId)
+                .then((details) => {
+                  if (details && !controller.signal.aborted) {
+                    saveSnapshot({
+                      cpId: station.cpId,
+                      cuprId: station.cuprId,
+                      source: 'user_nearby',
+                      stationData: detailsToSnapshotData(details),
+                    }).catch((err) => console.error('Failed to save snapshot:', err));
+                  }
+                })
+                .catch(() => {});
+            }
+
+            return enriched;
           })
-          .catch((err) => console.error('Failed to fetch details for saving:', err));
+        );
+
+        if (controller.signal.aborted) break;
+
+        setStations((prev) => {
+          const updated = [...prev];
+          for (const enriched of enrichedChunk) {
+            const idx = updated.findIndex((s) => s.cpId === enriched.cpId);
+            if (idx !== -1) {
+              updated[idx] = enriched;
+            }
+          }
+          return updated;
+        });
       }
     } catch (err) {
       if (controller.signal.aborted) return;
@@ -87,6 +133,7 @@ export function useStationSearch(): UseStationSearchReturn {
       if (!controller.signal.aborted) {
         setProgress({ current: 0, total: 0 });
         setLoading(false);
+        setEnriching(false);
       }
     }
   }, []);
@@ -95,6 +142,7 @@ export function useStationSearch(): UseStationSearchReturn {
     abortControllerRef.current?.abort();
     setStations([]);
     setError(null);
+    setEnriching(false);
   }, []);
 
   useEffect(() => {
@@ -106,6 +154,7 @@ export function useStationSearch(): UseStationSearchReturn {
   return {
     stations,
     loading,
+    enriching,
     progress,
     error,
     search,

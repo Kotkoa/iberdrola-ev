@@ -5,6 +5,7 @@ import Button from '@mui/material/Button';
 import Typography from '@mui/material/Typography';
 import Alert from '@mui/material/Alert';
 import Snackbar from '@mui/material/Snackbar';
+import Switch from '@mui/material/Switch';
 import RoomOutlinedIcon from '@mui/icons-material/RoomOutlined';
 import { RadiusSelector } from './RadiusSelector';
 import { SearchResults } from './SearchResults';
@@ -20,8 +21,9 @@ interface SearchTabProps {
 export function SearchTab({ onStationSelected }: SearchTabProps) {
   const [radius, setRadius] = useState(5);
   const [snackbarOpen, setSnackbarOpen] = useState(false);
+  const [showPaid, setShowPaid] = useState(false);
 
-  const { stations, loading, progress, error, search } = useStationSearch();
+  const { stations, loading, enriching, progress, error, search } = useStationSearch();
   const { primaryStationId, setPrimaryStation } = usePrimaryStation();
   const { location: userLocation } = useUserLocation();
 
@@ -48,27 +50,62 @@ export function SearchTab({ onStationSelected }: SearchTabProps) {
           Find charging stations near you
         </Typography>
 
-        <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 2 }}>
-          <RadiusSelector value={radius} onChange={setRadius} disabled={loading} />
+        <Stack
+          direction="row"
+          spacing={1}
+          alignItems="center"
+          justifyContent="space-between"
+          sx={{ mb: 2, width: '100%' }}
+        >
+          <Stack direction="row" spacing={1} alignItems="center">
+            <RadiusSelector value={radius} onChange={setRadius} disabled={loading} />
 
-          <Button
-            size="small"
-            variant="outlined"
-            color="success"
-            onClick={handleSearch}
-            disabled={loading}
-            startIcon={<RoomOutlinedIcon fontSize="small" />}
+            <Button
+              size="small"
+              variant="outlined"
+              color="success"
+              onClick={handleSearch}
+              disabled={loading}
+              startIcon={<RoomOutlinedIcon fontSize="small" />}
+              sx={{
+                height: '40px',
+                textTransform: 'none',
+                fontSize: { xs: '0.75rem', sm: '0.875rem' },
+              }}
+            >
+              {loading ? 'Searching...' : 'Find Stations'}
+            </Button>
+          </Stack>
+
+          <Switch
+            checked={showPaid}
+            onChange={(e) => setShowPaid(e.target.checked)}
+            size="medium"
             sx={{
-              height: '40px',
-              textTransform: 'none',
-              fontSize: { xs: '0.75rem', sm: '0.875rem' },
+              ml: 'auto',
+              '& .MuiSwitch-switchBase': {
+                color: 'success.main',
+                '&:hover': {
+                  backgroundColor: 'rgba(76, 175, 80, 0.08)',
+                },
+              },
+              '& .MuiSwitch-switchBase + .MuiSwitch-track': {
+                backgroundColor: 'success.main',
+              },
+              '& .MuiSwitch-switchBase.Mui-checked': {
+                color: 'warning.main',
+                '&:hover': {
+                  backgroundColor: 'rgba(255, 152, 0, 0.08)',
+                },
+              },
+              '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': {
+                backgroundColor: 'warning.main',
+              },
             }}
-          >
-            {loading ? 'Searching...' : 'Find Stations'}
-          </Button>
+          />
         </Stack>
 
-        {progress.total > 0 && (
+        {(loading || enriching) && progress.total > 0 && (
           <SearchProgressBar current={progress.current} total={progress.total} />
         )}
 
@@ -80,16 +117,17 @@ export function SearchTab({ onStationSelected }: SearchTabProps) {
       </Box>
 
       <Box sx={{ flex: 1, overflow: 'auto', minHeight: 0 }}>
-        {!loading && stations.length > 0 && (
+        {stations.length > 0 && (
           <SearchResults
             stations={stations}
             primaryStationId={primaryStationId}
             onSetPrimary={handleSetPrimary}
             userLocation={userLocation}
+            showPaid={showPaid}
           />
         )}
 
-        {!loading && stations.length === 0 && !error && progress.total === 0 && (
+        {!loading && !enriching && stations.length === 0 && !error && (
           <Box sx={{ py: 4, textAlign: 'center' }}>
             <Typography color="text.secondary">
               Search for free charging stations in your area.

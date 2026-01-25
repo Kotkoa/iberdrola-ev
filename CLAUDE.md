@@ -50,7 +50,7 @@ Supabase (station_snapshots + station_metadata) → useCharger hook → React st
 
 - [ChargingStationInfo](src/components/ChargingStationInfo.tsx) - Shows address, emergency/maintenance alerts
 - [PortCard](src/components/PortCard.tsx) - Shows socket type, pricing (FREE chip or €X.XXXX/kWh)
-- [GetNearestChargingPointsButton](src/features/get-nearest-charging-points/GetNearestChargingPointsButton.tsx) - Uses extended fields in search results
+- [StationResultCard](src/components/search/StationResultCard.tsx) - Search result card with skeleton loading
 
 ### PWA & Push Notifications
 
@@ -76,15 +76,56 @@ subscribeToStationNotifications(stationId, portNumber)
 - `VITE_SAVE_SUBSCRIPTION_URL` - Backend endpoint for subscriptions
 - `VITE_CHECK_SUB_URL` - Check existing subscriptions
 
-### Geolocation Feature
+### Search Feature (Two-Stage Loading)
 
-[GetNearestChargingPointsButton](src/features/get-nearest-charging-points/GetNearestChargingPointsButton.tsx) demonstrates the pattern:
+The Search tab uses optimized two-stage loading for fast results:
 
-1. Request user location
-2. Calculate bounding box using `GEO_CONSTANTS` from [src/constants/index.ts](src/constants/index.ts)
-3. Fetch stations via CORS proxy
-4. Filter by criteria (free, Type 2 connectors)
-5. Fetch detailed status for each station
+**Stage 1 - Instant Results** (batch API `getListarPuntosRecarga`):
+
+- Cards appear immediately with: address, coordinates, distance
+- `socketNum` field = total ports count
+- Skeleton placeholders for `maxPower`, `freePorts`, and `priceKwh`
+
+**Stage 2 - Background Enrichment** (individual API `getDatosPuntoRecarga`):
+
+- Asynchronously fetches details: power (kW), port availability, price, socket type
+- Updates cards in-place as data arrives (skeleton → actual value)
+- Shows real price: FREE (green outlined) or €X.XX (orange/warning outlined)
+- Only FREE stations are saved to DB cache via `shouldSaveStationToCache()` utility
+- Favorite star (⭐) is only shown for FREE stations (paid stations cannot be favorited)
+
+**Free/Paid Filter Switch**:
+
+- Located in the search row, aligned to right edge
+- Left position (default): success color, shows FREE stations only
+- Right position: warning color, shows PAID stations only
+- Filter is applied after data is loaded (client-side filtering)
+
+**Note**: `advantageous` field from batch API does NOT indicate free charging - actual price is only available from detail API.
+
+**Key types**:
+
+- `StationInfoPartial` - partial data from batch API (with optional fields)
+- `StationListItemFull` - full response structure from batch API
+
+**Key files**:
+
+- [src/services/iberdrola.ts](src/services/iberdrola.ts) - `fetchStationsPartial()`, `enrichStationDetails()`
+- [src/hooks/useStationSearch.ts](src/hooks/useStationSearch.ts) - two-stage loading logic
+- [src/components/search/StationResultCard.tsx](src/components/search/StationResultCard.tsx) - skeleton support
+- [src/utils/station.ts](src/utils/station.ts) - `shouldSaveStationToCache()` (tested in station.test.ts)
+
+**Data flow**:
+
+```
+User clicks "Find Stations"
+    ↓
+Stage 1: Batch API → StationInfoPartial[] → Show cards with skeletons
+    ↓
+Stage 2: Detail API × N (parallel, 5 at a time) → Update cards
+    ↓
+shouldSaveStationToCache(priceKwh) → Only FREE (priceKwh === 0) saved to DB
+```
 
 **CORS Proxy**: All Iberdrola API calls use `https://corsproxy.io/?` prefix (see [API_ENDPOINTS](src/constants/index.ts))
 
@@ -238,14 +279,15 @@ if (status === 'AVAILABLE') { ... }
 
 ## Key Files Reference
 
-| File                                             | Purpose                                   |
-| ------------------------------------------------ | ----------------------------------------- |
-| [src/App.tsx](src/App.tsx)                       | Main component, orchestrates all features |
-| [api/charger.ts](api/charger.ts)                 | Supabase data fetching + subscriptions    |
-| [src/pwa.ts](src/pwa.ts)                         | PWA utilities, push notifications         |
-| [src/constants/index.ts](src/constants/index.ts) | All constants, API endpoints              |
-| [types/charger.ts](types/charger.ts)             | Core data model                           |
-| [vite.config.ts](vite.config.ts)                 | Build configuration                       |
+| File                                             | Purpose                                      |
+| ------------------------------------------------ | -------------------------------------------- |
+| [src/App.tsx](src/App.tsx)                       | Main component, orchestrates all features    |
+| [api/charger.ts](api/charger.ts)                 | Supabase data fetching + subscriptions       |
+| [src/pwa.ts](src/pwa.ts)                         | PWA utilities, push notifications            |
+| [src/constants/index.ts](src/constants/index.ts) | All constants, API endpoints                 |
+| [types/charger.ts](types/charger.ts)             | Core data model                              |
+| [vite.config.ts](vite.config.ts)                 | Build configuration                          |
+| [src/utils/station.ts](src/utils/station.ts)     | Station utilities (shouldSaveStationToCache) |
 
 ## Build Commands
 

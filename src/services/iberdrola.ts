@@ -11,6 +11,16 @@ function chunkArray<T>(array: T[], size: number): T[][] {
   return chunks;
 }
 
+function formatAddress(addr?: {
+  streetName?: string;
+  streetNum?: string;
+  townName?: string;
+  regionName?: string;
+}): string {
+  if (!addr) return 'Address unknown';
+  return `${addr.streetName || ''} ${addr.streetNum || ''}, ${addr.townName || ''}, ${addr.regionName || ''}`.trim();
+}
+
 // API Response Types
 export interface PhysicalSocket {
   status?: { statusCode?: string; updateDate?: string };
@@ -56,6 +66,71 @@ export interface StationListItem {
   locationData?: {
     cuprId?: number;
   };
+}
+
+export interface StationListItemFull {
+  cpId: number;
+  locationData: {
+    cuprId: number;
+    cuprName: string;
+    latitude: number;
+    longitude: number;
+    situationCode?: string;
+    cuprReservationIndicator?: boolean;
+    supplyPointData?: {
+      cpAddress?: {
+        streetName?: string;
+        streetNum?: string;
+        townName?: string;
+        regionName?: string;
+      };
+    };
+  };
+  cpStatus: { statusCode: string };
+  advantageous: boolean;
+  socketNum: number;
+}
+
+export interface StationInfoPartial {
+  cpId: number;
+  cuprId: number;
+  name: string;
+  latitude: number;
+  longitude: number;
+  addressFull: string;
+  overallStatus: string;
+  totalPorts: number;
+  maxPower?: number;
+  freePorts?: number;
+  priceKwh?: number;
+  socketType?: string;
+  emergencyStopPressed?: boolean;
+  supportsReservation?: boolean;
+}
+
+export function extractPartialFromBatch(item: StationListItemFull): StationInfoPartial {
+  const addr = item.locationData.supplyPointData?.cpAddress;
+  return {
+    cpId: item.cpId,
+    cuprId: item.locationData.cuprId,
+    name: item.locationData.cuprName,
+    latitude: item.locationData.latitude,
+    longitude: item.locationData.longitude,
+    addressFull: formatAddress(addr),
+    overallStatus: item.cpStatus.statusCode,
+    totalPorts: item.socketNum,
+    supportsReservation: item.locationData.cuprReservationIndicator,
+  };
+}
+
+export function isStationListItemFull(item: StationListItem): item is StationListItemFull {
+  return (
+    item.cpId !== undefined &&
+    item.locationData?.cuprId !== undefined &&
+    'cpStatus' in item &&
+    'advantageous' in item &&
+    'socketNum' in item
+  );
 }
 
 // Domain Types
@@ -293,6 +368,67 @@ export async function findNearestFreeStations(
   }
 
   return freeStations;
+}
+
+/**
+ * Fetches stations in radius and returns partial info immediately from batch API.
+ * Note: Price info is not available from batch API, will be loaded via enrichStationDetails.
+ */
+export async function fetchStationsPartial(
+  latitude: number,
+  longitude: number,
+  radiusKm: number
+): Promise<StationInfoPartial[]> {
+  const stationsList = await fetchStationsInRadius(latitude, longitude, radiusKm);
+
+  const partialStations: StationInfoPartial[] = [];
+
+  for (const item of stationsList) {
+    if (isStationListItemFull(item)) {
+      partialStations.push(extractPartialFromBatch(item));
+    }
+  }
+
+  return partialStations;
+}
+
+/**
+ * Enriches partial station info with detailed data from API.
+ * Returns updated station with maxPower, freePorts, priceKwh, socketType, etc.
+ */
+export async function enrichStationDetails(
+  partial: StationInfoPartial
+): Promise<StationInfoPartial> {
+  try {
+    const details = await fetchStationDetails(partial.cuprId);
+    if (!details) return partial;
+
+    const logical = details.logicalSocket || [];
+    const flattened = logical.flatMap((ls) => ls.physicalSocket || []);
+    const availableSockets = flattened.filter(
+      (ps) => ps.status?.statusCode === CHARGING_POINT_STATUS.AVAILABLE
+    );
+
+    const firstSocket = flattened[0];
+    const socketType = firstSocket?.socketType?.socketName || 'Unknown';
+
+    const prices = flattened
+      .map((ps) => ps.appliedRate?.recharge?.finalPrice)
+      .filter((p): p is number => typeof p === 'number');
+    const priceKwh = prices.length > 0 ? Math.min(...prices) : 0;
+
+    return {
+      ...partial,
+      maxPower: flattened.reduce((acc, ps) => Math.max(acc, ps.maxPower || 0), 0) || 0,
+      freePorts: availableSockets.length,
+      priceKwh,
+      socketType,
+      emergencyStopPressed: details.emergencyStopButtonPressed || false,
+    };
+  } catch (err) {
+    console.warn(`Failed to enrich station ${partial.cpId}:`, err);
+    return partial;
+  }
 }
 
 /**
