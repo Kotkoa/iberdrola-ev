@@ -3,7 +3,7 @@ import { supabase } from '../../api/supabase';
 import { CHARGING_POINT_STATUS } from '../constants';
 
 const EDGE_BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`;
-const CACHE_TTL_MINUTES = 5;
+const CACHE_TTL_MINUTES = 15;
 
 /**
  * Get fresh snapshots for multiple stations

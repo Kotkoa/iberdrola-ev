@@ -10,7 +10,7 @@ import { fetchStationViaEdge } from '../src/services/stationApi';
 import { isDataStale } from '../src/utils/time';
 import type { ChargerStatus, StationDataStatus, StationDataState } from '../types/charger';
 
-const TTL_MINUTES = 5;
+const TTL_MINUTES = 15;
 
 /**
  * Manages station data with TTL-based freshness checking
