@@ -20,16 +20,18 @@ export class RateLimiter {
   private queue: Array<() => void> = [];
   private activeRequests = 0;
   private lastRequestTime = 0;
+  private readonly maxConcurrent: number;
+  private readonly minDelayMs: number;
 
   /**
    * Create a rate limiter
    * @param maxConcurrent Maximum number of concurrent requests
    * @param minDelayMs Minimum delay in milliseconds between requests
    */
-  constructor(
-    private maxConcurrent: number,
-    private minDelayMs: number
-  ) {}
+  constructor(maxConcurrent: number, minDelayMs: number) {
+    this.maxConcurrent = maxConcurrent;
+    this.minDelayMs = minDelayMs;
+  }
 
   /**
    * Acquire a slot for making a request
