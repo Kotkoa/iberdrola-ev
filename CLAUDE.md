@@ -30,22 +30,22 @@ Detailed instructions are organized in [.claude/](.claude/) directory:
 
 ### Tools
 
-- **[MCP Servers](.claude/mcp-servers.md)** - MUI, Context7, Chrome DevTools, Supabase
+- **[MCP Servers](.claude/mcp-servers.md)** - MUI, Context7, Chrome DevTools, Supabase, Playwright
+- **[E2E Test Plan](.claude/e2e-test-plan.md)** - Playwright MCP test scenarios
 
 ## Quick Reference
 
 ### Key Files
 
-| File                                                                           | Purpose                                          |
-| ------------------------------------------------------------------------------ | ------------------------------------------------ |
-| [src/App.tsx](src/App.tsx)                                                     | Main component, orchestrates all features        |
-| [api/charger.ts](api/charger.ts)                                               | Supabase data fetching + subscriptions           |
-| [hooks/useStationData.ts](hooks/useStationData.ts)                             | **TTL-based station data loading**               |
-| [src/utils/time.ts](src/utils/time.ts)                                         | TTL freshness checking utility                   |
-| [src/context/PrimaryStationContext.tsx](src/context/PrimaryStationContext.tsx) | Station context with feature flag                |
-| [src/constants/index.ts](src/constants/index.ts)                               | All constants, API endpoints                     |
-| [types/charger.ts](types/charger.ts)                                           | Core data model + state machine types            |
-| ~~[hooks/useCharger.ts](hooks/useCharger.ts)~~                                 | ~~Legacy hook (deprecated, use useStationData)~~ |
+| File                                                                           | Purpose                                   |
+| ------------------------------------------------------------------------------ | ----------------------------------------- |
+| [src/App.tsx](src/App.tsx)                                                     | Main component, orchestrates all features |
+| [api/charger.ts](api/charger.ts)                                               | Supabase data fetching + subscriptions    |
+| [hooks/useStationData.ts](hooks/useStationData.ts)                             | **TTL-based station data loading**        |
+| [src/utils/time.ts](src/utils/time.ts)                                         | TTL freshness checking utility            |
+| [src/context/PrimaryStationContext.tsx](src/context/PrimaryStationContext.tsx) | Primary station state management          |
+| [src/constants/index.ts](src/constants/index.ts)                               | All constants, API endpoints              |
+| [types/charger.ts](types/charger.ts)                                           | Core data model + state machine types     |
 
 ### Build Commands
 
