@@ -1,5 +1,6 @@
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 import { createClient } from 'npm:@supabase/supabase-js@2';
+import { retryWithBackoff } from '../_shared/retry.ts';
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
@@ -92,22 +93,91 @@ Deno.serve(async (req) => {
       });
     }
 
-    const response = await fetch(DETAILS_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Accept: 'application/json',
-        'X-Requested-With': 'XMLHttpRequest',
+    // Try to fetch from Iberdrola API with retry
+    const { data: details, error: apiError } = await retryWithBackoff(
+      async () => {
+        const response = await fetch(DETAILS_URL, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Accept: 'application/json',
+            'X-Requested-With': 'XMLHttpRequest',
+          },
+          body: JSON.stringify({ dto: { cuprId: [cuprId] }, language: 'en' }),
+        });
+
+        if (!response.ok) {
+          throw response;
+        }
+
+        const data = await response.json();
+        return data.entidad?.[0] as StationDetails;
       },
-      body: JSON.stringify({ dto: { cuprId: [cuprId] }, language: 'en' }),
-    });
+      { maxAttempts: 2, baseDelayMs: 500, maxDelayMs: 2000 }
+    );
 
-    if (!response.ok) {
-      throw new Error(`Iberdrola API error: ${response.status}`);
+    // GRACEFUL DEGRADATION: If API failed, try to serve from cache
+    if (apiError) {
+      console.warn(`[station-details] API failed (${apiError.type}): ${apiError.message}`);
+
+      const { data: cachedSnapshots } = await supabaseAdmin
+        .from('station_snapshots')
+        .select('*')
+        .eq('cp_id', cpId)
+        .order('created_at', { ascending: false })
+        .limit(1);
+
+      const { data: metadata } = await supabaseAdmin
+        .from('station_metadata')
+        .select('*')
+        .eq('cp_id', cpId)
+        .single();
+
+      if (cachedSnapshots && cachedSnapshots.length > 0 && metadata) {
+        const snapshot = cachedSnapshots[0];
+
+        console.log(
+          `[station-details] Serving stale cache for cpId=${cpId} (API: ${apiError.type})`
+        );
+
+        return new Response(
+          JSON.stringify({
+            station: {
+              id: `cache-${cpId}`,
+              created_at: snapshot.created_at,
+              cp_id: cpId,
+              cp_name: metadata.address_full?.split(',')[0] || 'Unknown',
+              schedule: '24/7',
+              overall_update_date: snapshot.created_at,
+              cp_latitude: metadata.latitude,
+              cp_longitude: metadata.longitude,
+              address_full: metadata.address_full,
+              port1_status: snapshot.port1_status,
+              port1_power_kw: snapshot.port1_power_kw,
+              port1_price_kwh: snapshot.port1_price_kwh,
+              port1_update_date: snapshot.port1_update_date,
+              port1_socket_type: snapshot.port1_socket_type,
+              port2_status: snapshot.port2_status,
+              port2_power_kw: snapshot.port2_power_kw,
+              port2_price_kwh: snapshot.port2_price_kwh,
+              port2_update_date: snapshot.port2_update_date,
+              port2_socket_type: snapshot.port2_socket_type,
+              emergency_stop_pressed: snapshot.emergency_stop_pressed,
+              situation_code: snapshot.situation_code,
+            },
+            _cached: true,
+            _cacheReason: apiError.type,
+          }),
+          { status: 200, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // No cache available - return error with classification
+      return new Response(JSON.stringify({ error: apiError.message, errorType: apiError.type }), {
+        status: apiError.type === 'not_found' ? 404 : 503,
+        headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+      });
     }
-
-    const data = await response.json();
-    const details: StationDetails = data.entidad?.[0];
 
     if (!details) {
       return new Response(JSON.stringify({ error: 'Station not found' }), {

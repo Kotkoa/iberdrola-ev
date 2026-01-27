@@ -1,7 +1,10 @@
 import { API_ENDPOINTS, CHARGING_POINT_STATUS, SEARCH_FILTERS, GEO_CONSTANTS } from '../constants';
 import { getStationsFromCache, type CachedStationInfo } from './stationApi';
+import { RateLimiter } from '../utils/rateLimiter';
 
 const CONCURRENCY_LIMIT = 5;
+const REQUEST_DELAY_MS = 100;
+const rateLimiter = new RateLimiter(CONCURRENCY_LIMIT, REQUEST_DELAY_MS);
 
 function chunkArray<T>(array: T[], size: number): T[][] {
   const chunks: T[][] = [];
@@ -200,22 +203,28 @@ async function fetchStationsInRadius(
 
 /**
  * Fetches detailed information for a specific charging station
+ * Uses rate limiting to avoid overwhelming the API
  */
 export async function fetchStationDetails(cuprId: number): Promise<StationDetails | null> {
-  const res = await fetch(API_ENDPOINTS.GET_CHARGING_POINT_DETAILS, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Accept: 'application/json',
-      'X-Requested-With': 'XMLHttpRequest',
-    },
-    body: JSON.stringify({ dto: { cuprId: [cuprId] }, language: 'en' }),
-  });
+  await rateLimiter.acquire();
+  try {
+    const res = await fetch(API_ENDPOINTS.GET_CHARGING_POINT_DETAILS, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+        'X-Requested-With': 'XMLHttpRequest',
+      },
+      body: JSON.stringify({ dto: { cuprId: [cuprId] }, language: 'en' }),
+    });
 
-  if (!res.ok) throw new Error('Failed to fetch station details: ' + res.status);
+    if (!res.ok) throw new Error('Failed to fetch station details: ' + res.status);
 
-  const data = await res.json();
-  return data.entidad?.[0] || null;
+    const data = await res.json();
+    return data.entidad?.[0] || null;
+  } finally {
+    rateLimiter.release();
+  }
 }
 
 /**
