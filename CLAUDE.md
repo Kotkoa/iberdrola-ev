@@ -67,4 +67,3 @@ yarn test     # Run tests in watch mode
 5. **Always run**: `yarn check-types` after changes
 6. **Data Loading**: Use `useStationData` for station data (TTL-based freshness)
 7. **State Management**: Use state machines, not boolean flags
-8. **Feature Flags**: Check `VITE_USE_TTL_FRESHNESS` in `.env.local`

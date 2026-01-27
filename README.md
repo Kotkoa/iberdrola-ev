@@ -102,10 +102,6 @@ Station data uses a **5-minute TTL cache** for optimal performance:
 - **Better offline handling** - stale data shown instead of blank screen
 - **Clear loading states** - state machine (`idle`, `loading_cache`, `loading_api`, `ready`, `error`)
 
-### Feature Flag
-
-Controlled by `VITE_USE_TTL_FRESHNESS` environment variable for gradual rollout.
-
 ---
 
 ## Data Model

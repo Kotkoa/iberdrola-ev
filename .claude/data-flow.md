@@ -94,13 +94,6 @@ The new architecture uses a state machine instead of multiple boolean flags:
 - **`getFreshSnapshot(cpId, ttl)`** - Unified cache lookup ([src/services/stationApi.ts](../src/services/stationApi.ts))
 - **`getFreshSnapshots(cpIds, ttl)`** - Batch cache lookup
 
-### Feature Flag
-
-The TTL architecture is controlled by `VITE_USE_TTL_FRESHNESS` environment variable:
-
-- `true`: Use new TTL-based architecture
-- `false`: Use legacy null-based fallback
-
 ### Benefits
 
 - ~50% reduction in Edge function calls
