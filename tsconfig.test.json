@@ -1,0 +1,15 @@
+{
+  "extends": "./tsconfig.app.json",
+  "compilerOptions": {
+    "types": ["vite/client", "@testing-library/jest-dom"],
+    "composite": true,
+    "declaration": true,
+    "declarationMap": true,
+    "noEmit": false,
+    "emitDeclarationOnly": true,
+    "allowImportingTsExtensions": false,
+    "outDir": "./node_modules/.tmp/test-tsbuildinfo"
+  },
+  "include": ["src/**/*.ts", "src/**/*.tsx", "api/**/*.ts", "hooks/**/*.ts", "types/**/*.ts"],
+  "exclude": ["supabase/functions/**/*.test.ts"]
+}
