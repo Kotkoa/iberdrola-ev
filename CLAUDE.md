@@ -56,6 +56,7 @@ Detailed instructions are organized in [.claude/](.claude/) directory:
 yarn dev      # Development server (port 5173)
 yarn build    # Production build
 yarn preview  # Preview production build
+yarn lint-staged # This simulates what will run during git commit
 yarn lint     # ESLint check
 yarn format   # Prettier format
 yarn test     # Run tests in watch mode
@@ -79,3 +80,7 @@ yarn test     # Run tests in watch mode
    - Prevents N database queries
    - Use `getStationsFromCache(cpIds, ttlMinutes)` for batch lookup
    - Pass cachedMap to `enrichStationDetails(station, cachedMap)`
+
+## Important Limitations
+
+- **Iberdrola API blocks server-side requests from Supabase IP** — Edge Functions cannot reliably fetch data from Iberdrola API

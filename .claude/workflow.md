@@ -12,25 +12,6 @@ Edit your code as usual.
 yarn test
 ```
 
-### 3. Commit
-
-```bash
-git add .
-git commit -m "feat: add new feature"
-```
-
-The pre-commit hook will automatically:
-
-- Format your code
-- Fix linting issues
-- Run related tests
-
-### 4. Push
-
-```bash
-git push
-```
-
 ## Post-Development Verification
 
 **Always run after code changes** (before committing):

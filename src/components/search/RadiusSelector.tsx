@@ -2,7 +2,7 @@ import FormControl from '@mui/material/FormControl';
 import Select from '@mui/material/Select';
 import MenuItem from '@mui/material/MenuItem';
 
-const RADIUS_OPTIONS = [3, 5, 10, 15, 25, 40];
+const RADIUS_OPTIONS = [3, 5, 10, 15, 25];
 
 interface RadiusSelectorProps {
   value: number;
