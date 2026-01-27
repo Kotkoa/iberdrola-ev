@@ -87,6 +87,27 @@ Frontend (PWA)    UI Update      Edge Function
 
 ---
 
+## Data Freshness (TTL-Based)
+
+Station data uses a **5-minute TTL cache** for optimal performance:
+
+- **Fresh data** (< 5 min): Loaded from Supabase, no API call needed
+- **Stale data** (≥ 5 min): Fetched from Edge function, stored in database
+- **Realtime**: Immediate WebSocket subscription, updates merged by timestamp
+
+### Benefits
+
+- **~50% reduction in API calls** - only fetch when data is truly stale
+- **Consistent user experience** - same TTL logic for Station and Search features
+- **Better offline handling** - stale data shown instead of blank screen
+- **Clear loading states** - state machine (`idle`, `loading_cache`, `loading_api`, `ready`, `error`)
+
+### Feature Flag
+
+Controlled by `VITE_USE_TTL_FRESHNESS` environment variable for gradual rollout.
+
+---
+
 ## Data Model
 
 ### `station_snapshots`
@@ -228,7 +249,8 @@ yarn format       # Prettier format
 │   ├── context/
 │   │   └── PrimaryStationContext.tsx
 │   ├── hooks/
-│   │   ├── useCharger.ts
+│   │   ├── useStationData.ts    # TTL-based station data loading ✨
+│   │   ├── useCharger.ts        # (deprecated - use useStationData)
 │   │   ├── useStationSearch.ts
 │   │   └── useUserLocation.ts
 │   ├── services/

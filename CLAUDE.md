@@ -36,13 +36,16 @@ Detailed instructions are organized in [.claude/](.claude/) directory:
 
 ### Key Files
 
-| File                                             | Purpose                                   |
-| ------------------------------------------------ | ----------------------------------------- |
-| [src/App.tsx](src/App.tsx)                       | Main component, orchestrates all features |
-| [api/charger.ts](api/charger.ts)                 | Supabase data fetching + subscriptions    |
-| [hooks/useCharger.ts](hooks/useCharger.ts)       | React hook wrapping API calls             |
-| [src/constants/index.ts](src/constants/index.ts) | All constants, API endpoints              |
-| [types/charger.ts](types/charger.ts)             | Core data model                           |
+| File                                                                           | Purpose                                          |
+| ------------------------------------------------------------------------------ | ------------------------------------------------ |
+| [src/App.tsx](src/App.tsx)                                                     | Main component, orchestrates all features        |
+| [api/charger.ts](api/charger.ts)                                               | Supabase data fetching + subscriptions           |
+| [hooks/useStationData.ts](hooks/useStationData.ts)                             | **TTL-based station data loading**               |
+| [src/utils/time.ts](src/utils/time.ts)                                         | TTL freshness checking utility                   |
+| [src/context/PrimaryStationContext.tsx](src/context/PrimaryStationContext.tsx) | Station context with feature flag                |
+| [src/constants/index.ts](src/constants/index.ts)                               | All constants, API endpoints                     |
+| [types/charger.ts](types/charger.ts)                                           | Core data model + state machine types            |
+| ~~[hooks/useCharger.ts](hooks/useCharger.ts)~~                                 | ~~Legacy hook (deprecated, use useStationData)~~ |
 
 ### Build Commands
 
@@ -62,3 +65,6 @@ yarn test     # Run tests in watch mode
 3. **Chat**: Responses in Russian, code in English
 4. **Package manager**: yarn
 5. **Always run**: `yarn check-types` after changes
+6. **Data Loading**: Use `useStationData` for station data (TTL-based freshness)
+7. **State Management**: Use state machines, not boolean flags
+8. **Feature Flags**: Check `VITE_USE_TTL_FRESHNESS` in `.env.local`

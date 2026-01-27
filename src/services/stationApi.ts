@@ -5,6 +5,34 @@ import { CHARGING_POINT_STATUS } from '../constants';
 const EDGE_BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`;
 const CACHE_TTL_MINUTES = 5;
 
+/**
+ * Get fresh snapshots for multiple stations
+ * @param cpIds Array of station IDs
+ * @param ttlMinutes Cache TTL in minutes
+ * @returns Map of cpId to cached station info (only fresh data within TTL)
+ */
+export async function getFreshSnapshots(
+  cpIds: number[],
+  ttlMinutes: number
+): Promise<Map<number, CachedStationInfo>> {
+  // Use existing getStationsFromCache implementation
+  return getStationsFromCache(cpIds, ttlMinutes);
+}
+
+/**
+ * Get fresh snapshot for a single station
+ * @param cpId Station ID
+ * @param ttlMinutes Cache TTL in minutes
+ * @returns Cached station info or null if stale/missing
+ */
+export async function getFreshSnapshot(
+  cpId: number,
+  ttlMinutes: number
+): Promise<CachedStationInfo | null> {
+  const result = await getFreshSnapshots([cpId], ttlMinutes);
+  return result.get(cpId) ?? null;
+}
+
 export interface CachedStationInfo {
   cpId: number;
   cuprId: number;
@@ -41,13 +69,14 @@ interface MetadataRow {
 }
 
 export async function getStationsFromCache(
-  cpIds: number[]
+  cpIds: number[],
+  ttlMinutes: number = CACHE_TTL_MINUTES
 ): Promise<Map<number, CachedStationInfo>> {
   const result = new Map<number, CachedStationInfo>();
 
   if (cpIds.length === 0) return result;
 
-  const ttlAgo = new Date(Date.now() - CACHE_TTL_MINUTES * 60 * 1000).toISOString();
+  const ttlAgo = new Date(Date.now() - ttlMinutes * 60 * 1000).toISOString();
 
   const [snapshotsRes, metadataRes] = await Promise.all([
     supabase
@@ -221,24 +250,58 @@ export function detailsToSnapshotData(details: StationDetails): SaveSnapshotRequ
 
 export { type SaveSnapshotRequest };
 
+// In-flight request deduplication map
+// Prevents parallel Edge calls for the same station
+const inFlightRequests = new Map<string, Promise<ChargerStatusFromApi | null>>();
+
+/**
+ * Fetch station via Edge function with single-flight pattern
+ *
+ * Multiple simultaneous calls for the same cpId+cuprId will return
+ * the same promise, preventing duplicate network requests.
+ *
+ * @param cpId Charging point ID
+ * @param cuprId CUPR ID (location ID)
+ * @returns Station data or null if not found/error
+ */
 export async function fetchStationViaEdge(
   cpId: number,
   cuprId: number
 ): Promise<ChargerStatusFromApi | null> {
-  const response = await fetch(`${EDGE_BASE}/station-details`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-    },
-    body: JSON.stringify({ cpId, cuprId }),
-  });
+  const key = `${cpId}-${cuprId}`;
 
-  if (!response.ok) {
-    console.error('Edge function error:', response.status);
-    return null;
+  // Check if request already in flight
+  const existing = inFlightRequests.get(key);
+  if (existing) {
+    console.log(`[Edge] Deduplicating request for station ${cpId}`);
+    return existing;
   }
 
-  const data = await response.json();
-  return data.station;
+  // Create new request
+  const promise = (async () => {
+    try {
+      const response = await fetch(`${EDGE_BASE}/station-details`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+        },
+        body: JSON.stringify({ cpId, cuprId }),
+      });
+
+      if (!response.ok) {
+        console.error('Edge function error:', response.status);
+        return null;
+      }
+
+      const data = await response.json();
+      return data.station;
+    } finally {
+      // Cleanup on success or error
+      inFlightRequests.delete(key);
+    }
+  })();
+
+  inFlightRequests.set(key, promise);
+  return promise;
 }

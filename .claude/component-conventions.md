@@ -112,3 +112,41 @@ if (status === CHARGING_POINT_STATUS.AVAILABLE) { ... }
 ```typescript
 if (status === 'AVAILABLE') { ... }
 ```
+
+## Data Loading Hooks
+
+### Use `useStationData` for station loading
+
+**Prefer `useStationData` over `useCharger`** (deprecated):
+
+```typescript
+import { useStationData } from '../hooks/useStationData';
+
+function StationCard({ cpId, cuprId }: Props) {
+  const { state, data, error, hasRealtime, isStale } = useStationData(cpId, cuprId);
+
+  if (state === 'loading_cache' || state === 'loading_api') {
+    return <Skeleton />;
+  }
+
+  if (state === 'error') {
+    return <Error message={error} />;
+  }
+
+  return <StationDetails station={data} isStale={isStale} />;
+}
+```
+
+### State Machine Pattern
+
+**Prefer explicit states over boolean flags:**
+
+```typescript
+// ✅ Good: State machine
+type State = 'idle' | 'loading_cache' | 'loading_api' | 'ready' | 'error';
+
+// ❌ Avoid: Boolean flags
+const [loading, setLoading] = useState(false);
+const [error, setError] = useState(false);
+const [hasData, setHasData] = useState(false);
+```

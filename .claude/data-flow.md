@@ -52,3 +52,58 @@ Supabase (station_snapshots + station_metadata) → useCharger hook → React st
 
 - Subscribe to INSERT events on `station_snapshots` table
 - UI updates every minute via `setInterval` - implemented in [App.tsx](../src/App.tsx)
+
+## TTL-Based Freshness Architecture
+
+### Overview
+
+Station data uses TTL-based freshness check (5 minutes) instead of null-based fallback. This ensures users always see recent data.
+
+### Data Flow
+
+```
+User selects station
+    ↓
+useStationData hook triggered
+    ↓
+Fetch snapshot + metadata (parallel)
+    ↓
+Check freshness: isDataStale(snapshot.created_at, TTL=5min)
+    ├─ Fresh (< 5min) → Use cache, skip Edge
+    └─ Stale (≥ 5min) OR missing → Call Edge
+    ↓
+Subscribe to realtime (immediately, not after load)
+    ↓
+Merge realtime updates (only if newer than current)
+```
+
+### State Machine
+
+The new architecture uses a state machine instead of multiple boolean flags:
+
+- **idle**: No station selected
+- **loading_cache**: Fetching from Supabase
+- **loading_api**: Fetching from Edge (cache miss/stale)
+- **ready**: Data available
+- **error**: Error occurred
+
+### Key Functions
+
+- **`isDataStale(createdAt, ttlMinutes)`** - Utility for freshness checking ([src/utils/time.ts](../src/utils/time.ts))
+- **`useStationData(cpId, cuprId, ttl)`** - Main data management hook ([hooks/useStationData.ts](../hooks/useStationData.ts))
+- **`getFreshSnapshot(cpId, ttl)`** - Unified cache lookup ([src/services/stationApi.ts](../src/services/stationApi.ts))
+- **`getFreshSnapshots(cpIds, ttl)`** - Batch cache lookup
+
+### Feature Flag
+
+The TTL architecture is controlled by `VITE_USE_TTL_FRESHNESS` environment variable:
+
+- `true`: Use new TTL-based architecture
+- `false`: Use legacy null-based fallback
+
+### Benefits
+
+- ~50% reduction in Edge function calls
+- Consistent behavior between Station and Search features
+- Better offline handling
+- Clear loading states with state machine

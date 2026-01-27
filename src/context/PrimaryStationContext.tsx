@@ -9,6 +9,7 @@ import {
   type ReactNode,
 } from 'react';
 import { useCharger } from '../../hooks/useCharger';
+import { useStationData } from '../../hooks/useStationData';
 import {
   getPrimaryStation,
   setPrimaryStation as saveToStorage,
@@ -19,6 +20,9 @@ import { fetchStationViaEdge } from '../services/stationApi';
 import type { ChargerStatusFromApi, StationInfoPartial } from '../services/iberdrola';
 import type { ChargerStatus } from '../../types/charger';
 import { CHARGING_POINT_STATUS } from '../constants';
+
+// Feature flag for TTL-based freshness architecture
+const USE_TTL_FRESHNESS = import.meta.env.VITE_USE_TTL_FRESHNESS === 'true';
 
 interface ApiFetchResult {
   forCpId: number;
@@ -76,10 +80,28 @@ interface PrimaryStationProviderProps {
   children: ReactNode;
 }
 
-export function PrimaryStationProvider({ children }: PrimaryStationProviderProps) {
-  const [stationData, setStationData] = useState<PrimaryStationData | null>(() =>
-    getPrimaryStation()
-  );
+/**
+ * Adapter for useStationData to match legacy interface
+ * Converts state machine to loading boolean
+ */
+function useNewStationDataAdapter(stationData: PrimaryStationData | null) {
+  const result = useStationData(stationData?.cpId ?? null, stationData?.cuprId, 5);
+
+  return {
+    data: result.data,
+    loading: result.state === 'loading_cache' || result.state === 'loading_api',
+    error: result.error,
+    hasRealtime: result.hasRealtime,
+  };
+}
+
+/**
+ * Legacy station data loading (before TTL refactor)
+ * Kept for rollback via feature flag
+ *
+ * Uses null-based fallback instead of TTL-based freshness check
+ */
+function useLegacyStationData(stationData: PrimaryStationData | null) {
   const [apiFetchResult, setApiFetchResult] = useState<ApiFetchResult | null>(null);
   const [pendingStationData, setPendingStationData] = useState<StationInfoPartial | null>(null);
   const fetchIdRef = useRef(0);
@@ -145,18 +167,56 @@ export function PrimaryStationProvider({ children }: PrimaryStationProviderProps
       });
   }, [shouldFetchFromApi, stationData, hasFetchedForCurrentStation]);
 
+  return {
+    data: primaryStation,
+    loading,
+    error,
+    hasRealtime,
+    setPendingStationData,
+    clearPendingData: () => setPendingStationData(null),
+  };
+}
+
+export function PrimaryStationProvider({ children }: PrimaryStationProviderProps) {
+  const [stationData, setStationData] = useState<PrimaryStationData | null>(() =>
+    getPrimaryStation()
+  );
+
+  // Feature flag: use new or legacy implementation
+  const newImplementation = useNewStationDataAdapter(stationData);
+  const legacyImplementation = useLegacyStationData(stationData);
+
+  // Choose implementation based on feature flag
+  const {
+    data: primaryStation,
+    loading,
+    error,
+    hasRealtime,
+  } = USE_TTL_FRESHNESS ? newImplementation : legacyImplementation;
+
+  const legacyRef = useRef(legacyImplementation);
+
+  // Update ref in effect to avoid updating during render
+  useEffect(() => {
+    legacyRef.current = legacyImplementation;
+  });
+
   const setPrimaryStation = useCallback((station: StationInfoPartial) => {
     saveToStorage(station.cpId, station.cuprId);
     setStationData({ cpId: station.cpId, cuprId: station.cuprId });
-    setPendingStationData(station);
-    setApiFetchResult(null);
+    // Legacy implementation needs pending data
+    if (!USE_TTL_FRESHNESS && legacyRef.current.setPendingStationData) {
+      legacyRef.current.setPendingStationData(station);
+    }
   }, []);
 
   const clearPrimaryStation = useCallback(() => {
     clearFromStorage();
     setStationData(null);
-    setPendingStationData(null);
-    setApiFetchResult(null);
+    // Legacy implementation needs to clear pending data
+    if (!USE_TTL_FRESHNESS && legacyRef.current.clearPendingData) {
+      legacyRef.current.clearPendingData();
+    }
   }, []);
 
   useEffect(() => {

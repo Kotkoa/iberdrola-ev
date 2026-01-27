@@ -9,6 +9,28 @@ import {
 } from '../api/charger.js';
 import type { ChargerStatus } from '../types/charger';
 
+/**
+ * @deprecated This hook will be replaced by useStationData for TTL-based freshness.
+ * Kept for backward compatibility during Phase 4 rollout.
+ *
+ * New code should use useStationData instead.
+ *
+ * **Differences from useStationData:**
+ * - No TTL check (uses any data from Supabase, even if stale)
+ * - Subscription starts after initial load (not immediately)
+ * - No state machine (uses loading boolean)
+ * - Null-based fallback (not TTL-based)
+ *
+ * **Migration guide:**
+ * ```typescript
+ * // Old:
+ * const { data, loading, error } = useCharger(cpId);
+ *
+ * // New:
+ * const { state, data, error, hasRealtime, isStale } = useStationData(cpId, cuprId);
+ * const loading = state === 'loading_cache' || state === 'loading_api';
+ * ```
+ */
 export function useCharger(cpId?: number | null) {
   const [data, setData] = useState<ChargerStatus | null>(null);
   const [loading, setLoading] = useState(true);

@@ -66,6 +66,9 @@ export interface StationListItem {
   locationData?: {
     cuprId?: number;
   };
+  cpStatus?: { statusCode?: string };
+  advantageous?: boolean;
+  socketNum?: number;
 }
 
 export interface StationListItemFull {
@@ -128,6 +131,8 @@ export function isStationListItemFull(item: StationListItem): item is StationLis
     item.cpId !== undefined &&
     item.locationData?.cuprId !== undefined &&
     'cpStatus' in item &&
+    item.cpStatus !== null &&
+    item.cpStatus?.statusCode !== undefined &&
     'advantageous' in item &&
     'socketNum' in item
   );
