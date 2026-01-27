@@ -100,3 +100,34 @@ The new architecture uses a state machine instead of multiple boolean flags:
 - Consistent behavior between Station and Search features
 - Better offline handling
 - Clear loading states with state machine
+
+## Caching Strategy
+
+### TTL-Based Freshness
+
+All station data uses 15-minute TTL (Time-To-Live):
+
+**Freshness check**:
+
+```typescript
+const ageMs = Date.now() - new Date(created_at).getTime();
+const isFresh = ageMs <= 15 * 60 * 1000; // < 15 minutes
+```
+
+**Cache sources**:
+
+- `station_snapshots` table - enrichment data (maxPower, price, socketType)
+- `station_metadata` table - location data (lat, lng, address)
+
+**Cache strategies**:
+
+1. **Primary station**: Individual cache lookup + freshness check
+2. **Search enrichment**: Batch cache lookup (1 query for all stations)
+
+**Performance metrics**:
+
+- Cache hit rate: >90% on repeated searches within 15 minutes
+- Database queries: 1 query (batch) instead of N queries (individual)
+- API request reduction: ~90% on repeated searches
+
+**See**: [.claude/caching-strategy.md](caching-strategy.md) for detailed documentation

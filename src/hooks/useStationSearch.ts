@@ -5,7 +5,12 @@ import {
   enrichStationDetails,
   type StationInfoPartial,
 } from '../services/iberdrola';
-import { saveSnapshot, detailsToSnapshotData } from '../services/stationApi';
+import {
+  saveSnapshot,
+  detailsToSnapshotData,
+  getStationsFromCache,
+  CACHE_TTL_MINUTES,
+} from '../services/stationApi';
 import { fetchStationDetails } from '../services/iberdrola';
 import { shouldSaveStationToCache } from '../utils/station';
 
@@ -65,6 +70,16 @@ export function useStationSearch(): UseStationSearchReturn {
       setEnriching(true);
       setProgress({ current: 0, total: partialResults.length });
 
+      // Batch cache lookup for all stations (single database query)
+      const allCpIds = partialResults.map((s) => s.cpId);
+      let cachedMap = new Map();
+      try {
+        cachedMap = await getStationsFromCache(allCpIds, CACHE_TTL_MINUTES);
+      } catch (cacheErr) {
+        console.warn('Cache lookup failed, continuing with API enrichment:', cacheErr);
+      }
+      if (controller.signal.aborted) return;
+
       let completed = 0;
 
       const chunks: StationInfoPartial[][] = [];
@@ -79,7 +94,7 @@ export function useStationSearch(): UseStationSearchReturn {
           chunk.map(async (station) => {
             if (controller.signal.aborted) return station;
 
-            const enriched = await enrichStationDetails(station);
+            const enriched = await enrichStationDetails(station, cachedMap);
             completed++;
 
             if (!controller.signal.aborted) {

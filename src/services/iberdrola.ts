@@ -407,13 +407,36 @@ export async function fetchStationsPartial(
 }
 
 /**
- * Enriches partial station info with detailed data from API.
- * Returns updated station with maxPower, freePorts, priceKwh, socketType, etc.
+ * Enriches partial station info with detailed data from cache or API.
+ * Uses TTL-based cache lookup to minimize API requests.
+ *
+ * @param partial Partial station info from batch API
+ * @param cachedMap Optional pre-fetched cache map (for batch optimization)
+ * @returns Updated station with maxPower, freePorts, priceKwh, socketType, etc.
  */
 export async function enrichStationDetails(
-  partial: StationInfoPartial
+  partial: StationInfoPartial,
+  cachedMap?: Map<number, CachedStationInfo>
 ): Promise<StationInfoPartial> {
   try {
+    // Check cache first (TTL-aware)
+    if (cachedMap) {
+      const cached = cachedMap.get(partial.cpId);
+      if (cached) {
+        console.log(`[enrichment] Using fresh cache for cpId=${partial.cpId}`);
+        return {
+          ...partial,
+          maxPower: cached.maxPower,
+          freePorts: cached.freePorts,
+          priceKwh: cached.priceKwh,
+          socketType: cached.socketType,
+          emergencyStopPressed: cached.emergencyStopPressed,
+        };
+      }
+    }
+
+    // Cache MISS or stale - fetch from API
+    console.log(`[enrichment] Cache miss for cpId=${partial.cpId}, fetching from API`);
     const details = await fetchStationDetails(partial.cuprId);
     if (!details) return partial;
 
