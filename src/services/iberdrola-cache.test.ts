@@ -49,6 +49,7 @@ describe('enrichStationDetails cache logic', () => {
         priceKwh: cached.priceKwh,
         socketType: cached.socketType,
         emergencyStopPressed: cached.emergencyStopPressed,
+        _fromCache: true,
       };
 
       // Verify cache data is used
@@ -57,6 +58,7 @@ describe('enrichStationDetails cache logic', () => {
       expect(enriched.socketType).toBe('Type 2');
       expect(enriched.freePorts).toBe(2);
       expect(enriched.emergencyStopPressed).toBe(false);
+      expect(enriched._fromCache).toBe(true); // Verify cache flag is set
     }
   });
 

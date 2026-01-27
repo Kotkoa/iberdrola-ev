@@ -112,6 +112,7 @@ export interface StationInfoPartial {
   socketType?: string;
   emergencyStopPressed?: boolean;
   supportsReservation?: boolean;
+  _fromCache?: boolean; // Indicates if enrichment data came from cache
 }
 
 export function extractPartialFromBatch(item: StationListItemFull): StationInfoPartial {
@@ -431,6 +432,7 @@ export async function enrichStationDetails(
           priceKwh: cached.priceKwh,
           socketType: cached.socketType,
           emergencyStopPressed: cached.emergencyStopPressed,
+          _fromCache: true,
         };
       }
     }
@@ -461,6 +463,7 @@ export async function enrichStationDetails(
       priceKwh,
       socketType,
       emergencyStopPressed: details.emergencyStopButtonPressed || false,
+      _fromCache: false,
     };
   } catch (err) {
     console.warn(`Failed to enrich station ${partial.cpId}:`, err);

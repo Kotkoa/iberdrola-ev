@@ -101,7 +101,9 @@ export function useStationSearch(): UseStationSearchReturn {
               setProgress({ current: completed, total: partialResults.length });
             }
 
-            if (shouldSaveStationToCache(enriched.priceKwh)) {
+            // Only fetch and save snapshot if data came from API (not cache)
+            // If _fromCache=true, snapshot already exists in DB
+            if (shouldSaveStationToCache(enriched.priceKwh) && !enriched._fromCache) {
               fetchStationDetails(station.cuprId)
                 .then((details) => {
                   if (details && !controller.signal.aborted) {

@@ -3,6 +3,7 @@ import { renderHook, act, waitFor } from '@testing-library/react';
 import { useStationSearch } from './useStationSearch';
 import * as stationApi from '../services/stationApi';
 import * as iberdrola from '../services/iberdrola';
+import { shouldSaveStationToCache } from '../utils/station';
 import type { CachedStationInfo } from '../services/stationApi';
 import type { StationInfoPartial } from '../services/iberdrola';
 
@@ -168,6 +169,7 @@ describe('useStationSearch', () => {
           priceKwh: cached.priceKwh,
           socketType: cached.socketType,
           emergencyStopPressed: cached.emergencyStopPressed,
+          _fromCache: true,
         };
       }
       return partial;
@@ -310,5 +312,181 @@ describe('useStationSearch', () => {
     await waitFor(() => {
       expect(result.current.error).toBeNull();
     });
+  });
+
+  it('should NOT call fetchStationDetails when enrichment used cache (_fromCache=true)', async () => {
+    // Test for Bug #3 fix: verify no duplicate API call when data from cache
+    const mockCachedMap = new Map<number, CachedStationInfo>([
+      [
+        123,
+        {
+          cpId: 123,
+          cuprId: 456,
+          name: 'Free Station',
+          latitude: 40.4168,
+          longitude: -3.7038,
+          maxPower: 22,
+          freePorts: 2,
+          priceKwh: 0, // FREE station
+          socketType: 'Type 2',
+          addressFull: 'Street 1, Madrid',
+          emergencyStopPressed: false,
+        },
+      ],
+    ]);
+
+    const partialResults: StationInfoPartial[] = [
+      {
+        cpId: 123,
+        cuprId: 456,
+        name: 'Free Station',
+        latitude: 40.4168,
+        longitude: -3.7038,
+        addressFull: 'Street 1, Madrid',
+        overallStatus: 'AVAILABLE',
+        totalPorts: 2,
+      },
+    ];
+
+    vi.mocked(iberdrola.getUserLocation).mockResolvedValue({
+      coords: {
+        latitude: 40.4168,
+        longitude: -3.7038,
+        accuracy: 10,
+        altitude: null,
+        altitudeAccuracy: null,
+        heading: null,
+        speed: null,
+      },
+      timestamp: Date.now(),
+    });
+
+    vi.mocked(iberdrola.fetchStationsPartial).mockResolvedValue(partialResults);
+    vi.mocked(stationApi.getStationsFromCache).mockResolvedValue(mockCachedMap);
+
+    // Mock enrichStationDetails to return _fromCache=true
+    vi.mocked(iberdrola.enrichStationDetails).mockImplementation(async (partial, cachedMap) => {
+      const cached = cachedMap?.get(partial.cpId);
+      if (cached) {
+        return {
+          ...partial,
+          maxPower: cached.maxPower,
+          freePorts: cached.freePorts,
+          priceKwh: cached.priceKwh,
+          socketType: cached.socketType,
+          emergencyStopPressed: cached.emergencyStopPressed,
+          _fromCache: true, // Data from cache
+        };
+      }
+      return partial;
+    });
+
+    // Spy on fetchStationDetails to verify it's NOT called
+    const fetchStationDetailsSpy = vi.spyOn(iberdrola, 'fetchStationDetails');
+
+    const { result } = renderHook(() => useStationSearch());
+
+    await act(async () => {
+      await result.current.search(5);
+    });
+
+    await waitFor(() => {
+      expect(result.current.stations).toHaveLength(1);
+    });
+
+    // CRITICAL: Verify fetchStationDetails was NOT called (Bug #3 fix)
+    expect(fetchStationDetailsSpy).not.toHaveBeenCalled();
+
+    // Verify enriched data is correct
+    expect(result.current.stations[0].priceKwh).toBe(0);
+    expect(result.current.stations[0]._fromCache).toBe(true);
+  });
+
+  it('should call fetchStationDetails when enrichment used API (_fromCache=false)', async () => {
+    // Test for Bug #3 fix: verify API call happens when data NOT from cache
+    const mockCachedMap = new Map<number, CachedStationInfo>(); // Empty cache
+
+    const partialResults: StationInfoPartial[] = [
+      {
+        cpId: 123,
+        cuprId: 456,
+        name: 'Free Station',
+        latitude: 40.4168,
+        longitude: -3.7038,
+        addressFull: 'Street 1, Madrid',
+        overallStatus: 'AVAILABLE',
+        totalPorts: 2,
+      },
+    ];
+
+    vi.mocked(iberdrola.getUserLocation).mockResolvedValue({
+      coords: {
+        latitude: 40.4168,
+        longitude: -3.7038,
+        accuracy: 10,
+        altitude: null,
+        altitudeAccuracy: null,
+        heading: null,
+        speed: null,
+      },
+      timestamp: Date.now(),
+    });
+
+    vi.mocked(iberdrola.fetchStationsPartial).mockResolvedValue(partialResults);
+    vi.mocked(stationApi.getStationsFromCache).mockResolvedValue(mockCachedMap);
+
+    // Override shouldSaveStationToCache to return true for free stations
+    vi.mocked(shouldSaveStationToCache).mockReturnValue(true);
+
+    // Mock enrichStationDetails to return _fromCache=false (API fetch)
+    vi.mocked(iberdrola.enrichStationDetails).mockResolvedValue({
+      ...partialResults[0],
+      maxPower: 22,
+      freePorts: 2,
+      priceKwh: 0, // FREE station
+      socketType: 'Type 2',
+      emergencyStopPressed: false,
+      _fromCache: false, // Data from API
+    });
+
+    // Mock fetchStationDetails for snapshot saving
+    const fetchStationDetailsMock = vi.mocked(iberdrola.fetchStationDetails);
+    fetchStationDetailsMock.mockResolvedValue({
+      logicalSocket: [
+        {
+          physicalSocket: [
+            {
+              status: { statusCode: 'AVAILABLE' },
+              maxPower: 22,
+              appliedRate: { recharge: { finalPrice: 0 } },
+              socketType: { socketName: 'Type 2' },
+            },
+          ],
+        },
+      ],
+      emergencyStopButtonPressed: false,
+    });
+
+    const { result } = renderHook(() => useStationSearch());
+
+    await act(async () => {
+      await result.current.search(5);
+    });
+
+    await waitFor(() => {
+      expect(result.current.stations).toHaveLength(1);
+    });
+
+    // Wait for async snapshot save to complete
+    await waitFor(
+      () => {
+        expect(fetchStationDetailsMock).toHaveBeenCalledWith(456);
+      },
+      { timeout: 3000 }
+    );
+
+    // Verify enriched data is correct
+    expect(result.current.stations[0].priceKwh).toBe(0);
+    expect(result.current.stations[0]._fromCache).toBe(false);
   });
 });
