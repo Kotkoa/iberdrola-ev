@@ -98,7 +98,11 @@ export async function subscribeToStationNotifications(stationId: number, portNum
   }
 
   // Save subscription with retry logic
-  await saveSubscriptionWithRetry(stationId, portNumber, subscription);
+  // At this point subscription is guaranteed to be non-null:
+  // - If existing was null, we created a new one (line 94-97)
+  // - If existing had wrong key, we re-subscribed (line 88-91)
+  // - If existing had correct key, it's the original non-null existing
+  await saveSubscriptionWithRetry(stationId, portNumber, subscription!);
 
   return subscription;
 }

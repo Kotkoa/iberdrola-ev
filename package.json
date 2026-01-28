@@ -14,6 +14,7 @@
     "test:coverage": "vitest run --coverage",
     "format": "prettier --write \"src/**/*.{ts,tsx,js,jsx,json,css,md}\"",
     "format:check": "prettier --check \"src/**/*.{ts,tsx,js,jsx,json,css,md}\"",
+    "prettify": "prettier --write",
     "check-types": "tsc --noEmit",
     "prepare": "husky"
   },
@@ -57,15 +58,9 @@
     "vitest": "^4.0.18"
   },
   "lint-staged": {
-    "*.{ts,tsx,js,jsx}": [
-      "prettier --write",
-      "eslint --fix"
-    ],
-    "*.{json,css,md}": [
-      "prettier --write"
-    ],
-    "*.{ts,tsx}": [
-      "vitest related --run"
+    "*.{js,jsx,ts,tsx,json}": [
+      "yarn prettify",
+      "yarn lint"
     ]
   }
 }

@@ -49,6 +49,30 @@ global.GeolocationPositionError = class GeolocationPositionError extends Error {
   }
 } as unknown as GeolocationPositionErrorConstructor;
 
+// Helper to create mock GeolocationCoordinates with toJSON method
+function createMockCoords(lat: number, lon: number): GeolocationCoordinates {
+  return {
+    latitude: lat,
+    longitude: lon,
+    accuracy: 10,
+    altitude: null,
+    altitudeAccuracy: null,
+    heading: null,
+    speed: null,
+    toJSON() {
+      return {
+        latitude: this.latitude,
+        longitude: this.longitude,
+        accuracy: this.accuracy,
+        altitude: this.altitude,
+        altitudeAccuracy: this.altitudeAccuracy,
+        heading: this.heading,
+        speed: this.speed,
+      };
+    },
+  };
+}
+
 describe('useStationSearch', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -141,15 +165,7 @@ describe('useStationSearch', () => {
     ];
 
     vi.mocked(iberdrola.getUserLocation).mockResolvedValue({
-      coords: {
-        latitude: 40.4168,
-        longitude: -3.7038,
-        accuracy: 10,
-        altitude: null,
-        altitudeAccuracy: null,
-        heading: null,
-        speed: null,
-      },
+      coords: createMockCoords(40.4168, -3.7038),
       timestamp: Date.now(),
     });
 
@@ -205,15 +221,7 @@ describe('useStationSearch', () => {
     ];
 
     vi.mocked(iberdrola.getUserLocation).mockResolvedValue({
-      coords: {
-        latitude: 40.4168,
-        longitude: -3.7038,
-        accuracy: 10,
-        altitude: null,
-        altitudeAccuracy: null,
-        heading: null,
-        speed: null,
-      },
+      coords: createMockCoords(40.4168, -3.7038),
       timestamp: Date.now(),
     });
 
@@ -275,15 +283,7 @@ describe('useStationSearch', () => {
     ];
 
     vi.mocked(iberdrola.getUserLocation).mockResolvedValue({
-      coords: {
-        latitude: 40.4168,
-        longitude: -3.7038,
-        accuracy: 10,
-        altitude: null,
-        altitudeAccuracy: null,
-        heading: null,
-        speed: null,
-      },
+      coords: createMockCoords(40.4168, -3.7038),
       timestamp: Date.now(),
     });
 
@@ -345,15 +345,7 @@ describe('useStationSearch', () => {
     ];
 
     vi.mocked(iberdrola.getUserLocation).mockResolvedValue({
-      coords: {
-        latitude: 40.4168,
-        longitude: -3.7038,
-        accuracy: 10,
-        altitude: null,
-        altitudeAccuracy: null,
-        heading: null,
-        speed: null,
-      },
+      coords: createMockCoords(40.4168, -3.7038),
       timestamp: Date.now(),
     });
 
@@ -416,15 +408,7 @@ describe('useStationSearch', () => {
     ];
 
     vi.mocked(iberdrola.getUserLocation).mockResolvedValue({
-      coords: {
-        latitude: 40.4168,
-        longitude: -3.7038,
-        accuracy: 10,
-        altitude: null,
-        altitudeAccuracy: null,
-        heading: null,
-        speed: null,
-      },
+      coords: createMockCoords(40.4168, -3.7038),
       timestamp: Date.now(),
     });
 

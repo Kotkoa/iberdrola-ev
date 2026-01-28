@@ -4,6 +4,7 @@ import { useStationData } from './useStationData';
 import * as charger from '../../api/charger';
 import * as stationApi from '../services/stationApi';
 import * as time from '../utils/time';
+import type { RealtimeConnectionState } from '../../types/realtime';
 
 // Mock modules
 vi.mock('../../api/charger', () => ({
@@ -22,19 +23,18 @@ vi.mock('../utils/time', () => ({
 }));
 
 describe('useStationData', () => {
-  const mockSnapshot = {
+  const mockSnapshot: charger.StationSnapshot = {
     id: 'test-id',
     cp_id: 12345,
     source: 'user_station',
     observed_at: '2024-01-01T12:00:00Z',
-    payload_hash: 'hash123',
     port1_status: 'AVAILABLE',
-    port1_power_kw: '22',
-    port1_price_kwh: '0',
+    port1_power_kw: 22,
+    port1_price_kwh: 0,
     port1_update_date: null,
     port2_status: 'OCCUPIED',
-    port2_power_kw: '22',
-    port2_price_kwh: '0',
+    port2_power_kw: 22,
+    port2_price_kwh: 0,
     port2_update_date: null,
     overall_status: 'AVAILABLE',
     emergency_stop_pressed: false,
@@ -42,32 +42,41 @@ describe('useStationData', () => {
     created_at: '2024-01-01T12:00:00Z',
   };
 
-  const mockMetadata = {
+  const mockMetadata: charger.StationMetadata = {
+    cp_id: 12345,
+    cupr_id: 67890,
     latitude: 40.4168,
     longitude: -3.7038,
     address_full: 'Calle Test 123, Madrid',
   };
 
   const mockChargerStatus = {
+    id: 'test-id',
     cp_id: 12345,
     cp_name: 'Calle Test 123',
+    schedule: null,
     cp_latitude: 40.4168,
     cp_longitude: -3.7038,
     address_full: 'Calle Test 123, Madrid',
     overall_status: 'AVAILABLE',
+    overall_update_date: null,
     port1_status: 'AVAILABLE',
     port1_power_kw: 22,
     port1_price_kwh: 0,
+    port1_update_date: null,
     port2_status: 'OCCUPIED',
     port2_power_kw: 22,
     port2_price_kwh: 0,
+    port2_update_date: null,
     created_at: '2024-01-01T12:00:00Z',
     emergency_stop_pressed: false,
     situation_code: 'OPER',
   };
 
   // Helper to create mock SubscriptionResult
-  const createMockSubscriptionResult = (onConnectionStateChange?: (state: string) => void) => {
+  const createMockSubscriptionResult = (
+    onConnectionStateChange?: (state: RealtimeConnectionState) => void
+  ) => {
     // Simulate connected state synchronously to avoid timer-related flakes in tests
     // In real code, Supabase calls this asynchronously, but for tests we call it immediately
     // after the mock is set up via queueMicrotask (more predictable than setTimeout)
@@ -249,7 +258,7 @@ describe('useStationData', () => {
     });
 
     it('should update data on realtime event with newer timestamp', async () => {
-      let realtimeCallback: ((snapshot: typeof mockSnapshot) => void) | null = null;
+      let realtimeCallback: ((snapshot: charger.StationSnapshot) => void) | null = null;
 
       vi.mocked(charger.subscribeToSnapshots).mockImplementation(
         (_cpId, callback, onConnectionStateChange) => {

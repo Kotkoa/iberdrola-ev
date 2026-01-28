@@ -1,1 +1,4 @@
-npx lint-staged
+echo "Running lint-staged..."
+yarn lint-staged
+echo "Running type check..."
+yarn check-types

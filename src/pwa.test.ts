@@ -16,8 +16,8 @@ vi.mock('import.meta', () => ({
 }));
 
 describe('isPushSupported', () => {
-  const originalWindow = global.window;
-  const originalNavigator = global.navigator;
+  const originalWindow = globalThis.window;
+  const originalNavigator = globalThis.navigator;
 
   beforeEach(() => {
     // Ensure all APIs are available for each test
@@ -26,8 +26,8 @@ describe('isPushSupported', () => {
   });
 
   afterEach(() => {
-    global.window = originalWindow;
-    global.navigator = originalNavigator;
+    globalThis.window = originalWindow;
+    globalThis.navigator = originalNavigator;
   });
 
   it.skip('should return true when all APIs are available', () => {
@@ -40,13 +40,13 @@ describe('isPushSupported', () => {
   it('should return false in SSR (typeof window === undefined)', () => {
     // Simulate SSR environment
     // @ts-expect-error - Testing SSR
-    global.window = undefined;
+    globalThis.window = undefined;
 
     expect(isPushSupported()).toBe(false);
   });
 
   it('should return false when Notification is missing', () => {
-    const originalNotification = global.Notification;
+    const originalNotification = globalThis.Notification;
     // @ts-expect-error - Testing missing API
     delete window.Notification;
 
@@ -67,30 +67,28 @@ describe('isPushSupported', () => {
   });
 
   it('should return false when PushManager is missing', () => {
-    // @ts-expect-error - Testing missing API
     const originalPushManager = window.PushManager;
     // @ts-expect-error - Testing missing API
     delete window.PushManager;
 
     expect(isPushSupported()).toBe(false);
 
-    // @ts-expect-error - Restore
     window.PushManager = originalPushManager;
   });
 });
 
 describe('isStandaloneApp', () => {
-  const originalWindow = global.window;
-  const originalNavigator = global.navigator;
+  const originalWindow = globalThis.window;
+  const originalNavigator = globalThis.navigator;
 
   afterEach(() => {
-    global.window = originalWindow;
-    global.navigator = originalNavigator;
+    globalThis.window = originalWindow;
+    globalThis.navigator = originalNavigator;
   });
 
   it('should return false in SSR (typeof window === undefined)', () => {
     // @ts-expect-error - Testing SSR
-    global.window = undefined;
+    globalThis.window = undefined;
 
     expect(isStandaloneApp()).toBe(false);
   });
@@ -103,8 +101,7 @@ describe('isStandaloneApp', () => {
       removeEventListener: vi.fn(),
     });
 
-    // @ts-expect-error - Mock matchMedia
-    window.matchMedia = mockMatchMedia;
+    window.matchMedia = mockMatchMedia as typeof window.matchMedia;
 
     expect(isStandaloneApp()).toBe(true);
     expect(mockMatchMedia).toHaveBeenCalledWith('(display-mode: standalone)');
@@ -118,8 +115,7 @@ describe('isStandaloneApp', () => {
       removeEventListener: vi.fn(),
     });
 
-    // @ts-expect-error - Mock matchMedia
-    window.matchMedia = mockMatchMedia;
+    window.matchMedia = mockMatchMedia as typeof window.matchMedia;
 
     // Mock iOS standalone
     // @ts-expect-error - iOS-specific property
@@ -136,8 +132,7 @@ describe('isStandaloneApp', () => {
       removeEventListener: vi.fn(),
     });
 
-    // @ts-expect-error - Mock matchMedia
-    window.matchMedia = mockMatchMedia;
+    window.matchMedia = mockMatchMedia as typeof window.matchMedia;
 
     // @ts-expect-error - iOS-specific property
     navigator.standalone = false;
@@ -157,14 +152,14 @@ describe('isStandaloneApp', () => {
 });
 
 describe('registerServiceWorker', () => {
-  const originalNavigator = global.navigator;
+  const originalNavigator = globalThis.navigator;
 
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
   afterEach(() => {
-    global.navigator = originalNavigator;
+    globalThis.navigator = originalNavigator;
   });
 
   it('should register /sw.js successfully', async () => {
@@ -177,16 +172,18 @@ describe('registerServiceWorker', () => {
 
     const mockRegister = vi.fn().mockResolvedValue(mockReg);
 
-    navigator.serviceWorker = {
-      // @ts-expect-error - Mock
-      register: mockRegister,
-      ready: Promise.resolve(mockReg),
-      controller: null,
-      addEventListener: vi.fn(),
-      removeEventListener: vi.fn(),
-      getRegistration: vi.fn(),
-      getRegistrations: vi.fn(),
-    };
+    Object.defineProperty(navigator, 'serviceWorker', {
+      value: {
+        register: mockRegister,
+        ready: Promise.resolve(mockReg),
+        controller: null,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        getRegistration: vi.fn(),
+        getRegistrations: vi.fn(),
+      },
+      configurable: true,
+    });
 
     const reg = await registerServiceWorker();
 
@@ -206,16 +203,18 @@ describe('registerServiceWorker', () => {
   it('should return null on registration error', async () => {
     const mockRegister = vi.fn().mockRejectedValue(new Error('Registration failed'));
 
-    navigator.serviceWorker = {
-      // @ts-expect-error - Mock
-      register: mockRegister,
-      ready: new Promise(() => {}), // Never resolves
-      controller: null,
-      addEventListener: vi.fn(),
-      removeEventListener: vi.fn(),
-      getRegistration: vi.fn(),
-      getRegistrations: vi.fn(),
-    };
+    Object.defineProperty(navigator, 'serviceWorker', {
+      value: {
+        register: mockRegister,
+        ready: new Promise(() => {}), // Never resolves
+        controller: null,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        getRegistration: vi.fn(),
+        getRegistrations: vi.fn(),
+      },
+      configurable: true,
+    });
 
     const reg = await registerServiceWorker();
 
@@ -224,38 +223,38 @@ describe('registerServiceWorker', () => {
 });
 
 describe('subscribeToStationNotifications', () => {
-  const originalWindow = global.window;
-  const originalNavigator = global.navigator;
-  const originalFetch = global.fetch;
+  const originalWindow = globalThis.window;
+  const originalNavigator = globalThis.navigator;
+  const originalFetch = globalThis.fetch;
 
   beforeEach(() => {
     vi.clearAllMocks();
 
     // Setup default mocks
-    global.Notification = {
+    globalThis.Notification = {
       // @ts-expect-error - Mock
       permission: 'granted',
       requestPermission: vi.fn().mockResolvedValue('granted'),
     };
 
-    global.PushManager = vi.fn();
+    globalThis.PushManager = vi.fn();
 
     // Mock fetch
-    global.fetch = vi.fn().mockResolvedValue({
+    globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true,
       json: () => Promise.resolve({ success: true }),
     });
   });
 
   afterEach(() => {
-    global.window = originalWindow;
-    global.navigator = originalNavigator;
-    global.fetch = originalFetch;
+    globalThis.window = originalWindow;
+    globalThis.navigator = originalNavigator;
+    globalThis.fetch = originalFetch;
   });
 
   it('should throw error when push is not supported', async () => {
     // @ts-expect-error - Testing SSR
-    global.window = undefined;
+    globalThis.window = undefined;
 
     await expect(subscribeToStationNotifications(147988, 1)).rejects.toThrow(
       'Push notifications are not supported in this browser.'
@@ -279,9 +278,9 @@ describe('subscribeToStationNotifications', () => {
   it('should request permission when permission is default', async () => {
     const mockRequestPermission = vi.fn().mockResolvedValue('granted');
     // @ts-expect-error - Mock
-    global.Notification.permission = 'default';
+    globalThis.Notification.permission = 'default';
     // @ts-expect-error - Mock
-    global.Notification.requestPermission = mockRequestPermission;
+    globalThis.Notification.requestPermission = mockRequestPermission;
 
     const mockSubscription = {
       endpoint: 'https://fcm.googleapis.com/test',
@@ -308,16 +307,18 @@ describe('subscribeToStationNotifications', () => {
       pushManager: mockPushManager,
     };
 
-    navigator.serviceWorker = {
-      // @ts-expect-error - Mock
-      ready: Promise.resolve(mockReg),
-      register: vi.fn(),
-      controller: null,
-      addEventListener: vi.fn(),
-      removeEventListener: vi.fn(),
-      getRegistration: vi.fn(),
-      getRegistrations: vi.fn(),
-    };
+    Object.defineProperty(navigator, 'serviceWorker', {
+      value: {
+        ready: Promise.resolve(mockReg),
+        register: vi.fn(),
+        controller: null,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        getRegistration: vi.fn(),
+        getRegistrations: vi.fn(),
+      },
+      configurable: true,
+    });
 
     await subscribeToStationNotifications(147988, 1);
 
@@ -326,7 +327,7 @@ describe('subscribeToStationNotifications', () => {
 
   it('should throw error when permission is denied', async () => {
     // @ts-expect-error - Mock
-    global.Notification.permission = 'denied';
+    globalThis.Notification.permission = 'denied';
 
     await expect(subscribeToStationNotifications(147988, 1)).rejects.toThrow(
       'Notifications are blocked. Please allow them in browser settings.'
@@ -335,7 +336,7 @@ describe('subscribeToStationNotifications', () => {
 
   it('should reuse existing subscription if VAPID key matches', async () => {
     // @ts-expect-error - Mock
-    global.Notification.permission = 'granted';
+    globalThis.Notification.permission = 'granted';
 
     // Create a mock applicationServerKey that matches VAPID_PUBLIC_KEY
     const vapidKey =
@@ -380,16 +381,18 @@ describe('subscribeToStationNotifications', () => {
       pushManager: mockPushManager,
     };
 
-    navigator.serviceWorker = {
-      // @ts-expect-error - Mock
-      ready: Promise.resolve(mockReg),
-      register: vi.fn(),
-      controller: null,
-      addEventListener: vi.fn(),
-      removeEventListener: vi.fn(),
-      getRegistration: vi.fn(),
-      getRegistrations: vi.fn(),
-    };
+    Object.defineProperty(navigator, 'serviceWorker', {
+      value: {
+        ready: Promise.resolve(mockReg),
+        register: vi.fn(),
+        controller: null,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        getRegistration: vi.fn(),
+        getRegistrations: vi.fn(),
+      },
+      configurable: true,
+    });
 
     await subscribeToStationNotifications(147988, 1);
 
@@ -401,7 +404,7 @@ describe('subscribeToStationNotifications', () => {
 
   it('should re-subscribe when existing subscription has different VAPID key', async () => {
     // @ts-expect-error - Mock
-    global.Notification.permission = 'granted';
+    globalThis.Notification.permission = 'granted';
 
     // Create a DIFFERENT applicationServerKey (old VAPID key)
     const oldVapidKey = new Uint8Array([1, 2, 3, 4, 5]); // Different from current VAPID
@@ -458,16 +461,18 @@ describe('subscribeToStationNotifications', () => {
       pushManager: mockPushManager,
     };
 
-    navigator.serviceWorker = {
-      // @ts-expect-error - Mock
-      ready: Promise.resolve(mockReg),
-      register: vi.fn(),
-      controller: null,
-      addEventListener: vi.fn(),
-      removeEventListener: vi.fn(),
-      getRegistration: vi.fn(),
-      getRegistrations: vi.fn(),
-    };
+    Object.defineProperty(navigator, 'serviceWorker', {
+      value: {
+        ready: Promise.resolve(mockReg),
+        register: vi.fn(),
+        controller: null,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        getRegistration: vi.fn(),
+        getRegistrations: vi.fn(),
+      },
+      configurable: true,
+    });
 
     await subscribeToStationNotifications(147988, 1);
 
@@ -481,7 +486,7 @@ describe('subscribeToStationNotifications', () => {
 
   it('should create new subscription when no existing subscription', async () => {
     // @ts-expect-error - Mock
-    global.Notification.permission = 'granted';
+    globalThis.Notification.permission = 'granted';
 
     const mockSubscription = {
       endpoint: 'https://fcm.googleapis.com/new',
@@ -511,16 +516,18 @@ describe('subscribeToStationNotifications', () => {
       pushManager: mockPushManager,
     };
 
-    navigator.serviceWorker = {
-      // @ts-expect-error - Mock
-      ready: Promise.resolve(mockReg),
-      register: vi.fn(),
-      controller: null,
-      addEventListener: vi.fn(),
-      removeEventListener: vi.fn(),
-      getRegistration: vi.fn(),
-      getRegistrations: vi.fn(),
-    };
+    Object.defineProperty(navigator, 'serviceWorker', {
+      value: {
+        ready: Promise.resolve(mockReg),
+        register: vi.fn(),
+        controller: null,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        getRegistration: vi.fn(),
+        getRegistrations: vi.fn(),
+      },
+      configurable: true,
+    });
 
     await subscribeToStationNotifications(147988, 1);
 
@@ -532,7 +539,7 @@ describe('subscribeToStationNotifications', () => {
 
   it('should send subscription to server with correct payload', async () => {
     // @ts-expect-error - Mock
-    global.Notification.permission = 'granted';
+    globalThis.Notification.permission = 'granted';
 
     // Use matching VAPID key to avoid re-subscribe
     const vapidKey =
@@ -574,23 +581,25 @@ describe('subscribeToStationNotifications', () => {
       pushManager: mockPushManager,
     };
 
-    navigator.serviceWorker = {
-      // @ts-expect-error - Mock
-      ready: Promise.resolve(mockReg),
-      register: vi.fn(),
-      controller: null,
-      addEventListener: vi.fn(),
-      removeEventListener: vi.fn(),
-      getRegistration: vi.fn(),
-      getRegistrations: vi.fn(),
-    };
+    Object.defineProperty(navigator, 'serviceWorker', {
+      value: {
+        ready: Promise.resolve(mockReg),
+        register: vi.fn(),
+        controller: null,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        getRegistration: vi.fn(),
+        getRegistrations: vi.fn(),
+      },
+      configurable: true,
+    });
 
     const mockFetch = vi.fn().mockResolvedValue({
       ok: true,
       json: () => Promise.resolve({ success: true }),
     });
 
-    global.fetch = mockFetch;
+    globalThis.fetch = mockFetch;
 
     await subscribeToStationNotifications(147988, 1);
 
@@ -608,7 +617,7 @@ describe('subscribeToStationNotifications', () => {
 
   it('should throw error when server returns non-200 response', async () => {
     // @ts-expect-error - Mock
-    global.Notification.permission = 'granted';
+    globalThis.Notification.permission = 'granted';
 
     // Use matching VAPID key to avoid re-subscribe
     const vapidKey =
@@ -650,16 +659,18 @@ describe('subscribeToStationNotifications', () => {
       pushManager: mockPushManager,
     };
 
-    navigator.serviceWorker = {
-      // @ts-expect-error - Mock
-      ready: Promise.resolve(mockReg),
-      register: vi.fn(),
-      controller: null,
-      addEventListener: vi.fn(),
-      removeEventListener: vi.fn(),
-      getRegistration: vi.fn(),
-      getRegistrations: vi.fn(),
-    };
+    Object.defineProperty(navigator, 'serviceWorker', {
+      value: {
+        ready: Promise.resolve(mockReg),
+        register: vi.fn(),
+        controller: null,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        getRegistration: vi.fn(),
+        getRegistrations: vi.fn(),
+      },
+      configurable: true,
+    });
 
     const mockFetch = vi.fn().mockResolvedValue({
       ok: false,
@@ -667,14 +678,14 @@ describe('subscribeToStationNotifications', () => {
       json: () => Promise.resolve({ error: 'Server error' }),
     });
 
-    global.fetch = mockFetch;
+    globalThis.fetch = mockFetch;
 
     await expect(subscribeToStationNotifications(147988, 1)).rejects.toThrow('Server returned 500');
   });
 
   it('should use default port number when not provided', async () => {
     // @ts-expect-error - Mock
-    global.Notification.permission = 'granted';
+    globalThis.Notification.permission = 'granted';
 
     // Use matching VAPID key to avoid re-subscribe
     const vapidKey =
@@ -716,23 +727,25 @@ describe('subscribeToStationNotifications', () => {
       pushManager: mockPushManager,
     };
 
-    navigator.serviceWorker = {
-      // @ts-expect-error - Mock
-      ready: Promise.resolve(mockReg),
-      register: vi.fn(),
-      controller: null,
-      addEventListener: vi.fn(),
-      removeEventListener: vi.fn(),
-      getRegistration: vi.fn(),
-      getRegistrations: vi.fn(),
-    };
+    Object.defineProperty(navigator, 'serviceWorker', {
+      value: {
+        ready: Promise.resolve(mockReg),
+        register: vi.fn(),
+        controller: null,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        getRegistration: vi.fn(),
+        getRegistrations: vi.fn(),
+      },
+      configurable: true,
+    });
 
     const mockFetch = vi.fn().mockResolvedValue({
       ok: true,
       json: () => Promise.resolve({ success: true }),
     });
 
-    global.fetch = mockFetch;
+    globalThis.fetch = mockFetch;
 
     // Call without portNumber
     await subscribeToStationNotifications(147988);
@@ -751,7 +764,7 @@ describe('subscribeToStationNotifications', () => {
 
   it('should return the subscription object on success', async () => {
     // @ts-expect-error - Mock
-    global.Notification.permission = 'granted';
+    globalThis.Notification.permission = 'granted';
 
     // Use matching VAPID key to avoid re-subscribe
     const vapidKey =
@@ -793,16 +806,18 @@ describe('subscribeToStationNotifications', () => {
       pushManager: mockPushManager,
     };
 
-    navigator.serviceWorker = {
-      // @ts-expect-error - Mock
-      ready: Promise.resolve(mockReg),
-      register: vi.fn(),
-      controller: null,
-      addEventListener: vi.fn(),
-      removeEventListener: vi.fn(),
-      getRegistration: vi.fn(),
-      getRegistrations: vi.fn(),
-    };
+    Object.defineProperty(navigator, 'serviceWorker', {
+      value: {
+        ready: Promise.resolve(mockReg),
+        register: vi.fn(),
+        controller: null,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        getRegistration: vi.fn(),
+        getRegistrations: vi.fn(),
+      },
+      configurable: true,
+    });
 
     const result = await subscribeToStationNotifications(147988, 1);
 

@@ -27,7 +27,7 @@ describe('fetchStationDetails', () => {
       ],
     };
 
-    global.fetch = vi.fn().mockResolvedValue({
+    globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => mockResponse,
     });
@@ -45,7 +45,7 @@ describe('fetchStationDetails', () => {
   });
 
   it('should throw on HTTP error', async () => {
-    global.fetch = vi.fn().mockResolvedValue({
+    globalThis.fetch = vi.fn().mockResolvedValue({
       ok: false,
       status: 403,
     });
@@ -56,7 +56,7 @@ describe('fetchStationDetails', () => {
   });
 
   it('should return null if no entity in response', async () => {
-    global.fetch = vi.fn().mockResolvedValue({
+    globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({ entidad: [] }),
     });
@@ -66,7 +66,7 @@ describe('fetchStationDetails', () => {
   });
 
   it('should return null if entidad is undefined', async () => {
-    global.fetch = vi.fn().mockResolvedValue({
+    globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({}),
     });
