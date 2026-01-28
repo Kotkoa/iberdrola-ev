@@ -29,7 +29,7 @@ dotenv.config({ path: path.resolve(process.cwd(), '.env.local') });
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
 const ANON_KEY = process.env.VITE_SUPABASE_ANON_KEY;
 const TEST_STATION_ID = '147988';
-const TEST_PORT = 1;
+const TEST_PORT: 1 | 2 = 1;
 
 if (!SUPABASE_URL || !ANON_KEY) {
   console.error('❌ Missing VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY in .env.local');
