@@ -24,7 +24,9 @@ export function SearchTab({ onStationSelected }: SearchTabProps) {
   const [snackbarOpen, setSnackbarOpen] = useState(false);
   const [showPaid, setShowPaid] = useState(false);
 
-  const { stations, loading, enriching, progress, error, search } = useStationSearch();
+  const { stations, loading, enriching, progress, error, usingCachedData, search } =
+    useStationSearch();
+
   const { primaryStationId, setPrimaryStation } = usePrimaryStation();
   const { location: userLocation } = useUserLocation();
 
@@ -111,7 +113,7 @@ export function SearchTab({ onStationSelected }: SearchTabProps) {
         )}
 
         {error && (
-          <Alert severity="error" sx={{ mb: 2 }}>
+          <Alert severity={usingCachedData ? 'warning' : 'error'} sx={{ mb: 2 }}>
             {error}
           </Alert>
         )}

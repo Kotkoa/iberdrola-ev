@@ -28,9 +28,19 @@ export const DEFAULT_CHARGING_POINT = {
 const CORS_PROXY = 'https://corsproxy.io/?';
 const IBERDROLA_BASE_URL = 'https://www.iberdrola.es/o/webclipb/iberdrola/puntosrecargacontroller';
 
+// Primary: Vercel API Route (no CORS issues)
+export const VERCEL_PROXY_ENDPOINT = '/api/iberdrola';
+
+// Fallback: External CORS proxy
 export const API_ENDPOINTS = {
   LIST_CHARGING_POINTS: `${CORS_PROXY}${IBERDROLA_BASE_URL}/getListarPuntosRecarga`,
   GET_CHARGING_POINT_DETAILS: `${CORS_PROXY}${IBERDROLA_BASE_URL}/getDatosPuntoRecarga`,
+} as const;
+
+// Endpoint types for Vercel proxy
+export const PROXY_ENDPOINT_TYPES = {
+  LIST: 'list',
+  DETAILS: 'details',
 } as const;
 
 // ========================

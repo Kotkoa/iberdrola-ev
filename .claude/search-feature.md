@@ -107,23 +107,66 @@ Stage 2: Detail API × N (parallel, 5 at a time) → Update cards
 shouldSaveStationToCache(priceKwh) → Only FREE (priceKwh === 0) saved to DB
 ```
 
-## CORS Proxy Configuration
+## Proxy Configuration with Fallback Chain
 
-**All Iberdrola API calls use `https://corsproxy.io/?` prefix**
+Iberdrola API requires server-side proxy due to CORS restrictions. The app uses a fallback chain for reliability.
+
+### Fallback Chain
+
+```
+1. Vercel API Route (/api/iberdrola) - Primary
+   ↓ (if fails)
+2. CORS Proxy (corsproxy.io) - Secondary
+   ↓ (if fails)
+3. Cached Data (loadStationsFromCacheNearLocation) - Fallback
+```
+
+### Vercel API Route (Primary)
+
+**File**: [api/iberdrola.ts](../api/iberdrola.ts)
+
+- Server-side proxy running on Vercel
+- No CORS issues (same-origin)
+- Handles preflight OPTIONS requests
+- Supports both `list` and `details` endpoints
+
+**Usage**:
+
+```typescript
+POST /api/iberdrola
+Body: { endpoint: 'list' | 'details', payload: {...} }
+```
+
+### CORS Proxy (Secondary)
+
+**URL**: `https://corsproxy.io/?`
 
 See [API_ENDPOINTS](../src/constants/index.ts)
 
-### Important Limitations
+**Limitations**:
 
-- Free tier for development only
-- Production may require paid subscription
-- Rate limits: 60 req/min per IP
-- Privacy: user geolocation passes through third-party
+- Free tier: 60 req/min per IP
+- May return 403 on preflight
+- Less reliable than Vercel proxy
 
-### Alternative for Station Tab
+### Cache Fallback
 
-**Station Tab uses Edge Functions** (no CORS issues):
+When both proxies fail, the app shows cached data:
 
-- `station-details` Edge Function fetches from Iberdrola API server-side
-- Automatically saves snapshots to database
-- Falls back to Edge Function only when no snapshot exists in DB
+- **Function**: `loadStationsFromCacheNearLocation(lat, lon, radius)`
+- **TTL**: 60 minutes (extended for fallback mode)
+- **UI**: Warning alert "Live data unavailable. Showing cached results."
+- **State**: `usingCachedData: true` in `useStationSearch` hook
+
+### Key Files
+
+- [api/iberdrola.ts](../api/iberdrola.ts) - Vercel API Route
+- [src/constants/index.ts](../src/constants/index.ts) - `VERCEL_PROXY_ENDPOINT`, `PROXY_ENDPOINT_TYPES`
+- [src/services/iberdrola.ts](../src/services/iberdrola.ts) - `fetchWithFallback()` helper
+- [src/services/stationApi.ts](../src/services/stationApi.ts) - `loadStationsFromCacheNearLocation()`
+- [src/hooks/useStationSearch.ts](../src/hooks/useStationSearch.ts) - `usingCachedData` state
+
+### Known Limitations
+
+- Supabase Edge Functions cannot call Iberdrola API (IP blocked)
+- `station-details` Edge Function was never implemented (abandoned)

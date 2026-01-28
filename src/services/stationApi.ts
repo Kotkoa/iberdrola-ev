@@ -1,6 +1,11 @@
-import type { StationInfo, StationDetails, ChargerStatusFromApi } from './iberdrola';
+import type {
+  StationInfo,
+  StationDetails,
+  ChargerStatusFromApi,
+  StationInfoPartial,
+} from './iberdrola';
 import { supabase } from '../../api/supabase';
-import { CHARGING_POINT_STATUS } from '../constants';
+import { CHARGING_POINT_STATUS, GEO_CONSTANTS } from '../constants';
 
 const EDGE_BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`;
 
@@ -258,6 +263,72 @@ export function detailsToSnapshotData(details: StationDetails): SaveSnapshotRequ
 }
 
 export { type SaveSnapshotRequest };
+
+/**
+ * Loads cached stations near a location (fallback when API is unavailable).
+ * Uses bounding box query on station_metadata joined with station_snapshots.
+ * Returns stations with data from cache, marked with _fromCache=true.
+ *
+ * @param lat Latitude of search center
+ * @param lon Longitude of search center
+ * @param radiusKm Search radius in kilometers
+ * @param ttlMinutes Cache TTL in minutes (default: 60 for fallback mode)
+ */
+export async function loadStationsFromCacheNearLocation(
+  lat: number,
+  lon: number,
+  radiusKm: number,
+  ttlMinutes: number = 60
+): Promise<StationInfoPartial[]> {
+  const latDelta = radiusKm / GEO_CONSTANTS.KM_PER_DEGREE_LAT;
+  const lonDelta =
+    radiusKm / (GEO_CONSTANTS.KM_PER_DEGREE_LAT * Math.cos(lat * GEO_CONSTANTS.DEG_TO_RAD));
+
+  // Get station metadata within bounding box
+  const { data: metadata, error: metaError } = await supabase
+    .from('station_metadata')
+    .select('cp_id, cupr_id, latitude, longitude, address_full')
+    .gte('latitude', lat - latDelta)
+    .lte('latitude', lat + latDelta)
+    .gte('longitude', lon - lonDelta)
+    .lte('longitude', lon + lonDelta)
+    .limit(100);
+
+  if (metaError || !metadata || metadata.length === 0) {
+    console.warn('[CacheNearby] No metadata found:', metaError);
+    return [];
+  }
+
+  // Get latest snapshots for these stations (with extended TTL for fallback)
+  const cpIds = metadata.map((m) => m.cp_id);
+  const cachedMap = await getStationsFromCache(cpIds, ttlMinutes);
+
+  const results: StationInfoPartial[] = [];
+  for (const meta of metadata) {
+    const cached = cachedMap.get(meta.cp_id);
+    if (cached) {
+      results.push({
+        cpId: meta.cp_id,
+        cuprId: meta.cupr_id,
+        name: cached.name,
+        latitude: meta.latitude,
+        longitude: meta.longitude,
+        addressFull: meta.address_full || 'Address unknown',
+        overallStatus: 'UNKNOWN', // Mark as potentially stale
+        totalPorts: 2,
+        maxPower: cached.maxPower,
+        freePorts: cached.freePorts,
+        priceKwh: cached.priceKwh,
+        socketType: cached.socketType,
+        emergencyStopPressed: cached.emergencyStopPressed,
+        _fromCache: true,
+      });
+    }
+  }
+
+  console.log(`[CacheNearby] Found ${results.length} stations from cache`);
+  return results;
+}
 
 // In-flight request deduplication map
 // Prevents parallel Edge calls for the same station

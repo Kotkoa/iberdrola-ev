@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { fetchStationDetails, extractStationInfo, type StationDetails } from './iberdrola';
+import { VERCEL_PROXY_ENDPOINT, API_ENDPOINTS } from '../constants';
 
 // Mock rate limiter to avoid delays in tests
 vi.mock('../utils/rateLimiter', () => ({
@@ -16,7 +17,7 @@ describe('fetchStationDetails', () => {
     vi.clearAllMocks();
   });
 
-  it('should fetch station details successfully', async () => {
+  it('should fetch station details via Vercel proxy first', async () => {
     const mockResponse = {
       entidad: [
         {
@@ -35,24 +36,59 @@ describe('fetchStationDetails', () => {
     const result = await fetchStationDetails(12345);
 
     expect(result).toEqual(mockResponse.entidad[0]);
+    // First call should be to Vercel proxy
     expect(fetch).toHaveBeenCalledWith(
-      expect.stringContaining('getDatosPuntoRecarga'),
+      VERCEL_PROXY_ENDPOINT,
       expect.objectContaining({
         method: 'POST',
-        body: expect.stringContaining('12345'),
+        body: expect.stringContaining('details'),
       })
     );
   });
 
-  it('should throw on HTTP error', async () => {
-    globalThis.fetch = vi.fn().mockResolvedValue({
-      ok: false,
-      status: 403,
-    });
+  it('should fallback to CORS proxy when Vercel proxy fails', async () => {
+    const mockResponse = {
+      entidad: [
+        {
+          cpStatus: { statusCode: 'AVAILABLE' },
+          logicalSocket: [],
+          locationData: { cuprName: 'Test Station' },
+        },
+      ],
+    };
 
-    await expect(fetchStationDetails(12345)).rejects.toThrow(
-      'Failed to fetch station details: 403'
+    // First call (Vercel) fails, second call (CORS proxy) succeeds
+    globalThis.fetch = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('Vercel proxy error'))
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => mockResponse,
+      });
+
+    const result = await fetchStationDetails(12345);
+
+    expect(result).toEqual(mockResponse.entidad[0]);
+    expect(fetch).toHaveBeenCalledTimes(2);
+    // Second call should be to CORS proxy
+    expect(fetch).toHaveBeenLastCalledWith(
+      API_ENDPOINTS.GET_CHARGING_POINT_DETAILS,
+      expect.objectContaining({
+        method: 'POST',
+      })
     );
+  });
+
+  it('should return null when both proxies fail', async () => {
+    globalThis.fetch = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('Vercel proxy error'))
+      .mockRejectedValueOnce(new Error('CORS proxy error'));
+
+    const result = await fetchStationDetails(12345);
+
+    expect(result).toBeNull();
+    expect(fetch).toHaveBeenCalledTimes(2);
   });
 
   it('should return null if no entity in response', async () => {

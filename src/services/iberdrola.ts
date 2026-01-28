@@ -1,10 +1,103 @@
-import { API_ENDPOINTS, CHARGING_POINT_STATUS, SEARCH_FILTERS, GEO_CONSTANTS } from '../constants';
+import {
+  API_ENDPOINTS,
+  CHARGING_POINT_STATUS,
+  SEARCH_FILTERS,
+  GEO_CONSTANTS,
+  VERCEL_PROXY_ENDPOINT,
+  PROXY_ENDPOINT_TYPES,
+} from '../constants';
 import { getStationsFromCache, type CachedStationInfo } from './stationApi';
 import { RateLimiter } from '../utils/rateLimiter';
 
 const CONCURRENCY_LIMIT = 5;
 const REQUEST_DELAY_MS = 100;
 const rateLimiter = new RateLimiter(CONCURRENCY_LIMIT, REQUEST_DELAY_MS);
+
+// ========================
+// Proxy Fetch with Fallback
+// ========================
+
+type ProxySource = 'vercel' | 'corsproxy';
+
+interface ProxyResult<T> {
+  data: T | null;
+  source: ProxySource;
+  error?: string;
+}
+
+/**
+ * Fetches data via Vercel API Route (primary proxy)
+ */
+async function fetchViaVercelProxy<T>(endpointType: string, payload: unknown): Promise<T> {
+  const res = await fetch(VERCEL_PROXY_ENDPOINT, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      endpoint: endpointType,
+      payload,
+    }),
+  });
+
+  if (!res.ok) {
+    throw new Error(`Vercel proxy error: ${res.status}`);
+  }
+
+  return res.json();
+}
+
+/**
+ * Fetches data via external CORS proxy (fallback)
+ */
+async function fetchViaCorsProxy<T>(endpoint: string, payload: unknown): Promise<T> {
+  const res = await fetch(endpoint, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+      'X-Requested-With': 'XMLHttpRequest',
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!res.ok) {
+    throw new Error(`CORS proxy error: ${res.status}`);
+  }
+
+  return res.json();
+}
+
+/**
+ * Fetches with fallback chain: Vercel -> CORS Proxy
+ * Returns data and source for debugging
+ */
+async function fetchWithFallback<T>(
+  endpointType: string,
+  corsEndpoint: string,
+  payload: unknown
+): Promise<ProxyResult<T>> {
+  // Try Vercel proxy first
+  try {
+    const data = await fetchViaVercelProxy<T>(endpointType, payload);
+    return { data, source: 'vercel' };
+  } catch (vercelError) {
+    console.warn('[Proxy] Vercel proxy failed:', vercelError);
+  }
+
+  // Fallback to CORS proxy
+  try {
+    const data = await fetchViaCorsProxy<T>(corsEndpoint, payload);
+    return { data, source: 'corsproxy' };
+  } catch (corsError) {
+    console.warn('[Proxy] CORS proxy failed:', corsError);
+    return {
+      data: null,
+      source: 'corsproxy',
+      error: corsError instanceof Error ? corsError.message : 'Unknown error',
+    };
+  }
+}
 
 function chunkArray<T>(array: T[], size: number): T[][] {
   const chunks: T[][] = [];
@@ -160,7 +253,8 @@ export interface StationInfo {
 }
 
 /**
- * Fetches a list of charging stations within a given radius
+ * Fetches a list of charging stations within a given radius.
+ * Uses fallback chain: Vercel proxy -> CORS proxy
  */
 async function fetchStationsInRadius(
   lat: number,
@@ -186,43 +280,47 @@ async function fetchStationsInRadius(
     language: 'en',
   };
 
-  const res = await fetch(API_ENDPOINTS.LIST_CHARGING_POINTS, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Accept: 'application/json',
-      'X-Requested-With': 'XMLHttpRequest',
-    },
-    body: JSON.stringify(payload),
-  });
+  const result = await fetchWithFallback<{ entidad: StationListItem[] }>(
+    PROXY_ENDPOINT_TYPES.LIST,
+    API_ENDPOINTS.LIST_CHARGING_POINTS,
+    payload
+  );
 
-  if (!res.ok) throw new Error('Failed to fetch stations: ' + res.status);
+  if (result.data) {
+    console.log(`[Search] Fetched stations via ${result.source}`);
+    return result.data.entidad || [];
+  }
 
-  const data = await res.json();
-  return data.entidad || [];
+  // Both proxies failed
+  throw new Error('Failed to fetch stations: all proxies unavailable');
 }
 
 /**
- * Fetches detailed information for a specific charging station
- * Uses rate limiting to avoid overwhelming the API
+ * Fetches detailed information for a specific charging station.
+ * Uses rate limiting to avoid overwhelming the API.
+ * Uses fallback chain: Vercel proxy -> CORS proxy -> returns null
  */
 export async function fetchStationDetails(cuprId: number): Promise<StationDetails | null> {
   await rateLimiter.acquire();
   try {
-    const res = await fetch(API_ENDPOINTS.GET_CHARGING_POINT_DETAILS, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Accept: 'application/json',
-        'X-Requested-With': 'XMLHttpRequest',
-      },
-      body: JSON.stringify({ dto: { cuprId: [cuprId] }, language: 'en' }),
-    });
+    const payload = { dto: { cuprId: [cuprId] }, language: 'en' };
 
-    if (!res.ok) throw new Error('Failed to fetch station details: ' + res.status);
+    const result = await fetchWithFallback<{ entidad: StationDetails[] }>(
+      PROXY_ENDPOINT_TYPES.DETAILS,
+      API_ENDPOINTS.GET_CHARGING_POINT_DETAILS,
+      payload
+    );
 
-    const data = await res.json();
-    return data.entidad?.[0] || null;
+    if (result.data?.entidad?.[0]) {
+      console.log(`[Details] Fetched cuprId=${cuprId} via ${result.source}`);
+      return result.data.entidad[0];
+    }
+
+    // Both proxies failed - return null (will use cache in caller)
+    if (result.error) {
+      console.warn(`[Details] Failed for cuprId=${cuprId}: ${result.error}`);
+    }
+    return null;
   } finally {
     rateLimiter.release();
   }

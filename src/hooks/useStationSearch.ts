@@ -11,6 +11,7 @@ import {
   getStationsFromCache,
   CACHE_TTL_MINUTES,
   shouldSaveStationToCache,
+  loadStationsFromCacheNearLocation,
 } from '../services/stationApi';
 import { fetchStationDetails } from '../services/iberdrola';
 
@@ -27,6 +28,7 @@ export interface UseStationSearchReturn {
   enriching: boolean;
   progress: SearchProgress;
   error: string | null;
+  usingCachedData: boolean;
   search: (radius: number) => Promise<void>;
   clear: () => void;
 }
@@ -37,6 +39,7 @@ export function useStationSearch(): UseStationSearchReturn {
   const [enriching, setEnriching] = useState(false);
   const [progress, setProgress] = useState<SearchProgress>({ current: 0, total: 0 });
   const [error, setError] = useState<string | null>(null);
+  const [usingCachedData, setUsingCachedData] = useState(false);
   const abortControllerRef = useRef<AbortController | null>(null);
 
   const search = useCallback(async (radius: number) => {
@@ -49,16 +52,41 @@ export function useStationSearch(): UseStationSearchReturn {
       setEnriching(false);
       setError(null);
       setStations([]);
+      setUsingCachedData(false);
       setProgress({ current: 0, total: 0 });
 
       const pos = await getUserLocation();
       if (controller.signal.aborted) return;
 
-      const partialResults = await fetchStationsPartial(
-        pos.coords.latitude,
-        pos.coords.longitude,
-        radius
-      );
+      let partialResults: StationInfoPartial[];
+
+      try {
+        partialResults = await fetchStationsPartial(
+          pos.coords.latitude,
+          pos.coords.longitude,
+          radius
+        );
+      } catch (fetchError) {
+        // API failed - try to load from cache
+        console.warn('[Search] API failed, loading from cache:', fetchError);
+
+        const cachedStations = await loadStationsFromCacheNearLocation(
+          pos.coords.latitude,
+          pos.coords.longitude,
+          radius
+        );
+
+        if (cachedStations.length > 0) {
+          setStations(cachedStations);
+          setUsingCachedData(true);
+          setError('Live data unavailable. Showing cached results.');
+          setLoading(false);
+          return;
+        }
+
+        // No cache available either
+        throw fetchError;
+      }
 
       if (controller.signal.aborted) return;
 
@@ -160,6 +188,7 @@ export function useStationSearch(): UseStationSearchReturn {
     setStations([]);
     setError(null);
     setEnriching(false);
+    setUsingCachedData(false);
   }, []);
 
   useEffect(() => {
@@ -174,6 +203,7 @@ export function useStationSearch(): UseStationSearchReturn {
     enriching,
     progress,
     error,
+    usingCachedData,
     search,
     clear,
   };
