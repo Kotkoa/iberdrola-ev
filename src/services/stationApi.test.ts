@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { shouldSaveStationToCache } from './station';
+import { shouldSaveStationToCache } from './stationApi';
 
 describe('shouldSaveStationToCache', () => {
   it('should return true for FREE stations (priceKwh === 0)', () => {

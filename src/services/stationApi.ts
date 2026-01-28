@@ -3,6 +3,15 @@ import { supabase } from '../../api/supabase';
 import { CHARGING_POINT_STATUS } from '../constants';
 
 const EDGE_BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`;
+
+/**
+ * Determines if a station should be saved to database cache.
+ * Only FREE stations (priceKwh === 0) should be saved.
+ * This prevents cluttering the database with paid stations.
+ */
+export function shouldSaveStationToCache(priceKwh: number | undefined): boolean {
+  return priceKwh === 0;
+}
 export const CACHE_TTL_MINUTES = 15;
 
 /**

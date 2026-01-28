@@ -3,7 +3,6 @@ import { renderHook, act, waitFor } from '@testing-library/react';
 import { useStationSearch } from './useStationSearch';
 import * as stationApi from '../services/stationApi';
 import * as iberdrola from '../services/iberdrola';
-import { shouldSaveStationToCache } from '../utils/station';
 import type { CachedStationInfo } from '../services/stationApi';
 import type { StationInfoPartial } from '../services/iberdrola';
 
@@ -14,6 +13,7 @@ vi.mock('../services/stationApi', async () => {
     ...actual,
     getStationsFromCache: vi.fn(),
     saveSnapshot: vi.fn(),
+    shouldSaveStationToCache: vi.fn().mockReturnValue(false),
   };
 });
 
@@ -27,10 +27,6 @@ vi.mock('../services/iberdrola', async () => {
     fetchStationDetails: vi.fn(),
   };
 });
-
-vi.mock('../utils/station', () => ({
-  shouldSaveStationToCache: vi.fn().mockReturnValue(false),
-}));
 
 // Mock GeolocationPositionError (not available in test environment)
 interface GeolocationPositionErrorConstructor {
@@ -436,7 +432,7 @@ describe('useStationSearch', () => {
     vi.mocked(stationApi.getStationsFromCache).mockResolvedValue(mockCachedMap);
 
     // Override shouldSaveStationToCache to return true for free stations
-    vi.mocked(shouldSaveStationToCache).mockReturnValue(true);
+    vi.mocked(stationApi.shouldSaveStationToCache).mockReturnValue(true);
 
     // Mock enrichStationDetails to return _fromCache=false (API fetch)
     vi.mocked(iberdrola.enrichStationDetails).mockResolvedValue({

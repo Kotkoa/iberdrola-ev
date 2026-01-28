@@ -13,6 +13,7 @@ vi.mock('../services/stationApi', async () => {
     ...actual,
     getStationsFromCache: vi.fn(),
     saveSnapshot: vi.fn(),
+    shouldSaveStationToCache: vi.fn().mockReturnValue(false),
   };
 });
 
@@ -27,9 +28,26 @@ vi.mock('../services/iberdrola', async () => {
   };
 });
 
-vi.mock('../utils/station', () => ({
-  shouldSaveStationToCache: vi.fn().mockReturnValue(false),
-}));
+// Mock GeolocationPositionError (not available in test environment)
+interface GeolocationPositionErrorConstructor {
+  new (message: string, code: number): GeolocationPositionError;
+  readonly PERMISSION_DENIED: number;
+  readonly POSITION_UNAVAILABLE: number;
+  readonly TIMEOUT: number;
+}
+
+global.GeolocationPositionError = class GeolocationPositionError extends Error {
+  code: number;
+  PERMISSION_DENIED = 1;
+  POSITION_UNAVAILABLE = 2;
+  TIMEOUT = 3;
+
+  constructor(message: string, code: number) {
+    super(message);
+    this.code = code;
+    this.name = 'GeolocationPositionError';
+  }
+} as unknown as GeolocationPositionErrorConstructor;
 
 describe('useStationSearch performance', () => {
   beforeEach(() => {

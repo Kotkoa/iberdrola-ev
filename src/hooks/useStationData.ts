@@ -5,10 +5,10 @@ import {
   subscribeToSnapshots,
   snapshotToChargerStatus,
   type StationSnapshot,
-} from '../api/charger';
-import { fetchStationViaEdge } from '../src/services/stationApi';
-import { isDataStale } from '../src/utils/time';
-import type { ChargerStatus, StationDataStatus, StationDataState } from '../types/charger';
+} from '../../api/charger';
+import { fetchStationViaEdge } from '../services/stationApi';
+import { isDataStale } from '../utils/time';
+import type { ChargerStatus, StationDataStatus, StationDataState } from '../../types/charger';
 
 const TTL_MINUTES = 15;
 

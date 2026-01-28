@@ -1,6 +1,5 @@
-import { Alert, Box, Stack, Typography } from '@mui/material';
+import { Alert, AlertTitle, Box, Button, Stack, Typography } from '@mui/material';
 import { PortCard } from './PortCard';
-import { SubscriptionPanel } from './SubscriptionPanel';
 import type { PortNumber, SubscriptionStatus } from '../types';
 
 interface PortConfig {
@@ -49,6 +48,15 @@ export function PortsList({
             const state = subscriptionState[portNumber];
             const errorMessage = subscriptionErrors[portNumber];
 
+            const buttonLabel =
+              state === 'success'
+                ? 'Alert active'
+                : state === 'error'
+                  ? 'Try again'
+                  : 'Get notified';
+
+            const isDisabled = !pushAvailable || state === 'loading' || state === 'success';
+
             return (
               <Box
                 key={portNumber}
@@ -69,13 +77,27 @@ export function PortsList({
                   socketType={socketType}
                 />
                 {!isAvailable && (
-                  <SubscriptionPanel
-                    portNumber={portNumber}
-                    subscriptionState={state}
-                    errorMessage={errorMessage}
-                    pushAvailable={pushAvailable}
-                    onSubscribeClick={onSubscribeClick}
-                  />
+                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                    <Button
+                      variant="contained"
+                      color="success"
+                      fullWidth
+                      disabled={isDisabled}
+                      onClick={() => onSubscribeClick(portNumber)}
+                      sx={{
+                        textTransform: 'none',
+                        fontSize: { xs: '0.75rem', sm: '0.875rem' },
+                      }}
+                    >
+                      {state === 'loading' ? 'Subscribing...' : buttonLabel}
+                    </Button>
+                    {state === 'error' && errorMessage && (
+                      <Alert severity="warning">
+                        <AlertTitle>Subscription error</AlertTitle>
+                        {errorMessage}
+                      </Alert>
+                    )}
+                  </Box>
                 )}
               </Box>
             );

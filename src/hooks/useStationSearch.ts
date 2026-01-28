@@ -10,9 +10,9 @@ import {
   detailsToSnapshotData,
   getStationsFromCache,
   CACHE_TTL_MINUTES,
+  shouldSaveStationToCache,
 } from '../services/stationApi';
 import { fetchStationDetails } from '../services/iberdrola';
-import { shouldSaveStationToCache } from '../utils/station';
 
 const CONCURRENCY_LIMIT = 5;
 
