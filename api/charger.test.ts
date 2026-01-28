@@ -53,11 +53,11 @@ describe('charger API', () => {
       expect(mockSubscribe).toHaveBeenCalled();
     });
 
-    it('should return unsubscribe function that calls channel.unsubscribe', () => {
+    it('should return SubscriptionResult with unsubscribe function that calls channel.unsubscribe', () => {
       const onUpdate = vi.fn();
 
-      const unsubscribe = subscribeToSnapshots(12345, onUpdate);
-      unsubscribe();
+      const result = subscribeToSnapshots(12345, onUpdate);
+      result.unsubscribe();
 
       expect(mockUnsubscribe).toHaveBeenCalledOnce();
     });

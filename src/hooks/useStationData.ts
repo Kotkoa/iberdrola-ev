@@ -8,7 +8,9 @@ import {
 } from '../../api/charger';
 import { fetchStationViaEdge } from '../services/stationApi';
 import { isDataStale } from '../utils/time';
+import { ReconnectionManager } from '../utils/reconnectionManager';
 import type { ChargerStatus, StationDataStatus, StationDataState } from '../../types/charger';
+import type { RealtimeConnectionState, SubscriptionResult } from '../../types/realtime';
 
 const TTL_MINUTES = 15;
 
@@ -52,7 +54,9 @@ export function useStationData(
     useState<Exclude<StationDataState, 'idle'>>('loading_cache');
   const [data, setData] = useState<ChargerStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [hasRealtime, setHasRealtime] = useState(false);
+  const [connectionState, setConnectionState] = useState<RealtimeConnectionState>('disconnected');
+  const subscriptionRef = useRef<SubscriptionResult | null>(null);
+  const reconnectionManagerRef = useRef<ReconnectionManager>(new ReconnectionManager());
   const metadataRef = useRef<{
     cp_name?: string;
     cp_latitude?: number;
@@ -82,8 +86,9 @@ export function useStationData(
         if (cpIdChanged) {
           setData(null);
           setError(null);
-          setHasRealtime(false);
+          setConnectionState('disconnected');
           currentDataTimestampRef.current = 0;
+          reconnectionManagerRef.current.reset();
         }
         setInternalState('loading_cache');
         setError(null);
@@ -106,25 +111,60 @@ export function useStationData(
             }
           : null;
 
+        // Function to create realtime subscription
+        const createSubscription = () => {
+          setConnectionState('connecting');
+          subscriptionRef.current = subscribeToSnapshots(
+            cpId,
+            (newSnapshot: StationSnapshot) => {
+              if (!active) return;
+
+              // Only update if new data is fresher than current
+              const newTimestamp = new Date(newSnapshot.created_at).getTime();
+
+              if (newTimestamp > currentDataTimestampRef.current) {
+                console.log(`[useStationData] Realtime update for ${cpId}, newer data received`);
+                const chargerStatus = snapshotToChargerStatus(
+                  newSnapshot,
+                  metadataRef.current ?? undefined
+                );
+                currentDataTimestampRef.current = newTimestamp;
+                setData(chargerStatus);
+                setInternalState('ready');
+              }
+            },
+            (newState: RealtimeConnectionState) => {
+              if (!active) return;
+              console.log(`[useStationData] Connection state changed to: ${newState}`);
+
+              if (newState === 'connected') {
+                // Reset reconnection manager on successful connection
+                reconnectionManagerRef.current.reset();
+                setConnectionState('connected');
+              } else if (newState === 'error' || newState === 'disconnected') {
+                // Schedule reconnection attempt
+                setConnectionState('reconnecting');
+                const scheduled = reconnectionManagerRef.current.scheduleReconnect(() => {
+                  if (!active) return;
+                  console.log(`[useStationData] Attempting reconnection for ${cpId}`);
+                  subscriptionRef.current?.unsubscribe();
+                  createSubscription();
+                });
+
+                if (!scheduled) {
+                  // Max attempts reached
+                  setConnectionState('error');
+                }
+              } else {
+                setConnectionState(newState);
+              }
+            }
+          );
+        };
+
         // Subscribe to realtime immediately (not after load)
-        unsubscribe = subscribeToSnapshots(cpId, (newSnapshot: StationSnapshot) => {
-          if (!active) return;
-
-          // Only update if new data is fresher than current
-          const newTimestamp = new Date(newSnapshot.created_at).getTime();
-
-          if (newTimestamp > currentDataTimestampRef.current) {
-            console.log(`[useStationData] Realtime update for ${cpId}, newer data received`);
-            const chargerStatus = snapshotToChargerStatus(
-              newSnapshot,
-              metadataRef.current ?? undefined
-            );
-            currentDataTimestampRef.current = newTimestamp;
-            setData(chargerStatus);
-            setHasRealtime(true);
-            setInternalState('ready');
-          }
-        });
+        createSubscription();
+        unsubscribe = () => subscriptionRef.current?.unsubscribe();
 
         // Check if snapshot is fresh
         const stale = isDataStale(snapshot?.created_at ?? null, ttlMinutes);
@@ -135,7 +175,6 @@ export function useStationData(
           const chargerStatus = snapshotToChargerStatus(snapshot, metadataRef.current ?? undefined);
           currentDataTimestampRef.current = new Date(snapshot.created_at).getTime();
           setData(chargerStatus);
-          setHasRealtime(true);
           setInternalState('ready');
         } else if (cuprId !== undefined) {
           // Stale or missing - fetch from Edge
@@ -151,7 +190,6 @@ export function useStationData(
           if (edgeData) {
             currentDataTimestampRef.current = new Date(edgeData.created_at).getTime();
             setData(edgeData);
-            setHasRealtime(true); // Edge stores snapshot, realtime will work
             setInternalState('ready');
           } else {
             setError('Station not found');
@@ -168,7 +206,6 @@ export function useStationData(
             );
             currentDataTimestampRef.current = new Date(snapshot.created_at).getTime();
             setData(chargerStatus);
-            setHasRealtime(true);
             setInternalState('ready');
           } else {
             setError('No data available');
@@ -186,9 +223,13 @@ export function useStationData(
 
     load();
 
+    // Copy ref value for cleanup to avoid stale ref warning
+    const reconnectionManager = reconnectionManagerRef.current;
+
     return () => {
       active = false;
       unsubscribe?.();
+      reconnectionManager.cancelPending();
     };
   }, [cpId, cuprId, ttlMinutes]);
 
@@ -202,15 +243,20 @@ export function useStationData(
       state: 'idle',
       data: null,
       error: null,
+      connectionState: 'disconnected',
       hasRealtime: false,
       isStale: false,
     };
   }
 
+  // Derive hasRealtime for backwards compatibility
+  const hasRealtime = connectionState === 'connected';
+
   return {
     state,
     data,
     error,
+    connectionState,
     hasRealtime,
     isStale: stale,
   };

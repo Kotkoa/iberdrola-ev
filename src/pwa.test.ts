@@ -669,9 +669,7 @@ describe('subscribeToStationNotifications', () => {
 
     global.fetch = mockFetch;
 
-    await expect(subscribeToStationNotifications(147988, 1)).rejects.toThrow(
-      'Failed to save subscription on the server.'
-    );
+    await expect(subscribeToStationNotifications(147988, 1)).rejects.toThrow('Server returned 500');
   });
 
   it('should use default port number when not provided', async () => {

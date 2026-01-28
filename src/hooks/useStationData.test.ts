@@ -66,10 +66,27 @@ describe('useStationData', () => {
     situation_code: 'OPER',
   };
 
+  // Helper to create mock SubscriptionResult
+  const createMockSubscriptionResult = (onConnectionStateChange?: (state: string) => void) => {
+    // Simulate connected state synchronously to avoid timer-related flakes in tests
+    // In real code, Supabase calls this asynchronously, but for tests we call it immediately
+    // after the mock is set up via queueMicrotask (more predictable than setTimeout)
+    if (onConnectionStateChange) {
+      queueMicrotask(() => onConnectionStateChange('connected'));
+    }
+    return {
+      unsubscribe: vi.fn(),
+      getConnectionState: vi.fn().mockReturnValue('connected'),
+    };
+  };
+
   beforeEach(() => {
     vi.clearAllMocks();
-    // Default mock: returns unsubscribe function
-    vi.mocked(charger.subscribeToSnapshots).mockReturnValue(() => {});
+    // Default mock: returns SubscriptionResult object and calls connectionState callback
+    vi.mocked(charger.subscribeToSnapshots).mockImplementation(
+      (_cpId, _onUpdate, onConnectionStateChange) =>
+        createMockSubscriptionResult(onConnectionStateChange)
+    );
     vi.mocked(charger.snapshotToChargerStatus).mockReturnValue(mockChargerStatus);
   });
 
@@ -195,13 +212,27 @@ describe('useStationData', () => {
       renderHook(() => useStationData(12345, 67890));
 
       await waitFor(() => {
-        expect(charger.subscribeToSnapshots).toHaveBeenCalledWith(12345, expect.any(Function));
+        expect(charger.subscribeToSnapshots).toHaveBeenCalledWith(
+          12345,
+          expect.any(Function),
+          expect.any(Function)
+        );
       });
     });
 
     it('should unsubscribe on unmount', async () => {
       const unsubscribeMock = vi.fn();
-      vi.mocked(charger.subscribeToSnapshots).mockReturnValue(unsubscribeMock);
+      vi.mocked(charger.subscribeToSnapshots).mockImplementation(
+        (_cpId, _onUpdate, onConnectionStateChange) => {
+          if (onConnectionStateChange) {
+            queueMicrotask(() => onConnectionStateChange('connected'));
+          }
+          return {
+            unsubscribe: unsubscribeMock,
+            getConnectionState: vi.fn().mockReturnValue('connected'),
+          };
+        }
+      );
       vi.mocked(charger.getLatestSnapshot).mockResolvedValue(mockSnapshot);
       vi.mocked(charger.getStationMetadata).mockResolvedValue(mockMetadata);
       vi.mocked(time.isDataStale).mockReturnValue(false);
@@ -220,10 +251,18 @@ describe('useStationData', () => {
     it('should update data on realtime event with newer timestamp', async () => {
       let realtimeCallback: ((snapshot: typeof mockSnapshot) => void) | null = null;
 
-      vi.mocked(charger.subscribeToSnapshots).mockImplementation((cpId, callback) => {
-        realtimeCallback = callback;
-        return () => {};
-      });
+      vi.mocked(charger.subscribeToSnapshots).mockImplementation(
+        (_cpId, callback, onConnectionStateChange) => {
+          realtimeCallback = callback;
+          if (onConnectionStateChange) {
+            queueMicrotask(() => onConnectionStateChange('connected'));
+          }
+          return {
+            unsubscribe: vi.fn(),
+            getConnectionState: vi.fn().mockReturnValue('connected'),
+          };
+        }
+      );
       vi.mocked(charger.getLatestSnapshot).mockResolvedValue(mockSnapshot);
       vi.mocked(charger.getStationMetadata).mockResolvedValue(mockMetadata);
       vi.mocked(time.isDataStale).mockReturnValue(false);

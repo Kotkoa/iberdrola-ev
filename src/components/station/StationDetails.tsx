@@ -2,7 +2,9 @@ import { Alert, Avatar, Box, Chip, Stack, Typography } from '@mui/material';
 import LocationOnIcon from '@mui/icons-material/LocationOn';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import { DistanceBadge } from '../common/DistanceBadge';
+import { ConnectionIndicator } from '../common/ConnectionIndicator';
 import { formatAddress } from '../../utils/address';
+import type { RealtimeConnectionState } from '../../../types/realtime';
 
 interface StationDetailsProps {
   cpId: number;
@@ -15,7 +17,9 @@ interface StationDetailsProps {
   latitude?: number | null;
   longitude?: number | null;
   distanceKm?: number | null;
+  /** @deprecated Use connectionState instead */
   hasRealtime?: boolean;
+  connectionState?: RealtimeConnectionState;
 }
 
 export function StationDetails({
@@ -29,8 +33,13 @@ export function StationDetails({
   latitude,
   longitude,
   distanceKm,
-  hasRealtime = true,
+  hasRealtime,
+  connectionState,
 }: StationDetailsProps) {
+  // Use connectionState if provided, otherwise derive from hasRealtime for backwards compatibility
+  // Default to 'disconnected' when neither is specified to avoid misleading "Live" indicator
+  const effectiveConnectionState: RealtimeConnectionState =
+    connectionState ?? (hasRealtime === true ? 'connected' : 'disconnected');
   const hasCoordinates = Boolean(latitude && longitude);
 
   return (
@@ -82,18 +91,7 @@ export function StationDetails({
             fontSize: { xs: '0.7rem', sm: '0.813rem' },
           }}
         />
-        {!hasRealtime && (
-          <Chip
-            label="No tracking"
-            color="error"
-            variant="outlined"
-            size="small"
-            sx={{
-              borderRadius: '4px',
-              fontSize: { xs: '0.7rem', sm: '0.813rem' },
-            }}
-          />
-        )}
+        <ConnectionIndicator state={effectiveConnectionState} size="small" />
       </Stack>
 
       <Typography

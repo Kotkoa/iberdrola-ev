@@ -9,12 +9,19 @@ import {
 } from '../services/localStorage';
 import type { StationInfoPartial } from '../services/iberdrola';
 import type { ChargerStatus } from '../../types/charger';
+import type { RealtimeConnectionState } from '../../types/realtime';
 
 interface PrimaryStationContextValue {
   primaryStationId: number | null;
   primaryStation: ChargerStatus | null;
   loading: boolean;
   error: string | null;
+  /** WebSocket connection state for realtime updates */
+  connectionState: RealtimeConnectionState;
+  /**
+   * Whether realtime subscription is active
+   * @deprecated Use connectionState === 'connected' instead
+   */
   hasRealtime: boolean;
   setPrimaryStation: (station: StationInfoPartial) => void;
   clearPrimaryStation: () => void;
@@ -36,6 +43,7 @@ export function PrimaryStationProvider({ children }: PrimaryStationProviderProps
     state,
     data: primaryStation,
     error,
+    connectionState,
     hasRealtime,
   } = useStationData(
     stationData?.cpId ?? null,
@@ -72,6 +80,7 @@ export function PrimaryStationProvider({ children }: PrimaryStationProviderProps
     primaryStation,
     loading,
     error,
+    connectionState,
     hasRealtime,
     setPrimaryStation,
     clearPrimaryStation,

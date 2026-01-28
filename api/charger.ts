@@ -1,5 +1,6 @@
 import { supabase, supabaseFetch } from './supabase.js';
 import type { ChargerStatus } from '../types/charger.js';
+import type { RealtimeConnectionState, SubscriptionResult } from '../types/realtime.js';
 
 export function unsubscribeAllChannels(): void {
   supabase.removeAllChannels();
@@ -67,7 +68,13 @@ export async function getLatestSnapshot(cpId: number): Promise<StationSnapshot |
   return normalizeSnapshotData(data[0]);
 }
 
-export function subscribeToSnapshots(cpId: number, onUpdate: (snapshot: StationSnapshot) => void) {
+export function subscribeToSnapshots(
+  cpId: number,
+  onUpdate: (snapshot: StationSnapshot) => void,
+  onConnectionStateChange?: (state: RealtimeConnectionState) => void
+): SubscriptionResult {
+  let connectionState: RealtimeConnectionState = 'connecting';
+
   const channel = supabase
     .channel(`station_snapshots_${cpId}`)
     .on(
@@ -92,10 +99,36 @@ export function subscribeToSnapshots(cpId: number, onUpdate: (snapshot: StationS
         }
       }
     )
-    .subscribe();
+    .subscribe((status, err) => {
+      switch (status) {
+        case 'SUBSCRIBED':
+          connectionState = 'connected';
+          console.log(`[Realtime:${cpId}] Connected`);
+          onConnectionStateChange?.('connected');
+          break;
+        case 'CHANNEL_ERROR':
+          connectionState = 'error';
+          console.error(`[Realtime:${cpId}] Channel error:`, err?.message);
+          onConnectionStateChange?.('error');
+          break;
+        case 'TIMED_OUT':
+          connectionState = 'error';
+          console.error(`[Realtime:${cpId}] Connection timed out`);
+          onConnectionStateChange?.('error');
+          break;
+        case 'CLOSED':
+          connectionState = 'disconnected';
+          console.log(`[Realtime:${cpId}] Disconnected`);
+          onConnectionStateChange?.('disconnected');
+          break;
+      }
+    });
 
-  return () => {
-    channel.unsubscribe();
+  return {
+    unsubscribe: () => {
+      channel.unsubscribe();
+    },
+    getConnectionState: () => connectionState,
   };
 }
 

@@ -53,6 +53,46 @@ Supabase (station_snapshots + station_metadata) → useCharger hook → React st
 - Subscribe to INSERT events on `station_snapshots` table
 - UI updates every minute via `setInterval` - implemented in [App.tsx](../src/App.tsx)
 
+### Connection State Management
+
+The realtime subscription uses a state machine to track WebSocket connection status:
+
+| State          | Description                    | UI Indicator       |
+| -------------- | ------------------------------ | ------------------ |
+| `disconnected` | No active connection           | Red "Offline" chip |
+| `connecting`   | Initial connection attempt     | Yellow spinner     |
+| `connected`    | Active WebSocket connection    | Green "Live" chip  |
+| `reconnecting` | Auto-reconnect in progress     | Yellow spinner     |
+| `error`        | Max reconnect attempts reached | Red "Error" chip   |
+
+**Key files:**
+
+- **[types/realtime.ts](../types/realtime.ts)** - Connection state types
+- **[src/utils/reconnectionManager.ts](../src/utils/reconnectionManager.ts)** - Exponential backoff logic
+- **[src/components/common/ConnectionIndicator.tsx](../src/components/common/ConnectionIndicator.tsx)** - UI component
+
+### Auto-Reconnection
+
+When WebSocket connection fails, `ReconnectionManager` handles automatic reconnection:
+
+- **Exponential backoff**: 1s → 2s → 4s → 8s → 16s → 30s (capped)
+- **Max attempts**: 10 (configurable)
+- **Reset on success**: Counter resets when connection succeeds
+
+```typescript
+// Usage in useStationData
+const reconnectionManager = new ReconnectionManager();
+
+// On disconnect/error
+reconnectionManager.scheduleReconnect(() => {
+  subscription.unsubscribe();
+  createNewSubscription();
+});
+
+// On successful connection
+reconnectionManager.reset();
+```
+
 ## TTL-Based Freshness Architecture
 
 ### Overview

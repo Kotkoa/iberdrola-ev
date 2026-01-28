@@ -1,3 +1,5 @@
+import type { RealtimeConnectionState } from './realtime.js';
+
 export interface ChargerStatus {
   id: string;
   created_at: string;
@@ -57,7 +59,15 @@ export interface StationDataStatus {
   data: ChargerStatus | null;
   /** Error message (null if no error) */
   error: string | null;
-  /** Whether realtime subscription is active */
+  /**
+   * WebSocket connection state for realtime updates
+   * Possible values: 'disconnected' | 'connecting' | 'connected' | 'reconnecting' | 'error'
+   */
+  connectionState: RealtimeConnectionState;
+  /**
+   * Whether realtime subscription is active
+   * @deprecated Use connectionState === 'connected' instead
+   */
   hasRealtime: boolean;
   /** Whether current data is stale (older than TTL) */
   isStale: boolean;

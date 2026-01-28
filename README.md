@@ -174,6 +174,20 @@ The Search tab uses optimized **two-stage loading** for fast results:
 6. Edge Function sends Web Push notifications
 7. Subscription is marked inactive (one-time alert)
 
+### Connection State & Auto-Reconnection
+
+The app tracks WebSocket connection state and auto-reconnects on failure:
+
+| State          | UI Indicator       | Description                    |
+| -------------- | ------------------ | ------------------------------ |
+| `connected`    | 🟢 Live            | Active WebSocket connection    |
+| `connecting`   | 🟡 Connecting...   | Initial connection             |
+| `reconnecting` | 🟡 Reconnecting... | Auto-reconnect in progress     |
+| `disconnected` | 🔴 Offline         | No connection                  |
+| `error`        | 🔴 Error           | Max reconnect attempts reached |
+
+**Auto-reconnection** uses exponential backoff (1s → 30s max, 10 attempts)
+
 ---
 
 ## Push Notifications (PWA)
@@ -255,7 +269,8 @@ yarn format       # Prettier format
 │   ├── utils/
 │   │   ├── maps.ts
 │   │   ├── time.ts
-│   │   └── station.ts       # shouldSaveStationToCache utility
+│   │   ├── station.ts       # shouldSaveStationToCache utility
+│   │   └── reconnectionManager.ts  # Auto-reconnect with backoff
 │   ├── constants/
 │   │   └── index.ts         # API endpoints, status enums
 │   ├── pwa.ts               # PWA utilities, push notifications
@@ -263,7 +278,8 @@ yarn format       # Prettier format
 ├── public/
 │   └── sw.js                # Service Worker
 ├── types/
-│   └── charger.ts           # Core data model
+│   ├── charger.ts           # Core data model
+│   └── realtime.ts          # WebSocket connection state types
 └── supabase/
     └── functions/           # Edge Functions
 ```

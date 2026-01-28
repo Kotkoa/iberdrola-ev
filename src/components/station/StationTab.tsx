@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import { usePrimaryStation } from '../../context/PrimaryStationContext';
@@ -20,7 +20,7 @@ interface StationTabProps {
 }
 
 export function StationTab({ onNavigateToSearch }: StationTabProps) {
-  const { primaryStation, loading, error, primaryStationId, hasRealtime } = usePrimaryStation();
+  const { primaryStation, loading, error, primaryStationId, connectionState } = usePrimaryStation();
   const { location: userLocation } = useUserLocation();
   const [now, setNow] = useState(() => new Date());
   const [pushAvailable, setPushAvailable] = useState(() => isPushSupported());
@@ -35,6 +35,10 @@ export function StationTab({ onNavigateToSearch }: StationTabProps) {
     1: null,
     2: null,
   });
+
+  // Debounce for subscription button clicks
+  const DEBOUNCE_MS = 2000;
+  const lastSubscribeTimeRef = useRef<Record<PortNumber, number>>({ 1: 0, 2: 0 });
 
   const VITE_CHECK_SUB_URL = import.meta.env.VITE_CHECK_SUB_URL;
 
@@ -114,6 +118,15 @@ export function StationTab({ onNavigateToSearch }: StationTabProps) {
   const handleSubscribeClick = useCallback(
     async (portNumber: PortNumber) => {
       if (!primaryStation) return;
+
+      // Debounce check
+      const now = Date.now();
+      if (now - lastSubscribeTimeRef.current[portNumber] < DEBOUNCE_MS) {
+        console.log(`[StationTab] Subscription click debounced for port ${portNumber}`);
+        return;
+      }
+      lastSubscribeTimeRef.current[portNumber] = now;
+
       setSubscriptionErrors((prev) => ({ ...prev, [portNumber]: null }));
       setSubscriptionState((prev) => ({ ...prev, [portNumber]: 'loading' }));
       try {
@@ -214,7 +227,7 @@ export function StationTab({ onNavigateToSearch }: StationTabProps) {
         latitude={primaryStation.cp_latitude}
         longitude={primaryStation.cp_longitude}
         distanceKm={distanceKm}
-        hasRealtime={hasRealtime}
+        connectionState={connectionState}
       />
 
       <PortsList
