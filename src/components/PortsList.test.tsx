@@ -176,4 +176,106 @@ describe('PortsList', () => {
       screen.queryByText("No waiting. No checking. Just come when it's free.")
     ).not.toBeInTheDocument();
   });
+
+  // Tests for subscribedOccupiedCount logic
+  describe('subscribedOccupiedCount behavior', () => {
+    it('should hide alert when subscribed port becomes available', () => {
+      // Port 1: was subscribed but now AVAILABLE
+      // Port 2: AVAILABLE
+      // Expected: NO alert (subscribedOccupiedCount = 0)
+      const props = {
+        ...defaultProps,
+        portConfigs: [
+          { ...defaultProps.portConfigs[0], isAvailable: true }, // Port 1 available
+          { ...defaultProps.portConfigs[1], isAvailable: true }, // Port 2 available
+        ],
+        subscriptionState: { 1: 'success', 2: 'idle' } as Record<PortNumber, SubscriptionStatus>,
+      };
+
+      render(<PortsList {...props} />);
+
+      expect(
+        screen.queryByText("We'll alert you as soon as this port is available")
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByText("We'll alert you as soon as this station is available")
+      ).not.toBeInTheDocument();
+    });
+
+    it('should show promo when subscribed port becomes available but other port is occupied', () => {
+      // Port 1: was subscribed but now AVAILABLE
+      // Port 2: OCCUPIED, not subscribed
+      // Expected: NO alert, but promo text SHOWN
+      const props = {
+        ...defaultProps,
+        portConfigs: [
+          { ...defaultProps.portConfigs[0], isAvailable: true }, // Port 1 available
+          { ...defaultProps.portConfigs[1], isAvailable: false }, // Port 2 occupied
+        ],
+        subscriptionState: { 1: 'success', 2: 'idle' } as Record<PortNumber, SubscriptionStatus>,
+      };
+
+      render(<PortsList {...props} />);
+
+      // Alert should NOT show (subscribed port is available now)
+      expect(
+        screen.queryByText("We'll alert you as soon as this port is available")
+      ).not.toBeInTheDocument();
+
+      // Promo should show (there's an occupied port without subscription)
+      expect(
+        screen.getByText("No waiting. No checking. Just come when it's free.")
+      ).toBeInTheDocument();
+    });
+
+    it('should show port alert when one of two subscribed ports becomes available', () => {
+      // Port 1: was subscribed but now AVAILABLE
+      // Port 2: OCCUPIED and subscribed
+      // Expected: Alert shows "port" (not "station")
+      const props = {
+        ...defaultProps,
+        portConfigs: [
+          { ...defaultProps.portConfigs[0], isAvailable: true }, // Port 1 available
+          { ...defaultProps.portConfigs[1], isAvailable: false }, // Port 2 occupied
+        ],
+        subscriptionState: { 1: 'success', 2: 'success' } as Record<PortNumber, SubscriptionStatus>,
+      };
+
+      render(<PortsList {...props} />);
+
+      // Should show "port" not "station" (only 1 subscribed occupied port)
+      expect(
+        screen.getByText("We'll alert you as soon as this port is available")
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByText("We'll alert you as soon as this station is available")
+      ).not.toBeInTheDocument();
+    });
+
+    it('should count only occupied ports with active subscriptions', () => {
+      // Port 1: OCCUPIED but not subscribed
+      // Port 2: AVAILABLE but subscribed (from before)
+      // Expected: NO alert, promo SHOWN
+      const props = {
+        ...defaultProps,
+        portConfigs: [
+          { ...defaultProps.portConfigs[0], isAvailable: false }, // Port 1 occupied
+          { ...defaultProps.portConfigs[1], isAvailable: true }, // Port 2 available
+        ],
+        subscriptionState: { 1: 'idle', 2: 'success' } as Record<PortNumber, SubscriptionStatus>,
+      };
+
+      render(<PortsList {...props} />);
+
+      // Alert should NOT show (subscribed port 2 is available)
+      expect(
+        screen.queryByText("We'll alert you as soon as this port is available")
+      ).not.toBeInTheDocument();
+
+      // Promo should show (Port 1 is occupied without subscription)
+      expect(
+        screen.getByText("No waiting. No checking. Just come when it's free.")
+      ).toBeInTheDocument();
+    });
+  });
 });

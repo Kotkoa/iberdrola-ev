@@ -333,12 +333,26 @@ describe('subscribeToStationNotifications', () => {
     );
   });
 
-  it('should reuse existing subscription if available', async () => {
+  it('should reuse existing subscription if VAPID key matches', async () => {
     // @ts-expect-error - Mock
     global.Notification.permission = 'granted';
 
+    // Create a mock applicationServerKey that matches VAPID_PUBLIC_KEY
+    const vapidKey =
+      'BBYOLN0dkh81SwIlhCjClqyo_nE7tyj5s-TbP8ATJU23RypPi813z703Cjbfvwu0BH-esigcZRGa_LiZxmwkSKY';
+    const padding = '='.repeat((4 - (vapidKey.length % 4)) % 4);
+    const base64 = (vapidKey + padding).replace(/-/g, '+').replace(/_/g, '/');
+    const rawData = atob(base64);
+    const expectedKey = new Uint8Array(rawData.length);
+    for (let i = 0; i < rawData.length; i++) {
+      expectedKey[i] = rawData.charCodeAt(i);
+    }
+
     const mockSubscription = {
       endpoint: 'https://fcm.googleapis.com/existing',
+      options: {
+        applicationServerKey: expectedKey.buffer,
+      },
       getKey: vi.fn((name: string) => {
         if (name === 'p256dh') return new Uint8Array([1, 2, 3]);
         if (name === 'auth') return new Uint8Array([4, 5, 6]);
@@ -351,6 +365,7 @@ describe('subscribeToStationNotifications', () => {
           auth: 'existing-auth',
         },
       }),
+      unsubscribe: vi.fn().mockResolvedValue(true),
     };
 
     const mockGetSubscription = vi.fn().mockResolvedValue(mockSubscription);
@@ -379,7 +394,89 @@ describe('subscribeToStationNotifications', () => {
     await subscribeToStationNotifications(147988, 1);
 
     expect(mockGetSubscription).toHaveBeenCalled();
+    // Should reuse existing subscription when VAPID key matches
     expect(mockSubscribe).not.toHaveBeenCalled();
+    expect(mockSubscription.unsubscribe).not.toHaveBeenCalled();
+  });
+
+  it('should re-subscribe when existing subscription has different VAPID key', async () => {
+    // @ts-expect-error - Mock
+    global.Notification.permission = 'granted';
+
+    // Create a DIFFERENT applicationServerKey (old VAPID key)
+    const oldVapidKey = new Uint8Array([1, 2, 3, 4, 5]); // Different from current VAPID
+
+    const newMockSubscription = {
+      endpoint: 'https://fcm.googleapis.com/new',
+      options: {
+        applicationServerKey: new ArrayBuffer(65), // New key
+      },
+      getKey: vi.fn((name: string) => {
+        if (name === 'p256dh') return new Uint8Array([7, 8, 9]);
+        if (name === 'auth') return new Uint8Array([10, 11, 12]);
+        return null;
+      }),
+      toJSON: () => ({
+        endpoint: 'https://fcm.googleapis.com/new',
+        keys: {
+          p256dh: 'new-p256dh',
+          auth: 'new-auth',
+        },
+      }),
+      unsubscribe: vi.fn().mockResolvedValue(true),
+    };
+
+    const oldMockSubscription = {
+      endpoint: 'https://fcm.googleapis.com/old',
+      options: {
+        applicationServerKey: oldVapidKey.buffer,
+      },
+      getKey: vi.fn((name: string) => {
+        if (name === 'p256dh') return new Uint8Array([1, 2, 3]);
+        if (name === 'auth') return new Uint8Array([4, 5, 6]);
+        return null;
+      }),
+      toJSON: () => ({
+        endpoint: 'https://fcm.googleapis.com/old',
+        keys: {
+          p256dh: 'old-p256dh',
+          auth: 'old-auth',
+        },
+      }),
+      unsubscribe: vi.fn().mockResolvedValue(true),
+    };
+
+    const mockGetSubscription = vi.fn().mockResolvedValue(oldMockSubscription);
+    const mockSubscribe = vi.fn().mockResolvedValue(newMockSubscription);
+
+    const mockPushManager = {
+      getSubscription: mockGetSubscription,
+      subscribe: mockSubscribe,
+    };
+
+    const mockReg = {
+      pushManager: mockPushManager,
+    };
+
+    navigator.serviceWorker = {
+      // @ts-expect-error - Mock
+      ready: Promise.resolve(mockReg),
+      register: vi.fn(),
+      controller: null,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      getRegistration: vi.fn(),
+      getRegistrations: vi.fn(),
+    };
+
+    await subscribeToStationNotifications(147988, 1);
+
+    // Should unsubscribe from old subscription and create new one
+    expect(oldMockSubscription.unsubscribe).toHaveBeenCalled();
+    expect(mockSubscribe).toHaveBeenCalledWith({
+      userVisibleOnly: true,
+      applicationServerKey: expect.any(Uint8Array),
+    });
   });
 
   it('should create new subscription when no existing subscription', async () => {
@@ -437,8 +534,22 @@ describe('subscribeToStationNotifications', () => {
     // @ts-expect-error - Mock
     global.Notification.permission = 'granted';
 
+    // Use matching VAPID key to avoid re-subscribe
+    const vapidKey =
+      'BBYOLN0dkh81SwIlhCjClqyo_nE7tyj5s-TbP8ATJU23RypPi813z703Cjbfvwu0BH-esigcZRGa_LiZxmwkSKY';
+    const padding = '='.repeat((4 - (vapidKey.length % 4)) % 4);
+    const base64 = (vapidKey + padding).replace(/-/g, '+').replace(/_/g, '/');
+    const rawData = atob(base64);
+    const expectedKey = new Uint8Array(rawData.length);
+    for (let i = 0; i < rawData.length; i++) {
+      expectedKey[i] = rawData.charCodeAt(i);
+    }
+
     const mockSubscription = {
       endpoint: 'https://fcm.googleapis.com/test',
+      options: {
+        applicationServerKey: expectedKey.buffer,
+      },
       getKey: vi.fn((name: string) => {
         if (name === 'p256dh') return new Uint8Array([1, 2, 3]);
         if (name === 'auth') return new Uint8Array([4, 5, 6]);
@@ -451,6 +562,7 @@ describe('subscribeToStationNotifications', () => {
           auth: 'test-auth',
         },
       }),
+      unsubscribe: vi.fn().mockResolvedValue(true),
     };
 
     const mockPushManager = {
@@ -498,8 +610,22 @@ describe('subscribeToStationNotifications', () => {
     // @ts-expect-error - Mock
     global.Notification.permission = 'granted';
 
+    // Use matching VAPID key to avoid re-subscribe
+    const vapidKey =
+      'BBYOLN0dkh81SwIlhCjClqyo_nE7tyj5s-TbP8ATJU23RypPi813z703Cjbfvwu0BH-esigcZRGa_LiZxmwkSKY';
+    const padding = '='.repeat((4 - (vapidKey.length % 4)) % 4);
+    const base64 = (vapidKey + padding).replace(/-/g, '+').replace(/_/g, '/');
+    const rawData = atob(base64);
+    const expectedKey = new Uint8Array(rawData.length);
+    for (let i = 0; i < rawData.length; i++) {
+      expectedKey[i] = rawData.charCodeAt(i);
+    }
+
     const mockSubscription = {
       endpoint: 'https://fcm.googleapis.com/test',
+      options: {
+        applicationServerKey: expectedKey.buffer,
+      },
       getKey: vi.fn((name: string) => {
         if (name === 'p256dh') return new Uint8Array([1, 2, 3]);
         if (name === 'auth') return new Uint8Array([4, 5, 6]);
@@ -512,6 +638,7 @@ describe('subscribeToStationNotifications', () => {
           auth: 'test-auth',
         },
       }),
+      unsubscribe: vi.fn().mockResolvedValue(true),
     };
 
     const mockPushManager = {
@@ -551,8 +678,22 @@ describe('subscribeToStationNotifications', () => {
     // @ts-expect-error - Mock
     global.Notification.permission = 'granted';
 
+    // Use matching VAPID key to avoid re-subscribe
+    const vapidKey =
+      'BBYOLN0dkh81SwIlhCjClqyo_nE7tyj5s-TbP8ATJU23RypPi813z703Cjbfvwu0BH-esigcZRGa_LiZxmwkSKY';
+    const padding = '='.repeat((4 - (vapidKey.length % 4)) % 4);
+    const base64 = (vapidKey + padding).replace(/-/g, '+').replace(/_/g, '/');
+    const rawData = atob(base64);
+    const expectedKey = new Uint8Array(rawData.length);
+    for (let i = 0; i < rawData.length; i++) {
+      expectedKey[i] = rawData.charCodeAt(i);
+    }
+
     const mockSubscription = {
       endpoint: 'https://fcm.googleapis.com/test',
+      options: {
+        applicationServerKey: expectedKey.buffer,
+      },
       getKey: vi.fn((name: string) => {
         if (name === 'p256dh') return new Uint8Array([1, 2, 3]);
         if (name === 'auth') return new Uint8Array([4, 5, 6]);
@@ -565,6 +706,7 @@ describe('subscribeToStationNotifications', () => {
           auth: 'test-auth',
         },
       }),
+      unsubscribe: vi.fn().mockResolvedValue(true),
     };
 
     const mockPushManager = {
@@ -613,8 +755,22 @@ describe('subscribeToStationNotifications', () => {
     // @ts-expect-error - Mock
     global.Notification.permission = 'granted';
 
+    // Use matching VAPID key to avoid re-subscribe
+    const vapidKey =
+      'BBYOLN0dkh81SwIlhCjClqyo_nE7tyj5s-TbP8ATJU23RypPi813z703Cjbfvwu0BH-esigcZRGa_LiZxmwkSKY';
+    const padding = '='.repeat((4 - (vapidKey.length % 4)) % 4);
+    const base64 = (vapidKey + padding).replace(/-/g, '+').replace(/_/g, '/');
+    const rawData = atob(base64);
+    const expectedKey = new Uint8Array(rawData.length);
+    for (let i = 0; i < rawData.length; i++) {
+      expectedKey[i] = rawData.charCodeAt(i);
+    }
+
     const mockSubscription = {
       endpoint: 'https://fcm.googleapis.com/test',
+      options: {
+        applicationServerKey: expectedKey.buffer,
+      },
       getKey: vi.fn((name: string) => {
         if (name === 'p256dh') return new Uint8Array([1, 2, 3]);
         if (name === 'auth') return new Uint8Array([4, 5, 6]);
@@ -627,6 +783,7 @@ describe('subscribeToStationNotifications', () => {
           auth: 'test-auth',
         },
       }),
+      unsubscribe: vi.fn().mockResolvedValue(true),
     };
 
     const mockPushManager = {

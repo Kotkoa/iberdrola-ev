@@ -27,10 +27,13 @@ export function PortsList({
   pushAvailable,
   onSubscribeClick,
 }: PortsListProps) {
-  const subscribedCount = Object.values(subscriptionState).filter((s) => s === 'success').length;
+  // Count ports that are both subscribed AND still occupied
+  const subscribedOccupiedCount = portConfigs.filter(
+    (p) => !p.isAvailable && subscriptionState[p.portNumber] === 'success'
+  ).length;
 
   const alertMessage =
-    subscribedCount === 2
+    subscribedOccupiedCount === 2
       ? "We'll alert you as soon as this station is available"
       : "We'll alert you as soon as this port is available";
 
@@ -104,16 +107,18 @@ export function PortsList({
           }
         )}
       </Stack>
-      {subscribedCount > 0 && (
+      {subscribedOccupiedCount > 0 && (
         <Alert severity="success" sx={{ mt: 1.5 }}>
           {alertMessage}
         </Alert>
       )}
-      {portConfigs.some((p) => !p.isAvailable) && pushAvailable && subscribedCount === 0 && (
-        <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', mt: 1.5 }}>
-          No waiting. No checking. Just come when it's free.
-        </Typography>
-      )}
+      {portConfigs.some((p) => !p.isAvailable) &&
+        pushAvailable &&
+        subscribedOccupiedCount === 0 && (
+          <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', mt: 1.5 }}>
+            No waiting. No checking. Just come when it's free.
+          </Typography>
+        )}
       {!pushAvailable && (
         <Typography variant="caption" color="textSecondary" sx={{ display: 'block', mt: 1.5 }}>
           Push notifications are not supported in this browser.

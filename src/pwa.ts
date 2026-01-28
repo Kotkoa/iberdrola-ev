@@ -65,12 +65,34 @@ export async function subscribeToStationNotifications(stationId: number, portNum
 
   const registration = await navigator.serviceWorker.ready;
   const existing = await registration.pushManager.getSubscription();
-  const subscription =
-    existing ??
-    (await registration.pushManager.subscribe({
+
+  // Check if existing subscription has matching VAPID key
+  let subscription = existing;
+  if (existing) {
+    const expectedKey = urlBase64ToUint8Array(VAPID_PUBLIC_KEY);
+    const existingKey = existing.options?.applicationServerKey
+      ? new Uint8Array(existing.options.applicationServerKey as ArrayBuffer)
+      : null;
+
+    const keysMatch =
+      existingKey &&
+      existingKey.length === expectedKey.length &&
+      existingKey.every((byte, i) => byte === expectedKey[i]);
+
+    if (!keysMatch) {
+      // VAPID key mismatch - unsubscribe and re-subscribe
+      await existing.unsubscribe();
+      subscription = await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: expectedKey,
+      });
+    }
+  } else {
+    subscription = await registration.pushManager.subscribe({
       userVisibleOnly: true,
       applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
-    }));
+    });
+  }
 
   const response = await fetch(SAVE_SUBSCRIPTION_ENDPOINT, {
     method: 'POST',
