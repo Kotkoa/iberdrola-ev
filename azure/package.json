@@ -2,11 +2,13 @@
   "name": "iberdrola-proxy-azure",
   "version": "1.0.0",
   "description": "Azure Function proxy for Iberdrola API",
-  "main": "index.js",
+  "main": "src/functions/*.js",
   "scripts": {
     "start": "func start",
     "test": "echo \"No tests yet\""
   },
-  "dependencies": {},
+  "dependencies": {
+    "@azure/functions": "^4.0.0"
+  },
   "devDependencies": {}
 }
