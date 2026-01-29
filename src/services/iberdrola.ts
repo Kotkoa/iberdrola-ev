@@ -3,6 +3,7 @@ import {
   CHARGING_POINT_STATUS,
   SEARCH_FILTERS,
   GEO_CONSTANTS,
+  AZURE_PROXY_ENDPOINT,
   CLOUDFLARE_PROXY_ENDPOINT,
   VERCEL_PROXY_ENDPOINT,
   PROXY_ENDPOINT_TYPES,
@@ -19,12 +20,34 @@ const rateLimiter = new RateLimiter(CONCURRENCY_LIMIT, REQUEST_DELAY_MS);
 // Proxy Fetch with Fallback
 // ========================
 
-type ProxySource = 'cloudflare' | 'vercel' | 'corsproxy' | 'direct';
+type ProxySource = 'azure' | 'cloudflare' | 'vercel' | 'corsproxy' | 'direct';
 
 interface ProxyResult<T> {
   data: T | null;
   source: ProxySource;
   error?: string;
+}
+
+/**
+ * Fetches data via Azure Function (primary proxy if configured)
+ */
+async function fetchViaAzureProxy<T>(endpointType: string, payload: unknown): Promise<T> {
+  const res = await fetch(AZURE_PROXY_ENDPOINT, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      endpoint: endpointType,
+      payload,
+    }),
+  });
+
+  if (!res.ok) {
+    throw new Error(`Azure proxy error: ${res.status}`);
+  }
+
+  return res.json();
 }
 
 /**
@@ -122,7 +145,7 @@ async function fetchDirectFromIberdrola<T>(endpoint: string, payload: unknown): 
 }
 
 /**
- * Fetches with fallback chain: Cloudflare -> Vercel -> CORS Proxy -> Direct
+ * Fetches with fallback chain: Azure -> Cloudflare -> Vercel -> CORS Proxy -> Direct
  * Returns data and source for debugging
  */
 async function fetchWithFallback<T>(
@@ -131,7 +154,17 @@ async function fetchWithFallback<T>(
   payload: unknown,
   directEndpoint?: string
 ): Promise<ProxyResult<T>> {
-  // Try Cloudflare Worker first (primary)
+  // Try Azure Function first if configured
+  if (AZURE_PROXY_ENDPOINT) {
+    try {
+      const data = await fetchViaAzureProxy<T>(endpointType, payload);
+      return { data, source: 'azure' };
+    } catch (azureError) {
+      console.warn('[Proxy] Azure proxy failed:', azureError);
+    }
+  }
+
+  // Try Cloudflare Worker (secondary)
   try {
     const data = await fetchViaCloudflare<T>(endpointType, payload);
     return { data, source: 'cloudflare' };
@@ -324,7 +357,7 @@ export interface StationInfo {
 
 /**
  * Fetches a list of charging stations within a given radius.
- * Uses fallback chain: Vercel proxy -> CORS proxy
+ * Uses fallback chain: Azure -> Cloudflare -> Vercel -> CORS proxy
  */
 async function fetchStationsInRadius(
   lat: number,
@@ -369,7 +402,7 @@ async function fetchStationsInRadius(
 /**
  * Fetches detailed information for a specific charging station.
  * Uses rate limiting to avoid overwhelming the API.
- * Uses fallback chain: Vercel proxy -> CORS proxy -> Direct -> returns null
+ * Uses fallback chain: Azure -> Cloudflare -> Vercel -> CORS proxy -> Direct -> returns null
  */
 export async function fetchStationDetails(cuprId: number): Promise<StationDetails | null> {
   await rateLimiter.acquire();

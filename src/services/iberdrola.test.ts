@@ -192,7 +192,7 @@ describe('fetchStationDetails', () => {
     });
   });
 
-  it('should verify fallback order: Cloudflare -> Vercel -> CORS -> Direct -> null', async () => {
+  it('should verify fallback order: Cloudflare -> Vercel -> CORS -> Direct -> null (when Azure not configured)', async () => {
     // All methods fail
     globalThis.fetch = vi
       .fn()

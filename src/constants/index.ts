@@ -28,7 +28,12 @@ export const DEFAULT_CHARGING_POINT = {
 const CORS_PROXY = 'https://corsproxy.io/?';
 const IBERDROLA_BASE_URL = 'https://www.iberdrola.es/o/webclipb/iberdrola/puntosrecargacontroller';
 
-// Primary: Cloudflare Worker (reliable, different IP range)
+const env = (import.meta as ImportMeta & { env?: Record<string, string> }).env;
+
+// Primary: Azure Function (most reliable if configured)
+export const AZURE_PROXY_ENDPOINT = env?.VITE_AZURE_PROXY_ENDPOINT || '';
+
+// Secondary: Cloudflare Worker (reliable, different IP range)
 export const CLOUDFLARE_PROXY_ENDPOINT = 'https://calm-base-a362.kotkoa.workers.dev';
 
 // Secondary: Vercel API Route (blocked by Iberdrola)
