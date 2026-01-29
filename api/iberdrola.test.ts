@@ -28,7 +28,7 @@ function createMockResponse(): VercelResponse & {
 } {
   const res = {
     _status: 200,
-    _json: null,
+    _json: null as unknown,
     _headers: {} as Record<string, string>,
     _ended: false,
     setHeader(name: string, value: string) {
