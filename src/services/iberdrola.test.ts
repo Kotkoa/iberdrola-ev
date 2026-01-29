@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { fetchStationDetails, extractStationInfo, type StationDetails } from './iberdrola';
-import { VERCEL_PROXY_ENDPOINT, API_ENDPOINTS } from '../constants';
+import { VERCEL_PROXY_ENDPOINT, API_ENDPOINTS, IBERDROLA_DIRECT_ENDPOINTS } from '../constants';
 
 // Mock rate limiter to avoid delays in tests
 vi.mock('../utils/rateLimiter', () => ({
@@ -110,6 +110,181 @@ describe('fetchStationDetails', () => {
 
     const result = await fetchStationDetails(12345);
     expect(result).toBeNull();
+  });
+
+  it('should fallback to direct fetch when both proxies fail', async () => {
+    const mockResponse = {
+      entidad: [
+        {
+          cpStatus: { statusCode: 'AVAILABLE' },
+          logicalSocket: [],
+          locationData: { cuprName: 'Test Station' },
+        },
+      ],
+    };
+
+    // Vercel fails, CORS fails, Direct succeeds
+    globalThis.fetch = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('Vercel proxy error'))
+      .mockRejectedValueOnce(new Error('CORS proxy error'))
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => mockResponse,
+      });
+
+    const result = await fetchStationDetails(12345);
+
+    expect(result).toEqual(mockResponse.entidad[0]);
+    expect(fetch).toHaveBeenCalledTimes(3);
+    // Third call should be to direct Iberdrola endpoint
+    expect(fetch).toHaveBeenLastCalledWith(
+      IBERDROLA_DIRECT_ENDPOINTS.GET_CHARGING_POINT_DETAILS,
+      expect.objectContaining({
+        method: 'POST',
+        mode: 'cors',
+        credentials: 'omit',
+      })
+    );
+  });
+
+  it('should call direct fetch with correct headers', async () => {
+    const mockResponse = {
+      entidad: [
+        {
+          cpStatus: { statusCode: 'AVAILABLE' },
+          logicalSocket: [],
+        },
+      ],
+    };
+
+    // Vercel fails, CORS fails, Direct succeeds
+    globalThis.fetch = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('Vercel proxy error'))
+      .mockRejectedValueOnce(new Error('CORS proxy error'))
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => mockResponse,
+      });
+
+    await fetchStationDetails(12345);
+
+    // Verify direct fetch call has correct headers
+    const directFetchCall = vi.mocked(fetch).mock.calls[2];
+    const directFetchOptions = directFetchCall[1] as RequestInit;
+
+    expect(directFetchOptions.method).toBe('POST');
+    expect(directFetchOptions.mode).toBe('cors');
+    expect(directFetchOptions.credentials).toBe('omit');
+    expect(directFetchOptions.headers).toEqual({
+      Accept: 'application/json',
+      'Content-Type': 'application/json; charset=UTF-8',
+      'X-Requested-With': 'XMLHttpRequest',
+    });
+  });
+
+  it('should verify fallback order: Vercel -> CORS -> Direct -> null', async () => {
+    // All methods fail
+    globalThis.fetch = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('Vercel proxy error'))
+      .mockRejectedValueOnce(new Error('CORS proxy error'))
+      .mockRejectedValueOnce(new Error('Direct fetch error'));
+
+    const result = await fetchStationDetails(12345);
+
+    expect(result).toBeNull();
+    expect(fetch).toHaveBeenCalledTimes(3);
+
+    // Verify call order
+    const calls = vi.mocked(fetch).mock.calls;
+
+    // 1st call: Vercel proxy
+    expect(calls[0][0]).toBe(VERCEL_PROXY_ENDPOINT);
+
+    // 2nd call: CORS proxy
+    expect(calls[1][0]).toBe(API_ENDPOINTS.GET_CHARGING_POINT_DETAILS);
+
+    // 3rd call: Direct Iberdrola endpoint
+    expect(calls[2][0]).toBe(IBERDROLA_DIRECT_ENDPOINTS.GET_CHARGING_POINT_DETAILS);
+  });
+
+  describe('direct fetch timeout', () => {
+    it('should abort direct fetch when signal is triggered', async () => {
+      const abortError = new DOMException('The operation was aborted.', 'AbortError');
+
+      // Vercel fails, CORS fails, Direct aborts due to timeout
+      globalThis.fetch = vi
+        .fn()
+        .mockRejectedValueOnce(new Error('Vercel proxy error'))
+        .mockRejectedValueOnce(new Error('CORS proxy error'))
+        .mockRejectedValueOnce(abortError);
+
+      const result = await fetchStationDetails(12345);
+
+      expect(result).toBeNull();
+      expect(fetch).toHaveBeenCalledTimes(3);
+    });
+
+    it('should pass AbortSignal to direct fetch', async () => {
+      globalThis.fetch = vi
+        .fn()
+        .mockRejectedValueOnce(new Error('Vercel proxy error'))
+        .mockRejectedValueOnce(new Error('CORS proxy error'))
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ entidad: [{ cpStatus: { statusCode: 'AVAILABLE' } }] }),
+        });
+
+      await fetchStationDetails(12345);
+
+      // Verify direct fetch was called with signal
+      const directFetchCall = vi.mocked(fetch).mock.calls[2];
+      const directFetchOptions = directFetchCall[1] as RequestInit;
+
+      expect(directFetchOptions.signal).toBeInstanceOf(AbortSignal);
+    });
+
+    it('should configure direct fetch with 5s timeout via AbortController', async () => {
+      // Mock AbortController to verify timeout is set correctly
+      const originalAbortController = globalThis.AbortController;
+      const mockAbort = vi.fn();
+      const mockSignal = { aborted: false } as AbortSignal;
+
+      class MockAbortController {
+        signal = mockSignal;
+        abort = mockAbort;
+      }
+
+      globalThis.AbortController = MockAbortController as unknown as typeof AbortController;
+
+      // Track setTimeout calls to verify 5s timeout
+      const originalSetTimeout = globalThis.setTimeout;
+      let capturedTimeout = 0;
+      globalThis.setTimeout = vi.fn((fn: () => void, ms: number) => {
+        capturedTimeout = ms;
+        return originalSetTimeout(fn, 0); // Execute immediately in test
+      }) as unknown as typeof setTimeout;
+
+      globalThis.fetch = vi
+        .fn()
+        .mockRejectedValueOnce(new Error('Vercel proxy error'))
+        .mockRejectedValueOnce(new Error('CORS proxy error'))
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ entidad: [{ cpStatus: { statusCode: 'AVAILABLE' } }] }),
+        });
+
+      await fetchStationDetails(12345);
+
+      // Verify 5s timeout was configured
+      expect(capturedTimeout).toBe(5000);
+
+      // Restore globals
+      globalThis.AbortController = originalAbortController;
+      globalThis.setTimeout = originalSetTimeout;
+    });
   });
 });
 
