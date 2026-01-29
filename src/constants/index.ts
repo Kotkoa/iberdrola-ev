@@ -23,52 +23,6 @@ export const DEFAULT_CHARGING_POINT = {
 } as const;
 
 // ========================
-// API Configuration
-// ========================
-const CORS_PROXY = 'https://corsproxy.io/?';
-const IBERDROLA_BASE_URL = 'https://www.iberdrola.es/o/webclipb/iberdrola/puntosrecargacontroller';
-
-const env = (import.meta as ImportMeta & { env?: Record<string, string> }).env;
-
-// Primary: Azure Function (most reliable if configured)
-export const AZURE_PROXY_ENDPOINT = env?.VITE_AZURE_PROXY_ENDPOINT || '';
-
-// Secondary: Cloudflare Worker (reliable, different IP range)
-export const CLOUDFLARE_PROXY_ENDPOINT = 'https://calm-base-a362.kotkoa.workers.dev';
-
-// Secondary: Vercel API Route (blocked by Iberdrola)
-export const VERCEL_PROXY_ENDPOINT = '/api/iberdrola';
-
-// Fallback: External CORS proxy
-export const API_ENDPOINTS = {
-  LIST_CHARGING_POINTS: `${CORS_PROXY}${IBERDROLA_BASE_URL}/getListarPuntosRecarga`,
-  GET_CHARGING_POINT_DETAILS: `${CORS_PROXY}${IBERDROLA_BASE_URL}/getDatosPuntoRecarga`,
-} as const;
-
-// Endpoint types for Vercel proxy
-export const PROXY_ENDPOINT_TYPES = {
-  LIST: 'list',
-  DETAILS: 'details',
-} as const;
-
-// Direct Iberdrola API endpoints (fallback - usually CORS blocked)
-export const IBERDROLA_DIRECT_ENDPOINTS = {
-  LIST_CHARGING_POINTS: `${IBERDROLA_BASE_URL}/getListarPuntosRecarga`,
-  GET_CHARGING_POINT_DETAILS: `${IBERDROLA_BASE_URL}/getDatosPuntoRecarga`,
-} as const;
-
-// ========================
-// Search Filters
-// ========================
-export const SEARCH_FILTERS = {
-  CHARGE_POINT_TYPES: ['P', 'R', 'I', 'N'] as const,
-  SOCKET_STATUS: [] as string[],
-  ADVANTAGEOUS: false,
-  CONNECTORS_TYPE: ['2', '7'] as const, // Type 2 connectors
-  LOAD_SPEED: [] as string[],
-} as const;
-
-// ========================
 // Geographic Calculations
 // ========================
 export const GEO_CONSTANTS = {

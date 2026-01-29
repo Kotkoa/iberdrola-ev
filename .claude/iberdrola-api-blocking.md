@@ -1,147 +1,121 @@
-# Iberdrola API Blocking Issue
+# Iberdrola API Blocking - Current Architecture
 
-## Timeline
+## Status: Cache-Only Mode
 
-**Before (worked ~1 week ago):**
-- Search feature fetched live data from Iberdrola API
-- Used `corsproxy.io` as CORS proxy
-- All stations showed real-time availability
-
-**After (current state):**
-- All proxy methods return 403 Forbidden
-- Search falls back to cached data
-- Message: "Live data unavailable. Showing cached results."
+**All direct API proxy attempts have been removed** from the codebase. The application now operates exclusively on cached data from Supabase.
 
 ---
 
-## Root Cause
+## Data Flow
 
-**Iberdrola enabled aggressive IP blocking via Akamai CDN.**
-
-Error response:
-```html
-<H1>Access Denied</H1>
-You don't have permission to access "http://www.iberdrola.es/..." on this server.
-Reference #18.d56d655f.1769689418.16279892
-https://errors.edgesuite.net/18...
+```
+GitHub Actions Scraper (every 10 min)
+    ↓
+Iberdrola API (works from Azure IPs)
+    ↓
+Supabase station_snapshots table
+    ↓
+Frontend (reads from cache only)
 ```
 
-The `edgesuite.net` domain confirms **Akamai CDN** is performing the blocking.
+---
+
+## Why Direct API Access Doesn't Work
+
+Iberdrola enabled aggressive IP blocking via **Akamai CDN**. All common cloud provider IPs are blocked:
+
+| Source | Status |
+|--------|--------|
+| corsproxy.io (Cloudflare) | ❌ 403 |
+| Vercel (AWS Lambda) | ❌ 403 |
+| Cloudflare Workers | ❌ 403 |
+| Supabase Edge Functions (AWS/Deno) | ❌ 403 |
+| Azure Functions | ❌ 403 |
+| **GitHub Actions (Azure)** | ✅ Works |
+
+Only GitHub Actions works because Microsoft Azure IPs have better reputation and are less commonly blocked.
 
 ---
 
-## Blocked IP Ranges
+## Removed Code (January 2025)
 
-| Source | IP Range | Status |
-|--------|----------|--------|
-| corsproxy.io | Cloudflare | ❌ 403 |
-| Vercel (AWS Lambda) | AWS | ❌ 403 |
-| Cloudflare Workers | Cloudflare | ❌ 403 |
-| Supabase Edge Functions | AWS/Deno | ❌ 403 |
-| allorigins.win | Cloudflare | ❌ 403 |
-| Local Mac (Spanish ISP) | Residential | ❌ 403 |
-| **GitHub Actions** | **Azure** | ✅ Works |
+The following dead code was removed to simplify the codebase:
 
----
+### Files Deleted
 
-## Why GitHub Actions Works
+- `azure/` directory (Azure Functions proxy)
+- `api/iberdrola.ts` (Vercel proxy)
+- `api/iberdrola.test.ts` (proxy tests)
+- `src/services/iberdrola.test.ts` (proxy tests)
 
-The `iberdrola-scraper` repository runs on GitHub Actions (Azure infrastructure).
+### Constants Removed from `src/constants/index.ts`
 
-Azure IP ranges are not blocked by Iberdrola/Akamai, likely because:
-1. Azure is less commonly used for scraping
-2. Microsoft enterprise IPs have better reputation
-3. Akamai blocklists focus on AWS/Cloudflare
+- `CORS_PROXY`
+- `AZURE_PROXY_ENDPOINT`
+- `CLOUDFLARE_PROXY_ENDPOINT`
+- `VERCEL_PROXY_ENDPOINT`
+- `API_ENDPOINTS`
+- `PROXY_ENDPOINT_TYPES`
+- `IBERDROLA_DIRECT_ENDPOINTS`
+- `SEARCH_FILTERS`
 
-Scraper code uses identical headers — only IP differs.
+### Functions Simplified in `src/services/iberdrola.ts`
 
----
+- `fetchStationDetails()` - now returns `null` immediately
+- `fetchStationsPartial()` - now throws error immediately
+- `enrichStationDetails()` - uses cache only, no API fallback
+- `fetchStationAsChargerStatus()` - now returns `null` immediately
 
-## Attempted Solutions
+All proxy-related functions were removed:
 
-### 1. Cloudflare Worker (Failed)
-- Created worker at `https://calm-base-a362.kotkoa.workers.dev`
-- Same headers as working scraper
-- Result: 403 Forbidden
-
-### 2. Alternative CORS Proxies (Failed)
-Tested multiple public CORS proxies:
-- cors-anywhere.herokuapp.com — requires demo access
-- cors.sh — rate limited (paid)
-- thingproxy, codetabs, crossorigin.me — no response
-- All others — 403 Forbidden
-
-### 3. Direct Fetch from Browser (Failed)
-- CORS policy blocks preflight
-- Even if CORS allowed, IP would be blocked
+- `fetchViaAzureProxy()`
+- `fetchViaCloudflare()`
+- `fetchViaVercelProxy()`
+- `fetchViaCorsProxy()`
+- `fetchDirectFromIberdrola()`
+- `fetchWithFallback()`
+- `fetchStationsInRadius()`
+- `findNearestFreeStations()`
 
 ---
 
-## Viable Solutions
+## Current Behavior
 
-### Option 1: GitHub Actions Proxy (Recommended)
-**Pros:**
-- Free (2000 min/month)
-- Azure IPs work
-- Already have working scraper code
+### Search Feature (`useStationSearch`)
 
-**Cons:**
-- Not real-time (workflow dispatch delay)
-- Requires `repository_dispatch` API setup
+1. Tries `fetchStationsPartial()` → immediately throws error
+2. Falls back to `loadStationsFromCacheNearLocation()` → works
+3. Shows message: "Live data unavailable. Showing cached results."
 
-**Implementation:**
-1. Create workflow that accepts HTTP requests
-2. Proxy to Iberdrola API
-3. Return response via GitHub API or artifact
+### Station Data (`useStationData`)
 
-### Option 2: Self-hosted VPS
-**Pros:**
-- Full control
-- Real-time responses
-- Can choose location (Spain/Europe)
-
-**Cons:**
-- Cost (~$5/month minimum)
-- Maintenance required
-- IP may get blocked eventually
-
-**Providers:**
-- Hetzner (Germany) — €4.50/month
-- OVH (France/Spain) — €3.50/month
-- Oracle Cloud — Free tier (test first)
-
-### Option 3: Residential Proxy Service
-**Pros:**
-- Residential IPs rarely blocked
-- Rotating IPs
-
-**Cons:**
-- Expensive ($20+/month)
-- Overkill for this use case
+1. Loads from `station_snapshots` cache
+2. Subscribes to realtime updates
+3. No API fallback needed
 
 ---
 
-## Current Workaround
+## Data Freshness
 
-The app falls back to **cached data** from Supabase:
-1. Scraper runs every 10 minutes on GitHub Actions
-2. Data saved to `station_snapshots` table
-3. Search shows cached results when API fails
-
-**Limitation:** Data is up to 10 minutes stale.
+- **Scraper runs**: Every 10 minutes via GitHub Actions
+- **Cache TTL**: 15 minutes
+- **User experience**: Data is 0-10 minutes stale
 
 ---
 
-## Recommended Next Steps
+## Future Options
 
-1. **Short-term:** Accept cached data fallback (current behavior)
-2. **Medium-term:** Implement GitHub Actions proxy endpoint
-3. **Long-term:** Monitor if Iberdrola relaxes blocking
+If real-time data is needed:
+
+1. **Increase scraper frequency** (costs more GitHub Actions minutes)
+2. **Self-hosted VPS** with residential IP (~$5/month)
+3. **Residential proxy service** (expensive, ~$20+/month)
+4. **Wait for Iberdrola** to relax blocking
 
 ---
 
 ## Related Files
 
-- [src/services/iberdrola.ts](../src/services/iberdrola.ts) — Fallback chain implementation
-- [src/constants/index.ts](../src/constants/index.ts) — Proxy endpoints
-- [iberdrola-scraper](https://github.com/Kotkoa/iberdrola-scraper) — Working scraper on GitHub Actions
+- [src/services/iberdrola.ts](../src/services/iberdrola.ts) - Stub functions + types
+- [src/services/stationApi.ts](../src/services/stationApi.ts) - Cache operations
+- [iberdrola-scraper](https://github.com/Kotkoa/iberdrola-scraper) - Working scraper
