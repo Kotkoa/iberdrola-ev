@@ -44,12 +44,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     const targetUrl = ENDPOINTS[endpoint];
 
     // Forward request to Iberdrola API
+    // Headers match iberdrola-scraper for reliable access
     const response = await fetch(targetUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Accept: 'application/json',
-        'User-Agent': 'Mozilla/5.0 (compatible; IberdrolaEVMonitor/1.0)',
+        Accept: 'application/json, text/javascript, */*; q=0.01',
+        'Accept-Language': 'en-US,en;q=0.9',
+        Referer: 'https://www.iberdrola.es/en/electric-mobility/recharge-outside-the-house',
+        Origin: 'https://www.iberdrola.es',
+        'User-Agent':
+          'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        'X-Requested-With': 'XMLHttpRequest',
       },
       body: JSON.stringify(payload),
     });

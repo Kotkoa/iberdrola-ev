@@ -87,6 +87,19 @@ Frontend (PWA)    UI Update      Edge Function
 
 ---
 
+## Related Projects
+
+This PWA displays data collected by a separate backend scraper:
+
+- **[iberdrola-scraper](https://github.com/Kotkoa/iberdrola-scraper)** - Node.js scraper that fetches charging point data from Iberdrola API and stores it in Supabase via GitHub Actions cron job (runs every 5 minutes)
+
+The scraper is intentionally kept as a separate repository for:
+- **Isolation**: Frontend changes don't affect data collection
+- **Independent CI/CD**: Scraper runs on its own schedule
+- **Separation of concerns**: PWA (UI/UX) vs Data ingestion (backend job)
+
+---
+
 ## Data Freshness (TTL-Based)
 
 Station data uses a **5-minute TTL cache** for optimal performance:
