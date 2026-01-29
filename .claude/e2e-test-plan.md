@@ -29,6 +29,22 @@ E2E tests using Playwright MCP server for browser automation. Tests run against 
 
 ---
 
+### 2b. Search Proxy Fallback (NEW)
+
+| Test                        | Steps                                   | Expected                                     |
+| --------------------------- | --------------------------------------- | -------------------------------------------- |
+| **Vercel proxy success**    | Search normally                         | Results appear, no warning                   |
+| **Vercel proxy fails**      | Block /api/iberdrola, search            | Fallback to CORS proxy, results appear       |
+| **All proxies fail**        | Block all API routes, search            | Warning alert, cached data shown             |
+| **Cached data warning**     | API fails, cached data available        | Yellow warning "Showing cached results"      |
+| **No cached data error**    | API fails, no cached data               | Red error alert displayed                    |
+| **Progress bar**            | Search with API working                 | Progress bar during enrichment               |
+| **Cached search fast**      | Search twice within 15 min              | Second search < 5 seconds (TTL cache)        |
+
+**Test File**: [test/e2e-search-proxy.spec.ts](../test/e2e-search-proxy.spec.ts)
+
+---
+
 ### 3. Station Selection Flow (User's Test)
 
 **Scenario**: Select "pego cervantes" as primary station
@@ -184,9 +200,20 @@ Using Playwright MCP tools directly in Claude conversation.
 ### Future: Automated
 
 ```bash
-# TODO: Add Playwright test files
+# Install Playwright
+yarn add -D @playwright/test
+npx playwright install chromium
+
+# Run e2e tests
 yarn test:e2e
 ```
+
+### Test Files
+
+| File                                                                   | Coverage                     |
+| ---------------------------------------------------------------------- | ---------------------------- |
+| [test/e2e-push-notifications.spec.ts](../test/e2e-push-notifications.spec.ts) | Push notification flow       |
+| [test/e2e-search-proxy.spec.ts](../test/e2e-search-proxy.spec.ts)             | Search proxy fallback chain  |
 
 ---
 
@@ -194,11 +221,12 @@ yarn test:e2e
 
 1. **P0 - Critical**: Station Selection Flow (Test 3)
 2. **P1 - High**: Search Functionality (Test 2)
-3. **P1 - High**: Station Details (Test 4)
-4. **P2 - Medium**: TTL-Based Loading (Test 5)
-5. **P2 - Medium**: Empty State (Test 1)
-6. **P3 - Low**: Push Notifications (Test 6)
-7. **P3 - Low**: Edge Cases (Test 7)
+3. **P1 - High**: Search Proxy Fallback (Test 2b) - **NEW**
+4. **P1 - High**: Station Details (Test 4)
+5. **P2 - Medium**: TTL-Based Loading (Test 5)
+6. **P2 - Medium**: Empty State (Test 1)
+7. **P3 - Low**: Push Notifications (Test 6)
+8. **P3 - Low**: Edge Cases (Test 7)
 
 ---
 
