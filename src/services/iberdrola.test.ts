@@ -1,6 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { fetchStationDetails, extractStationInfo, type StationDetails } from './iberdrola';
-import { VERCEL_PROXY_ENDPOINT, API_ENDPOINTS, IBERDROLA_DIRECT_ENDPOINTS } from '../constants';
+import {
+  CLOUDFLARE_PROXY_ENDPOINT,
+  VERCEL_PROXY_ENDPOINT,
+  API_ENDPOINTS,
+  IBERDROLA_DIRECT_ENDPOINTS,
+} from '../constants';
 
 // Mock rate limiter to avoid delays in tests
 vi.mock('../utils/rateLimiter', () => ({
@@ -17,7 +22,7 @@ describe('fetchStationDetails', () => {
     vi.clearAllMocks();
   });
 
-  it('should fetch station details via Vercel proxy first', async () => {
+  it('should fetch station details via Cloudflare proxy first', async () => {
     const mockResponse = {
       entidad: [
         {
@@ -36,9 +41,9 @@ describe('fetchStationDetails', () => {
     const result = await fetchStationDetails(12345);
 
     expect(result).toEqual(mockResponse.entidad[0]);
-    // First call should be to Vercel proxy
+    // First call should be to Cloudflare proxy
     expect(fetch).toHaveBeenCalledWith(
-      VERCEL_PROXY_ENDPOINT,
+      CLOUDFLARE_PROXY_ENDPOINT,
       expect.objectContaining({
         method: 'POST',
         body: expect.stringContaining('details'),
@@ -46,7 +51,7 @@ describe('fetchStationDetails', () => {
     );
   });
 
-  it('should fallback to CORS proxy when Vercel proxy fails', async () => {
+  it('should fallback to Vercel proxy when Cloudflare fails', async () => {
     const mockResponse = {
       entidad: [
         {
@@ -57,10 +62,10 @@ describe('fetchStationDetails', () => {
       ],
     };
 
-    // First call (Vercel) fails, second call (CORS proxy) succeeds
+    // First call (Cloudflare) fails, second call (Vercel) succeeds
     globalThis.fetch = vi
       .fn()
-      .mockRejectedValueOnce(new Error('Vercel proxy error'))
+      .mockRejectedValueOnce(new Error('Cloudflare proxy error'))
       .mockResolvedValueOnce({
         ok: true,
         json: async () => mockResponse,
@@ -70,9 +75,9 @@ describe('fetchStationDetails', () => {
 
     expect(result).toEqual(mockResponse.entidad[0]);
     expect(fetch).toHaveBeenCalledTimes(2);
-    // Second call should be to CORS proxy
+    // Second call should be to Vercel proxy
     expect(fetch).toHaveBeenLastCalledWith(
-      API_ENDPOINTS.GET_CHARGING_POINT_DETAILS,
+      VERCEL_PROXY_ENDPOINT,
       expect.objectContaining({
         method: 'POST',
       })
@@ -82,6 +87,7 @@ describe('fetchStationDetails', () => {
   it('should return null when all methods fail', async () => {
     globalThis.fetch = vi
       .fn()
+      .mockRejectedValueOnce(new Error('Cloudflare proxy error'))
       .mockRejectedValueOnce(new Error('Vercel proxy error'))
       .mockRejectedValueOnce(new Error('CORS proxy error'))
       .mockRejectedValueOnce(new Error('Direct fetch error'));
@@ -89,7 +95,7 @@ describe('fetchStationDetails', () => {
     const result = await fetchStationDetails(12345);
 
     expect(result).toBeNull();
-    expect(fetch).toHaveBeenCalledTimes(3);
+    expect(fetch).toHaveBeenCalledTimes(4);
   });
 
   it('should return null if no entity in response', async () => {
@@ -112,7 +118,7 @@ describe('fetchStationDetails', () => {
     expect(result).toBeNull();
   });
 
-  it('should fallback to direct fetch when both proxies fail', async () => {
+  it('should fallback to direct fetch when all proxies fail', async () => {
     const mockResponse = {
       entidad: [
         {
@@ -123,9 +129,10 @@ describe('fetchStationDetails', () => {
       ],
     };
 
-    // Vercel fails, CORS fails, Direct succeeds
+    // Cloudflare fails, Vercel fails, CORS fails, Direct succeeds
     globalThis.fetch = vi
       .fn()
+      .mockRejectedValueOnce(new Error('Cloudflare proxy error'))
       .mockRejectedValueOnce(new Error('Vercel proxy error'))
       .mockRejectedValueOnce(new Error('CORS proxy error'))
       .mockResolvedValueOnce({
@@ -136,8 +143,8 @@ describe('fetchStationDetails', () => {
     const result = await fetchStationDetails(12345);
 
     expect(result).toEqual(mockResponse.entidad[0]);
-    expect(fetch).toHaveBeenCalledTimes(3);
-    // Third call should be to direct Iberdrola endpoint
+    expect(fetch).toHaveBeenCalledTimes(4);
+    // Fourth call should be to direct Iberdrola endpoint
     expect(fetch).toHaveBeenLastCalledWith(
       IBERDROLA_DIRECT_ENDPOINTS.GET_CHARGING_POINT_DETAILS,
       expect.objectContaining({
@@ -158,9 +165,10 @@ describe('fetchStationDetails', () => {
       ],
     };
 
-    // Vercel fails, CORS fails, Direct succeeds
+    // Cloudflare fails, Vercel fails, CORS fails, Direct succeeds
     globalThis.fetch = vi
       .fn()
+      .mockRejectedValueOnce(new Error('Cloudflare proxy error'))
       .mockRejectedValueOnce(new Error('Vercel proxy error'))
       .mockRejectedValueOnce(new Error('CORS proxy error'))
       .mockResolvedValueOnce({
@@ -170,8 +178,8 @@ describe('fetchStationDetails', () => {
 
     await fetchStationDetails(12345);
 
-    // Verify direct fetch call has correct headers
-    const directFetchCall = vi.mocked(fetch).mock.calls[2];
+    // Verify direct fetch call has correct headers (4th call)
+    const directFetchCall = vi.mocked(fetch).mock.calls[3];
     const directFetchOptions = directFetchCall[1] as RequestInit;
 
     expect(directFetchOptions.method).toBe('POST');
@@ -184,10 +192,11 @@ describe('fetchStationDetails', () => {
     });
   });
 
-  it('should verify fallback order: Vercel -> CORS -> Direct -> null', async () => {
+  it('should verify fallback order: Cloudflare -> Vercel -> CORS -> Direct -> null', async () => {
     // All methods fail
     globalThis.fetch = vi
       .fn()
+      .mockRejectedValueOnce(new Error('Cloudflare proxy error'))
       .mockRejectedValueOnce(new Error('Vercel proxy error'))
       .mockRejectedValueOnce(new Error('CORS proxy error'))
       .mockRejectedValueOnce(new Error('Direct fetch error'));
@@ -195,28 +204,32 @@ describe('fetchStationDetails', () => {
     const result = await fetchStationDetails(12345);
 
     expect(result).toBeNull();
-    expect(fetch).toHaveBeenCalledTimes(3);
+    expect(fetch).toHaveBeenCalledTimes(4);
 
     // Verify call order
     const calls = vi.mocked(fetch).mock.calls;
 
-    // 1st call: Vercel proxy
-    expect(calls[0][0]).toBe(VERCEL_PROXY_ENDPOINT);
+    // 1st call: Cloudflare proxy
+    expect(calls[0][0]).toBe(CLOUDFLARE_PROXY_ENDPOINT);
 
-    // 2nd call: CORS proxy
-    expect(calls[1][0]).toBe(API_ENDPOINTS.GET_CHARGING_POINT_DETAILS);
+    // 2nd call: Vercel proxy
+    expect(calls[1][0]).toBe(VERCEL_PROXY_ENDPOINT);
 
-    // 3rd call: Direct Iberdrola endpoint
-    expect(calls[2][0]).toBe(IBERDROLA_DIRECT_ENDPOINTS.GET_CHARGING_POINT_DETAILS);
+    // 3rd call: CORS proxy
+    expect(calls[2][0]).toBe(API_ENDPOINTS.GET_CHARGING_POINT_DETAILS);
+
+    // 4th call: Direct Iberdrola endpoint
+    expect(calls[3][0]).toBe(IBERDROLA_DIRECT_ENDPOINTS.GET_CHARGING_POINT_DETAILS);
   });
 
   describe('direct fetch timeout', () => {
     it('should abort direct fetch when signal is triggered', async () => {
       const abortError = new DOMException('The operation was aborted.', 'AbortError');
 
-      // Vercel fails, CORS fails, Direct aborts due to timeout
+      // Cloudflare fails, Vercel fails, CORS fails, Direct aborts due to timeout
       globalThis.fetch = vi
         .fn()
+        .mockRejectedValueOnce(new Error('Cloudflare proxy error'))
         .mockRejectedValueOnce(new Error('Vercel proxy error'))
         .mockRejectedValueOnce(new Error('CORS proxy error'))
         .mockRejectedValueOnce(abortError);
@@ -224,12 +237,13 @@ describe('fetchStationDetails', () => {
       const result = await fetchStationDetails(12345);
 
       expect(result).toBeNull();
-      expect(fetch).toHaveBeenCalledTimes(3);
+      expect(fetch).toHaveBeenCalledTimes(4);
     });
 
     it('should pass AbortSignal to direct fetch', async () => {
       globalThis.fetch = vi
         .fn()
+        .mockRejectedValueOnce(new Error('Cloudflare proxy error'))
         .mockRejectedValueOnce(new Error('Vercel proxy error'))
         .mockRejectedValueOnce(new Error('CORS proxy error'))
         .mockResolvedValueOnce({
@@ -239,8 +253,8 @@ describe('fetchStationDetails', () => {
 
       await fetchStationDetails(12345);
 
-      // Verify direct fetch was called with signal
-      const directFetchCall = vi.mocked(fetch).mock.calls[2];
+      // Verify direct fetch was called with signal (4th call)
+      const directFetchCall = vi.mocked(fetch).mock.calls[3];
       const directFetchOptions = directFetchCall[1] as RequestInit;
 
       expect(directFetchOptions.signal).toBeInstanceOf(AbortSignal);
@@ -269,6 +283,7 @@ describe('fetchStationDetails', () => {
 
       globalThis.fetch = vi
         .fn()
+        .mockRejectedValueOnce(new Error('Cloudflare proxy error'))
         .mockRejectedValueOnce(new Error('Vercel proxy error'))
         .mockRejectedValueOnce(new Error('CORS proxy error'))
         .mockResolvedValueOnce({

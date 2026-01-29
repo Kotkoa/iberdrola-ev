@@ -3,6 +3,7 @@ import {
   CHARGING_POINT_STATUS,
   SEARCH_FILTERS,
   GEO_CONSTANTS,
+  CLOUDFLARE_PROXY_ENDPOINT,
   VERCEL_PROXY_ENDPOINT,
   PROXY_ENDPOINT_TYPES,
   IBERDROLA_DIRECT_ENDPOINTS,
@@ -18,7 +19,7 @@ const rateLimiter = new RateLimiter(CONCURRENCY_LIMIT, REQUEST_DELAY_MS);
 // Proxy Fetch with Fallback
 // ========================
 
-type ProxySource = 'vercel' | 'corsproxy' | 'direct';
+type ProxySource = 'cloudflare' | 'vercel' | 'corsproxy' | 'direct';
 
 interface ProxyResult<T> {
   data: T | null;
@@ -27,7 +28,29 @@ interface ProxyResult<T> {
 }
 
 /**
- * Fetches data via Vercel API Route (primary proxy)
+ * Fetches data via Cloudflare Worker (primary proxy)
+ */
+async function fetchViaCloudflare<T>(endpointType: string, payload: unknown): Promise<T> {
+  const res = await fetch(CLOUDFLARE_PROXY_ENDPOINT, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      endpoint: endpointType,
+      payload,
+    }),
+  });
+
+  if (!res.ok) {
+    throw new Error(`Cloudflare proxy error: ${res.status}`);
+  }
+
+  return res.json();
+}
+
+/**
+ * Fetches data via Vercel API Route (secondary proxy)
  */
 async function fetchViaVercelProxy<T>(endpointType: string, payload: unknown): Promise<T> {
   const res = await fetch(VERCEL_PROXY_ENDPOINT, {
@@ -99,7 +122,7 @@ async function fetchDirectFromIberdrola<T>(endpoint: string, payload: unknown): 
 }
 
 /**
- * Fetches with fallback chain: Vercel -> CORS Proxy -> Direct
+ * Fetches with fallback chain: Cloudflare -> Vercel -> CORS Proxy -> Direct
  * Returns data and source for debugging
  */
 async function fetchWithFallback<T>(
@@ -108,7 +131,15 @@ async function fetchWithFallback<T>(
   payload: unknown,
   directEndpoint?: string
 ): Promise<ProxyResult<T>> {
-  // Try Vercel proxy first
+  // Try Cloudflare Worker first (primary)
+  try {
+    const data = await fetchViaCloudflare<T>(endpointType, payload);
+    return { data, source: 'cloudflare' };
+  } catch (cloudflareError) {
+    console.warn('[Proxy] Cloudflare proxy failed:', cloudflareError);
+  }
+
+  // Fallback to Vercel proxy (secondary)
   try {
     const data = await fetchViaVercelProxy<T>(endpointType, payload);
     return { data, source: 'vercel' };
@@ -116,7 +147,7 @@ async function fetchWithFallback<T>(
     console.warn('[Proxy] Vercel proxy failed:', vercelError);
   }
 
-  // Fallback to CORS proxy
+  // Fallback to CORS proxy (tertiary)
   try {
     const data = await fetchViaCorsProxy<T>(corsEndpoint, payload);
     return { data, source: 'corsproxy' };
