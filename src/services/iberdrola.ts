@@ -5,6 +5,7 @@ import {
   GEO_CONSTANTS,
   VERCEL_PROXY_ENDPOINT,
   PROXY_ENDPOINT_TYPES,
+  IBERDROLA_DIRECT_ENDPOINTS,
 } from '../constants';
 import { getStationsFromCache, type CachedStationInfo } from './stationApi';
 import { RateLimiter } from '../utils/rateLimiter';
@@ -17,7 +18,7 @@ const rateLimiter = new RateLimiter(CONCURRENCY_LIMIT, REQUEST_DELAY_MS);
 // Proxy Fetch with Fallback
 // ========================
 
-type ProxySource = 'vercel' | 'corsproxy';
+type ProxySource = 'vercel' | 'corsproxy' | 'direct';
 
 interface ProxyResult<T> {
   data: T | null;
@@ -69,13 +70,43 @@ async function fetchViaCorsProxy<T>(endpoint: string, payload: unknown): Promise
 }
 
 /**
- * Fetches with fallback chain: Vercel -> CORS Proxy
+ * Direct fetch to Iberdrola API (best effort, usually CORS blocked)
+ * Uses 5s timeout to fail fast if blocked
+ */
+async function fetchDirectFromIberdrola<T>(endpoint: string, payload: unknown): Promise<T> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 5000);
+
+  try {
+    const res = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json; charset=UTF-8',
+        'X-Requested-With': 'XMLHttpRequest',
+      },
+      body: JSON.stringify(payload),
+      mode: 'cors',
+      credentials: 'omit',
+      signal: controller.signal,
+    });
+
+    if (!res.ok) throw new Error(`Direct API: ${res.status}`);
+    return res.json();
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+/**
+ * Fetches with fallback chain: Vercel -> CORS Proxy -> Direct
  * Returns data and source for debugging
  */
 async function fetchWithFallback<T>(
   endpointType: string,
   corsEndpoint: string,
-  payload: unknown
+  payload: unknown,
+  directEndpoint?: string
 ): Promise<ProxyResult<T>> {
   // Try Vercel proxy first
   try {
@@ -91,12 +122,20 @@ async function fetchWithFallback<T>(
     return { data, source: 'corsproxy' };
   } catch (corsError) {
     console.warn('[Proxy] CORS proxy failed:', corsError);
-    return {
-      data: null,
-      source: 'corsproxy',
-      error: corsError instanceof Error ? corsError.message : 'Unknown error',
-    };
   }
+
+  // Fallback to direct fetch (usually CORS blocked)
+  if (directEndpoint) {
+    try {
+      const data = await fetchDirectFromIberdrola<T>(directEndpoint, payload);
+      console.log('[Proxy] Direct fetch succeeded!');
+      return { data, source: 'direct' };
+    } catch (directError) {
+      console.warn('[Proxy] Direct fetch failed (expected):', directError);
+    }
+  }
+
+  return { data: null, source: 'direct', error: 'All methods failed' };
 }
 
 function chunkArray<T>(array: T[], size: number): T[][] {
@@ -283,7 +322,8 @@ async function fetchStationsInRadius(
   const result = await fetchWithFallback<{ entidad: StationListItem[] }>(
     PROXY_ENDPOINT_TYPES.LIST,
     API_ENDPOINTS.LIST_CHARGING_POINTS,
-    payload
+    payload,
+    IBERDROLA_DIRECT_ENDPOINTS.LIST_CHARGING_POINTS
   );
 
   if (result.data) {
@@ -291,14 +331,14 @@ async function fetchStationsInRadius(
     return result.data.entidad || [];
   }
 
-  // Both proxies failed
-  throw new Error('Failed to fetch stations: all proxies unavailable');
+  // All methods failed
+  throw new Error('Failed to fetch stations: all methods unavailable');
 }
 
 /**
  * Fetches detailed information for a specific charging station.
  * Uses rate limiting to avoid overwhelming the API.
- * Uses fallback chain: Vercel proxy -> CORS proxy -> returns null
+ * Uses fallback chain: Vercel proxy -> CORS proxy -> Direct -> returns null
  */
 export async function fetchStationDetails(cuprId: number): Promise<StationDetails | null> {
   await rateLimiter.acquire();
@@ -308,7 +348,8 @@ export async function fetchStationDetails(cuprId: number): Promise<StationDetail
     const result = await fetchWithFallback<{ entidad: StationDetails[] }>(
       PROXY_ENDPOINT_TYPES.DETAILS,
       API_ENDPOINTS.GET_CHARGING_POINT_DETAILS,
-      payload
+      payload,
+      IBERDROLA_DIRECT_ENDPOINTS.GET_CHARGING_POINT_DETAILS
     );
 
     if (result.data?.entidad?.[0]) {
@@ -316,7 +357,7 @@ export async function fetchStationDetails(cuprId: number): Promise<StationDetail
       return result.data.entidad[0];
     }
 
-    // Both proxies failed - return null (will use cache in caller)
+    // All methods failed - return null (will use cache in caller)
     if (result.error) {
       console.warn(`[Details] Failed for cuprId=${cuprId}: ${result.error}`);
     }

@@ -79,16 +79,17 @@ describe('fetchStationDetails', () => {
     );
   });
 
-  it('should return null when both proxies fail', async () => {
+  it('should return null when all methods fail', async () => {
     globalThis.fetch = vi
       .fn()
       .mockRejectedValueOnce(new Error('Vercel proxy error'))
-      .mockRejectedValueOnce(new Error('CORS proxy error'));
+      .mockRejectedValueOnce(new Error('CORS proxy error'))
+      .mockRejectedValueOnce(new Error('Direct fetch error'));
 
     const result = await fetchStationDetails(12345);
 
     expect(result).toBeNull();
-    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(fetch).toHaveBeenCalledTimes(3);
   });
 
   it('should return null if no entity in response', async () => {

@@ -43,6 +43,12 @@ export const PROXY_ENDPOINT_TYPES = {
   DETAILS: 'details',
 } as const;
 
+// Direct Iberdrola API endpoints (fallback - usually CORS blocked)
+export const IBERDROLA_DIRECT_ENDPOINTS = {
+  LIST_CHARGING_POINTS: `${IBERDROLA_BASE_URL}/getListarPuntosRecarga`,
+  GET_CHARGING_POINT_DETAILS: `${IBERDROLA_BASE_URL}/getDatosPuntoRecarga`,
+} as const;
+
 // ========================
 // Search Filters
 // ========================
