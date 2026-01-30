@@ -28,6 +28,10 @@ vi.mock('../services/iberdrola', async () => {
   };
 });
 
+vi.mock('../services/localSearch', () => ({
+  searchLocalStations: vi.fn().mockResolvedValue([]),
+}));
+
 // Mock GeolocationPositionError (not available in test environment)
 interface GeolocationPositionErrorConstructor {
   new (message: string, code: number): GeolocationPositionError;

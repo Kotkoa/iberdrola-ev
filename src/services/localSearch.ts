@@ -1,8 +1,8 @@
 /**
- * Client-side local search for stations from pre-built library
- * Zero network requests, works offline
+ * Station search with Supabase primary and local JSON fallback
  */
 
+import { supabase } from '../../api/supabase';
 import { calculateDistance } from '../utils/maps';
 import type { StationInfoPartial } from './iberdrola';
 
@@ -20,13 +20,75 @@ interface LibraryStation {
   free: boolean;
 }
 
+interface SupabaseStationResult {
+  cp_id: number;
+  cupr_id: number;
+  name: string;
+  lat: number;
+  lon: number;
+  address: string;
+  socket_type: string | null;
+  max_power: number | null;
+  price_kwh: number;
+  total_ports: number;
+  free: boolean;
+  distance_km: number;
+}
+
 let libraryCache: LibraryStation[] | null = null;
 
 /**
- * Load station library from public/stations/library.json
- * Caches result in memory
+ * Search stations via Supabase RPC
  */
-export async function loadLibrary(): Promise<LibraryStation[]> {
+async function searchViaSupabase(
+  lat: number,
+  lon: number,
+  radiusKm: number,
+  onlyFree: boolean
+): Promise<StationInfoPartial[] | null> {
+  try {
+    const { data, error } = await supabase.rpc('search_stations_nearby', {
+      p_lat: lat,
+      p_lon: lon,
+      p_radius_km: radiusKm,
+      p_only_free: onlyFree,
+    });
+
+    if (error) {
+      console.warn('[LocalSearch] Supabase RPC error:', error.message);
+      return null;
+    }
+
+    if (!data || !Array.isArray(data)) {
+      return null;
+    }
+
+    return (data as SupabaseStationResult[]).map((s) => ({
+      cpId: s.cp_id,
+      cuprId: s.cupr_id,
+      name: s.name,
+      latitude: s.lat,
+      longitude: s.lon,
+      addressFull: s.address,
+      overallStatus: 'AVAILABLE' as const,
+      totalPorts: s.total_ports,
+      maxPower: s.max_power ?? undefined,
+      priceKwh: s.price_kwh,
+      socketType: s.socket_type ?? 'Unknown',
+      _fromCache: true,
+      _distanceKm: s.distance_km,
+    }));
+  } catch (err) {
+    console.warn('[LocalSearch] Supabase fetch failed:', err);
+    return null;
+  }
+}
+
+/**
+ * Load station library from public/stations/library.json
+ * Used as fallback when Supabase is unavailable
+ */
+async function loadLibrary(): Promise<LibraryStation[]> {
   if (libraryCache) {
     return libraryCache;
   }
@@ -55,38 +117,34 @@ function toStationInfoPartial(station: LibraryStation, distanceKm?: number): Sta
     latitude: station.lat,
     longitude: station.lon,
     addressFull: station.address,
-    overallStatus: 'AVAILABLE', // Static status for library
+    overallStatus: 'AVAILABLE',
     totalPorts: station.totalPorts,
     maxPower: station.maxPower ?? undefined,
     priceKwh: station.priceKwh ?? 0,
     socketType: station.socketType,
     _fromCache: true,
-    // Add distance for sorting (not part of StationInfoPartial but useful internally)
     ...(distanceKm !== undefined && { _distanceKm: distanceKm }),
   };
 }
 
 /**
- * Search stations by location from local library
- * No network requests - instant results
+ * Search stations from local library (fallback)
  */
-export async function searchLocalStations(
+async function searchFromLibrary(
   lat: number,
   lon: number,
   radiusKm: number,
-  onlyFree = true
+  onlyFree: boolean
 ): Promise<StationInfoPartial[]> {
   const library = await loadLibrary();
 
   if (library.length === 0) {
-    console.warn('[LocalSearch] Library is empty');
     return [];
   }
 
   const results: Array<{ station: LibraryStation; distance: number }> = [];
 
   for (const station of library) {
-    // Filter by free/paid
     if (onlyFree && !station.free) {
       continue;
     }
@@ -98,10 +156,33 @@ export async function searchLocalStations(
     }
   }
 
-  // Sort by distance (closest first)
   results.sort((a, b) => a.distance - b.distance);
 
   return results.map(({ station, distance }) => toStationInfoPartial(station, distance));
+}
+
+/**
+ * Search stations by location
+ * Primary: Supabase RPC
+ * Fallback: Local JSON library (3 nearby stations)
+ */
+export async function searchLocalStations(
+  lat: number,
+  lon: number,
+  radiusKm: number,
+  onlyFree = true
+): Promise<StationInfoPartial[]> {
+  // Try Supabase first
+  const supabaseResults = await searchViaSupabase(lat, lon, radiusKm, onlyFree);
+
+  if (supabaseResults !== null) {
+    console.log(`[LocalSearch] Found ${supabaseResults.length} stations via Supabase`);
+    return supabaseResults;
+  }
+
+  // Fallback to local library
+  console.log('[LocalSearch] Using local library fallback');
+  return searchFromLibrary(lat, lon, radiusKm, onlyFree);
 }
 
 /**
