@@ -1,11 +1,11 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Box from '@mui/material/Box';
 import Stack from '@mui/material/Stack';
 import Button from '@mui/material/Button';
 import Typography from '@mui/material/Typography';
 import Alert from '@mui/material/Alert';
 import Snackbar from '@mui/material/Snackbar';
-import Switch from '@mui/material/Switch';
+// import Switch from '@mui/material/Switch'; // TODO: temporarily hidden
 import RoomOutlinedIcon from '@mui/icons-material/RoomOutlined';
 import { RadiusSelector } from './RadiusSelector';
 import { SearchResults } from './SearchResults';
@@ -22,7 +22,7 @@ interface SearchTabProps {
 export function SearchTab({ onStationSelected }: SearchTabProps) {
   const [radius, setRadius] = useState(5);
   const [snackbarOpen, setSnackbarOpen] = useState(false);
-  const [showPaid, setShowPaid] = useState(false);
+  // const [showPaid, setShowPaid] = useState(false); // TODO: temporarily hidden
 
   const { stations, loading, enriching, progress, error, usingCachedData, search } =
     useStationSearch();
@@ -45,6 +45,15 @@ export function SearchTab({ onStationSelected }: SearchTabProps) {
   const handleCloseSnackbar = () => {
     setSnackbarOpen(false);
   };
+
+  // Auto-search on mount
+  const hasSearchedRef = useRef(false);
+  useEffect(() => {
+    if (!hasSearchedRef.current) {
+      hasSearchedRef.current = true;
+      search(3); // default radius
+    }
+  }, [search]);
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
@@ -80,6 +89,7 @@ export function SearchTab({ onStationSelected }: SearchTabProps) {
             </Button>
           </Stack>
 
+          {/* TODO: temporarily hidden paid stations switcher
           <Switch
             checked={showPaid}
             onChange={(e) => setShowPaid(e.target.checked)}
@@ -106,6 +116,7 @@ export function SearchTab({ onStationSelected }: SearchTabProps) {
               },
             }}
           />
+          */}
         </Stack>
 
         {(loading || enriching) && progress.total > 0 && (
@@ -126,17 +137,15 @@ export function SearchTab({ onStationSelected }: SearchTabProps) {
             primaryStationId={primaryStationId}
             onSetPrimary={handleSetPrimary}
             userLocation={userLocation}
-            showPaid={showPaid}
+            showPaid={false} // TODO: temporarily always false
           />
         )}
 
         {!loading && !enriching && stations.length === 0 && !error && (
           <Box sx={{ py: 4, textAlign: 'center' }}>
-            <Typography color="text.secondary">
-              Search for free charging stations in your area.
-            </Typography>
+            <Typography color="text.secondary">No stations found in this area.</Typography>
             <Typography variant="caption" color="text.secondary">
-              Select a radius and click "Find Stations".
+              Try increasing the search radius.
             </Typography>
           </Box>
         )}

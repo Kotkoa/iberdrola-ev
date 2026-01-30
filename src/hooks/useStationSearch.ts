@@ -1,8 +1,8 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import {
-  getUserLocation,
   fetchStationsPartial,
   enrichStationDetails,
+  getUserLocation,
   type StationInfoPartial,
 } from '../services/iberdrola';
 import {
@@ -13,6 +13,7 @@ import {
   shouldSaveStationToCache,
   loadStationsFromCacheNearLocation,
 } from '../services/stationApi';
+import { searchLocalStations } from '../services/localSearch';
 import { fetchStationDetails } from '../services/iberdrola';
 
 const CONCURRENCY_LIMIT = 5;
@@ -58,6 +59,23 @@ export function useStationSearch(): UseStationSearchReturn {
       const pos = await getUserLocation();
       if (controller.signal.aborted) return;
 
+      // Priority 1: Try local library first (no network, instant)
+      const localResults = await searchLocalStations(
+        pos.coords.latitude,
+        pos.coords.longitude,
+        radius,
+        true // only free stations
+      );
+
+      if (localResults.length > 0) {
+        console.log('[Search] Using local library:', localResults.length, 'stations');
+        setStations(localResults);
+        setUsingCachedData(true);
+        setLoading(false);
+        return;
+      }
+
+      // Priority 2: Try Iberdrola API (currently blocked)
       let partialResults: StationInfoPartial[];
 
       try {
@@ -67,8 +85,8 @@ export function useStationSearch(): UseStationSearchReturn {
           radius
         );
       } catch (fetchError) {
-        // API failed - try to load from cache
-        console.warn('[Search] API failed, loading from cache:', fetchError);
+        // API failed - try Supabase cache
+        console.warn('[Search] API failed, loading from Supabase cache:', fetchError);
 
         const cachedStations = await loadStationsFromCacheNearLocation(
           pos.coords.latitude,
@@ -175,11 +193,9 @@ export function useStationSearch(): UseStationSearchReturn {
             : 'Search failed';
       setError(errorMsg);
     } finally {
-      if (!controller.signal.aborted) {
-        setProgress({ current: 0, total: 0 });
-        setLoading(false);
-        setEnriching(false);
-      }
+      setProgress({ current: 0, total: 0 });
+      setLoading(false);
+      setEnriching(false);
     }
   }, []);
 

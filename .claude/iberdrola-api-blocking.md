@@ -22,18 +22,36 @@ Frontend (reads from cache only)
 
 ## Why Direct API Access Doesn't Work
 
-Iberdrola enabled aggressive IP blocking via **Akamai CDN**. All common cloud provider IPs are blocked:
+Iberdrola uses **Akamai Bot Manager** — CDN-level protection that blocks requests before they reach Iberdrola servers.
 
-| Source | Status |
-|--------|--------|
-| corsproxy.io (Cloudflare) | ❌ 403 |
-| Vercel (AWS Lambda) | ❌ 403 |
-| Cloudflare Workers | ❌ 403 |
-| Supabase Edge Functions (AWS/Deno) | ❌ 403 |
-| Azure Functions | ❌ 403 |
-| **GitHub Actions (Azure)** | ✅ Works |
+### How Akamai Detects Bots
 
-Only GitHub Actions works because Microsoft Azure IPs have better reputation and are less commonly blocked.
+| Method | What It Checks |
+|--------|----------------|
+| **JavaScript challenge** | Cookie `_abck` contains encrypted challenge solution — requires real browser JS execution |
+| **TLS fingerprint** | Cipher suite order unique to each browser; curl/Node.js have different fingerprints |
+| **IP reputation** | Cloud provider IPs (AWS, GCP, Azure, Vercel) are flagged |
+| **Browser APIs** | Checks for `navigator`, `window`, mouse events |
+| **Request patterns** | Timing, frequency, behavioral analysis |
+
+### Why Cookies Don't Help
+
+Copying cookies from browser won't work because:
+- `_abck` token is tied to browser JS execution context
+- Session cookies (`JSESSIONID`) are bound to IP
+- TLS fingerprint must match real browser
+
+### Blocked Providers
+
+| Source | Status | Reason |
+|--------|--------|--------|
+| corsproxy.io (Cloudflare) | ❌ 403 | Flagged IP range |
+| Vercel (AWS Lambda) | ❌ 403 | Flagged IP range |
+| Cloudflare Workers | ❌ 403 | Flagged IP range |
+| Supabase Edge Functions | ❌ 403 | Flagged IP range |
+| Azure Functions | ❌ 403 | Flagged IP range |
+| **GitHub Actions (Azure)** | ✅ Works | Azure IPs have better reputation |
+| **Playwright + stealth** | ✅ Works | Real browser with anti-detection |
 
 ---
 
