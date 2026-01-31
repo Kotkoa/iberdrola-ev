@@ -56,11 +56,8 @@ The system is fully event-driven and does **not rely on polling in the frontend*
 Iberdrola API
       ↓
 ┌─────────────────────────────────────────────────────┐
-│                                                     │
-│  GitHub Actions          Search Feature (Browser)   │
-│  (cron, every 5 min)     (on-demand via CORS proxy) │
+│  Subscription            Search Feature (Browser)   │
 │         ↓                         ↓                 │
-│  Node.js Scraper         Two-stage loading:         │
 │         ↓                 1. Batch API → instant    │
 │         ↓                 2. Detail API → enrich    │
 │         ↓                         ↓                 │
@@ -74,7 +71,6 @@ Iberdrola API
     └─────────────────────────────┘
                       ↓
     ┌─────────────────┬────────────────┐
-    │                 │                │
     │  Realtime       │  Database      │
     │  Channel        │  Webhook       │
     │  (WebSocket)    │  (HTTP)        │
