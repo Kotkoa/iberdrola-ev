@@ -8,7 +8,7 @@ Real-time Progressive Web App (PWA) for monitoring Iberdrola EV charging station
 
 ## Overview
 
-**Iberdrola EV Charger Monitor** helps electric vehicle drivers instantly check whether a specific Iberdrola charging station is free or occupied — without physically visiting the location.
+**Iberdrola EV Charger Monitor** - This application lets you see in real time whether a selected Iberdrola charging station is occupied or available, without having to physically go there. The user can see not only the port status, but also how long it has been occupied, which helps, based on personal experience, to estimate when the charging point is likely to become available. The key feature of the application is a one-time push notification subscription: the notification is delivered exactly at the moment the port becomes free. The app works in the background, does not require manual checks, and saves time.
 
 The app provides:
 
@@ -80,10 +80,12 @@ Iberdrola API
     │  (WebSocket)    │  (HTTP)        │
     │                 │                │
     ▼                 ▼                ▼
-Frontend (PWA)    UI Update      Edge Function
+Frontend (PWA)    UI Update      Edge Function*
                                       ↓
-                              Web Push Notification
+                              Web Push Notification*
 ```
+
+**Note:** \*Push notification delivery via Edge Function is planned but not yet implemented. Current implementation handles subscriptions via Service Worker (`public/sw.js`) and stores them in the `subscriptions` table.
 
 ---
 
@@ -94,6 +96,7 @@ This PWA displays data collected by a separate backend scraper:
 - **[iberdrola-scraper](https://github.com/Kotkoa/iberdrola-scraper)** - Node.js scraper that fetches charging point data from Iberdrola API and stores it in Supabase via GitHub Actions cron job (runs every 5 minutes)
 
 The scraper is intentionally kept as a separate repository for:
+
 - **Isolation**: Frontend changes don't affect data collection
 - **Independent CI/CD**: Scraper runs on its own schedule
 - **Separation of concerns**: PWA (UI/UX) vs Data ingestion (backend job)
@@ -181,11 +184,12 @@ The Search tab uses optimized **two-stage loading** for fast results:
 
 1. Scraper detects a status change (or user triggers search)
 2. New row inserted into `station_snapshots`
-3. Supabase Realtime broadcasts change to all clients
+3. Supabase Realtime broadcasts change to all clients via WebSocket
 4. UI updates instantly
-5. Database Webhook triggers Edge Function
-6. Edge Function sends Web Push notifications
-7. Subscription is marked inactive (one-time alert)
+5. Service Worker handles push notification display (if subscribed)
+6. Subscription is marked inactive after notification (one-time alert)
+
+**Note:** Database Webhook → Edge Function → Push delivery is planned for future implementation to enable notifications when app is not open.
 
 ### Connection State & Auto-Reconnection
 
@@ -207,8 +211,15 @@ The app tracks WebSocket connection state and auto-reconnects on failure:
 
 - Uses **VAPID authentication**
 - Works even when the app is closed
-- Implemented via Service Worker (`sw.js`)
+- Implemented via Service Worker (`public/sw.js`)
+- Subscriptions stored in Supabase `subscriptions` table
 - One notification per subscription (anti-spam)
+
+**Current Implementation:**
+
+- Frontend manages subscriptions via `src/pwa.ts`
+- Service Worker handles push events and displays notifications
+- Edge Function for push delivery is planned but not yet implemented
 
 ---
 
@@ -261,19 +272,31 @@ yarn format       # Prettier format
 │   └── supabase.ts          # Supabase client
 ├── src/
 │   ├── components/
+│   │   ├── common/          # Shared UI components
+│   │   │   ├── AvailabilityBadge.tsx
+│   │   │   ├── ConnectionIndicator.tsx
+│   │   │   └── DistanceBadge.tsx
+│   │   ├── layout/          # Layout components
+│   │   │   ├── AppLayout.tsx
+│   │   │   └── TabNavigation.tsx
 │   │   ├── search/          # Search feature components
 │   │   │   ├── SearchTab.tsx
 │   │   │   ├── SearchResults.tsx
 │   │   │   ├── StationResultCard.tsx
-│   │   │   └── RadiusSelector.tsx
-│   │   ├── ChargingStationInfo.tsx
+│   │   │   ├── RadiusSelector.tsx
+│   │   │   └── SearchProgressBar.tsx
+│   │   ├── station/         # Station monitoring components
+│   │   │   ├── StationDetails.tsx
+│   │   │   ├── StationEmptyState.tsx
+│   │   │   └── StationTab.tsx
 │   │   ├── PortCard.tsx
+│   │   ├── PortsList.tsx
+│   │   ├── LoadingSkeleton.tsx
 │   │   └── ErrorBoundary.tsx
 │   ├── context/
 │   │   └── PrimaryStationContext.tsx
 │   ├── hooks/
 │   │   ├── useStationData.ts    # TTL-based station data loading ✨
-│   │   ├── useCharger.ts        # (deprecated - use useStationData)
 │   │   ├── useStationSearch.ts
 │   │   └── useUserLocation.ts
 │   ├── services/
@@ -282,7 +305,6 @@ yarn format       # Prettier format
 │   ├── utils/
 │   │   ├── maps.ts
 │   │   ├── time.ts
-│   │   ├── station.ts       # shouldSaveStationToCache utility
 │   │   └── reconnectionManager.ts  # Auto-reconnect with backoff
 │   ├── constants/
 │   │   └── index.ts         # API endpoints, status enums
@@ -311,7 +333,7 @@ yarn test:coverage # Coverage report
 
 Key test files:
 
-- `src/utils/station.test.ts` - Database save rules
+- `src/services/stationApi.test.ts` - Database save rules
 - `src/utils/maps.test.ts` - Distance calculations
 - `src/utils/time.test.ts` - Duration formatting
 - `api/charger.test.ts` - Supabase subscriptions
