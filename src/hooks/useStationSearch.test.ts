@@ -29,14 +29,7 @@ vi.mock('../services/localSearch', () => ({
 }));
 
 // Mock GeolocationPositionError (not available in test environment)
-interface GeolocationPositionErrorConstructor {
-  new (message: string, code: number): GeolocationPositionError;
-  readonly PERMISSION_DENIED: number;
-  readonly POSITION_UNAVAILABLE: number;
-  readonly TIMEOUT: number;
-}
-
-global.GeolocationPositionError = class GeolocationPositionError extends Error {
+class MockGeolocationPositionError extends Error {
   code: number;
   PERMISSION_DENIED = 1;
   POSITION_UNAVAILABLE = 2;
@@ -47,7 +40,10 @@ global.GeolocationPositionError = class GeolocationPositionError extends Error {
     this.code = code;
     this.name = 'GeolocationPositionError';
   }
-} as unknown as GeolocationPositionErrorConstructor;
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+(globalThis as any).GeolocationPositionError = MockGeolocationPositionError;
 
 // Helper to create mock GeolocationCoordinates with toJSON method
 function createMockCoords(lat: number, lon: number): GeolocationCoordinates {
@@ -68,6 +64,21 @@ function createMockCoords(lat: number, lon: number): GeolocationCoordinates {
         altitudeAccuracy: this.altitudeAccuracy,
         heading: this.heading,
         speed: this.speed,
+      };
+    },
+  };
+}
+
+// Helper to create mock GeolocationPosition with toJSON method
+function createMockPosition(lat: number, lon: number): GeolocationPosition {
+  const coords = createMockCoords(lat, lon);
+  return {
+    coords,
+    timestamp: Date.now(),
+    toJSON() {
+      return {
+        coords: coords.toJSON(),
+        timestamp: this.timestamp,
       };
     },
   };
@@ -141,10 +152,7 @@ describe('useStationSearch', () => {
   });
 
   it('should call searchNearby Edge Function with correct params', async () => {
-    vi.mocked(iberdrola.getUserLocation).mockResolvedValue({
-      coords: createMockCoords(38.84, -0.12),
-      timestamp: Date.now(),
-    });
+    vi.mocked(iberdrola.getUserLocation).mockResolvedValue(createMockPosition(38.84, -0.12));
 
     vi.mocked(apiClient.searchNearby).mockResolvedValue(createSuccessResponse([]));
 
@@ -180,10 +188,7 @@ describe('useStationSearch', () => {
       },
     ];
 
-    vi.mocked(iberdrola.getUserLocation).mockResolvedValue({
-      coords: createMockCoords(38.84, -0.12),
-      timestamp: Date.now(),
-    });
+    vi.mocked(iberdrola.getUserLocation).mockResolvedValue(createMockPosition(38.84, -0.12));
 
     vi.mocked(apiClient.searchNearby).mockResolvedValue(createSuccessResponse(mockStations));
 
@@ -225,10 +230,7 @@ describe('useStationSearch', () => {
       },
     ];
 
-    vi.mocked(iberdrola.getUserLocation).mockResolvedValue({
-      coords: createMockCoords(38.84, -0.12),
-      timestamp: Date.now(),
-    });
+    vi.mocked(iberdrola.getUserLocation).mockResolvedValue(createMockPosition(38.84, -0.12));
 
     vi.mocked(apiClient.searchNearby).mockResolvedValue(
       createSuccessResponse(mockStations, true) // scraper_triggered = true
@@ -248,10 +250,7 @@ describe('useStationSearch', () => {
   });
 
   it('should set scraperTriggered to false when meta.scraper_triggered is false', async () => {
-    vi.mocked(iberdrola.getUserLocation).mockResolvedValue({
-      coords: createMockCoords(38.84, -0.12),
-      timestamp: Date.now(),
-    });
+    vi.mocked(iberdrola.getUserLocation).mockResolvedValue(createMockPosition(38.84, -0.12));
 
     vi.mocked(apiClient.searchNearby).mockResolvedValue(
       createSuccessResponse([], false) // scraper_triggered = false
@@ -271,10 +270,7 @@ describe('useStationSearch', () => {
   });
 
   it('should show error when no stations found', async () => {
-    vi.mocked(iberdrola.getUserLocation).mockResolvedValue({
-      coords: createMockCoords(38.84, -0.12),
-      timestamp: Date.now(),
-    });
+    vi.mocked(iberdrola.getUserLocation).mockResolvedValue(createMockPosition(38.84, -0.12));
 
     vi.mocked(apiClient.searchNearby).mockResolvedValue(createSuccessResponse([]));
 
@@ -307,10 +303,7 @@ describe('useStationSearch', () => {
       },
     ];
 
-    vi.mocked(iberdrola.getUserLocation).mockResolvedValue({
-      coords: createMockCoords(38.84, -0.12),
-      timestamp: Date.now(),
-    });
+    vi.mocked(iberdrola.getUserLocation).mockResolvedValue(createMockPosition(38.84, -0.12));
 
     vi.mocked(apiClient.searchNearby).mockResolvedValue(createErrorResponse('Edge Function error'));
 
@@ -335,10 +328,7 @@ describe('useStationSearch', () => {
   });
 
   it('should show error when both Edge Function and local fallback fail', async () => {
-    vi.mocked(iberdrola.getUserLocation).mockResolvedValue({
-      coords: createMockCoords(38.84, -0.12),
-      timestamp: Date.now(),
-    });
+    vi.mocked(iberdrola.getUserLocation).mockResolvedValue(createMockPosition(38.84, -0.12));
 
     vi.mocked(apiClient.searchNearby).mockResolvedValue(
       createErrorResponse('Edge Function unavailable')
@@ -363,7 +353,7 @@ describe('useStationSearch', () => {
 
   it('should handle geolocation error', async () => {
     vi.mocked(iberdrola.getUserLocation).mockRejectedValue(
-      new GeolocationPositionError('User denied Geolocation', 1)
+      new MockGeolocationPositionError('User denied Geolocation', 1)
     );
 
     const { result } = renderHook(() => useStationSearch());
@@ -381,10 +371,7 @@ describe('useStationSearch', () => {
   });
 
   it('should handle network errors', async () => {
-    vi.mocked(iberdrola.getUserLocation).mockResolvedValue({
-      coords: createMockCoords(38.84, -0.12),
-      timestamp: Date.now(),
-    });
+    vi.mocked(iberdrola.getUserLocation).mockResolvedValue(createMockPosition(38.84, -0.12));
 
     vi.mocked(apiClient.searchNearby).mockRejectedValue(new Error('Network error'));
 
@@ -404,16 +391,7 @@ describe('useStationSearch', () => {
   it('should set loading state during search', async () => {
     vi.mocked(iberdrola.getUserLocation).mockImplementation(
       () =>
-        new Promise((resolve) =>
-          setTimeout(
-            () =>
-              resolve({
-                coords: createMockCoords(38.84, -0.12),
-                timestamp: Date.now(),
-              }),
-            100
-          )
-        )
+        new Promise((resolve) => setTimeout(() => resolve(createMockPosition(38.84, -0.12)), 100))
     );
 
     vi.mocked(apiClient.searchNearby).mockResolvedValue(createSuccessResponse([]));
@@ -433,10 +411,7 @@ describe('useStationSearch', () => {
   });
 
   it('should reset state when starting new search', async () => {
-    vi.mocked(iberdrola.getUserLocation).mockResolvedValue({
-      coords: createMockCoords(38.84, -0.12),
-      timestamp: Date.now(),
-    });
+    vi.mocked(iberdrola.getUserLocation).mockResolvedValue(createMockPosition(38.84, -0.12));
 
     vi.mocked(apiClient.searchNearby).mockResolvedValue(createSuccessResponse([]));
 

@@ -232,12 +232,11 @@ describe('subscribeToStationNotifications', () => {
 
     // Setup default mocks
     globalThis.Notification = {
-      // @ts-expect-error - Mock
       permission: 'granted',
       requestPermission: vi.fn().mockResolvedValue('granted'),
-    };
+    } as unknown as typeof Notification;
 
-    globalThis.PushManager = vi.fn();
+    globalThis.PushManager = vi.fn() as unknown as typeof PushManager;
 
     // Mock fetch
     globalThis.fetch = vi.fn().mockResolvedValue({
@@ -277,10 +276,10 @@ describe('subscribeToStationNotifications', () => {
 
   it('should request permission when permission is default', async () => {
     const mockRequestPermission = vi.fn().mockResolvedValue('granted');
-    // @ts-expect-error - Mock
-    globalThis.Notification.permission = 'default';
-    // @ts-expect-error - Mock
-    globalThis.Notification.requestPermission = mockRequestPermission;
+    (globalThis.Notification as { permission: string }).permission = 'default';
+    (
+      globalThis.Notification as { requestPermission: typeof mockRequestPermission }
+    ).requestPermission = mockRequestPermission;
 
     const mockSubscription = {
       endpoint: 'https://fcm.googleapis.com/test',
