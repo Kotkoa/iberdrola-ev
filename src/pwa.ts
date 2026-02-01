@@ -1,3 +1,6 @@
+import { startWatch, isApiSuccess } from './services/apiClient';
+import type { StartWatchData } from './types/api';
+
 const SAVE_SUBSCRIPTION_ENDPOINT =
   import.meta.env.VITE_SAVE_SUBSCRIPTION_URL ?? '/save-subscription';
 
@@ -6,6 +9,17 @@ const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
 const MAX_RETRY_ATTEMPTS = 3;
 const RETRY_DELAY_MS = 1000;
+
+/**
+ * Result from start-watch API call
+ */
+export interface StartWatchResult {
+  subscriptionId: string;
+  taskId: string;
+  currentStatus: StartWatchData['current_status'];
+  fresh: boolean;
+  nextPollIn: number | null;
+}
 
 interface NavigatorStandalone extends Navigator {
   standalone?: boolean;
@@ -170,4 +184,96 @@ function urlBase64ToUint8Array(base64String: string) {
   }
 
   return outputArray;
+}
+
+function arrayBufferToBase64(buffer: ArrayBuffer): string {
+  return btoa(String.fromCharCode(...new Uint8Array(buffer)));
+}
+
+/**
+ * Subscribe to station notifications using the new start-watch API
+ * This triggers server-side polling and returns current status
+ *
+ * @param cuprId - CUPR ID for the station
+ * @param portNumber - Port number (1 or 2) or null for any port
+ * @returns StartWatchResult with subscription info and current status
+ */
+export async function subscribeWithWatch(
+  cuprId: number,
+  portNumber: 1 | 2 | null
+): Promise<StartWatchResult> {
+  if (!isPushSupported()) {
+    throw new Error('Push notifications are not supported in this browser.');
+  }
+
+  if (!VAPID_PUBLIC_KEY) {
+    throw new Error('VAPID public key not set.');
+  }
+
+  // Request notification permission
+  let permission: NotificationPermission = Notification.permission;
+
+  if (permission === 'default') {
+    permission = await Notification.requestPermission();
+  } else if (permission === 'denied') {
+    throw new Error('Notifications are blocked. Please allow them in browser settings.');
+  }
+
+  if (permission !== 'granted') {
+    throw new Error('Subscription is not possible without notification permission.');
+  }
+
+  // Get push subscription
+  const registration = await navigator.serviceWorker.ready;
+  let subscription = await registration.pushManager.getSubscription();
+
+  // Check if existing subscription has matching VAPID key
+  if (subscription) {
+    const expectedKey = urlBase64ToUint8Array(VAPID_PUBLIC_KEY);
+    const existingKey = subscription.options?.applicationServerKey
+      ? new Uint8Array(subscription.options.applicationServerKey as ArrayBuffer)
+      : null;
+
+    const keysMatch =
+      existingKey &&
+      existingKey.length === expectedKey.length &&
+      existingKey.every((byte, i) => byte === expectedKey[i]);
+
+    if (!keysMatch) {
+      await subscription.unsubscribe();
+      subscription = null;
+    }
+  }
+
+  if (!subscription) {
+    subscription = await registration.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
+    });
+  }
+
+  // Call start-watch API
+  const result = await startWatch({
+    cupr_id: cuprId,
+    port: portNumber,
+    subscription: {
+      endpoint: subscription.endpoint,
+      keys: {
+        p256dh: arrayBufferToBase64(subscription.getKey('p256dh')!),
+        auth: arrayBufferToBase64(subscription.getKey('auth')!),
+      },
+    },
+  });
+
+  if (!isApiSuccess(result)) {
+    throw new Error(result.error.message);
+  }
+
+  return {
+    subscriptionId: result.data.subscription_id,
+    taskId: result.data.task_id,
+    currentStatus: result.data.current_status,
+    fresh: result.data.fresh,
+    nextPollIn: result.data.next_poll_in,
+  };
 }

@@ -13,6 +13,8 @@ import type { RealtimeConnectionState } from '../../types/realtime';
 
 interface PrimaryStationContextValue {
   primaryStationId: number | null;
+  /** CUPR ID for the primary station (used for API calls) */
+  primaryStationCuprId: number | undefined;
   primaryStation: ChargerStatus | null;
   loading: boolean;
   error: string | null;
@@ -77,6 +79,7 @@ export function PrimaryStationProvider({ children }: PrimaryStationProviderProps
 
   const value: PrimaryStationContextValue = {
     primaryStationId: stationData?.cpId ?? null,
+    primaryStationCuprId: stationData?.cuprId,
     primaryStation,
     loading,
     error,

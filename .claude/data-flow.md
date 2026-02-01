@@ -119,13 +119,17 @@ Merge realtime updates (only if newer than current)
 
 ### State Machine
 
-The new architecture uses a state machine instead of multiple boolean flags:
+The architecture uses a state machine instead of multiple boolean flags:
 
 - **idle**: No station selected
 - **loading_cache**: Fetching from Supabase
-- **loading_api**: Fetching from Edge (cache miss/stale)
+- **loading_api**: Fetching from Edge via poll-station
 - **ready**: Data available
 - **error**: Error occurred
+
+Additional state fields for rate limiting:
+- **isRateLimited**: true if last poll was rate limited
+- **nextPollIn**: seconds until next poll allowed (from retry_after)
 
 ### Key Functions
 
@@ -171,3 +175,79 @@ const isFresh = ageMs <= 15 * 60 * 1000; // < 15 minutes
 - API request reduction: ~90% on repeated searches
 
 **See**: [.claude/caching-strategy.md](caching-strategy.md) for detailed documentation
+
+## Edge Function Integration
+
+### API Client
+
+The frontend uses a unified API client for Edge Function calls:
+
+**File**: [src/services/apiClient.ts](../src/services/apiClient.ts)
+
+```typescript
+// Poll station status (on-demand)
+pollStation(cuprId: number): Promise<ApiResponse<PollStationData>>
+
+// Subscribe with immediate polling
+startWatch(request: StartWatchRequest): Promise<ApiResponse<StartWatchData>>
+
+// Type guards
+isApiSuccess<T>(response): response is ApiSuccessResponse<T>
+isRateLimited(response): response is ApiErrorResponse
+isApiError(response): response is ApiErrorResponse
+```
+
+### Rate Limiting
+
+Rate limiting is handled at two levels:
+
+1. **Server-side (Edge Function)**: 5-minute cooldown per station
+2. **Client-side cache**: Prevents unnecessary API calls
+
+**File**: [src/utils/rateLimitCache.ts](../src/utils/rateLimitCache.ts)
+
+```typescript
+// Check if station is rate limited
+isStationRateLimited(cuprId: number): boolean
+
+// Mark station as rate limited
+markRateLimited(cuprId: number, retryAfterSeconds: number): void
+
+// Clear rate limit for a station
+clearStationRateLimit(cuprId: number): void
+
+// Clear entire cache
+clearRateLimitCache(): void
+```
+
+**Flow in useStationData**:
+
+```
+Cache is stale/missing?
+    ↓
+Check isStationRateLimited(cuprId)
+    ├─ Rate limited → Use stale cache, set isRateLimited=true
+    └─ Not limited → Call poll-station API
+                     ├─ Success → Use fresh data
+                     ├─ RATE_LIMITED → markRateLimited(), use cache
+                     └─ Error → Show error
+```
+
+### Push Notifications with start-watch
+
+The `subscribeWithWatch` function combines push subscription with immediate polling:
+
+**File**: [src/pwa.ts](../src/pwa.ts)
+
+```typescript
+subscribeWithWatch(cuprId: number, portNumber: 1 | 2 | null): Promise<StartWatchResult>
+```
+
+**Returns**:
+- `subscriptionId`: UUID of the subscription
+- `taskId`: UUID of the background polling task
+- `currentStatus`: Current port statuses
+- `fresh`: Whether data was freshly polled or from cache
+- `nextPollIn`: Seconds until next poll (if rate limited)
+
+**Used by**: [StationTab.tsx](../src/components/station/StationTab.tsx) in `handleSubscribeClick`

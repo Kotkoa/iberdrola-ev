@@ -185,6 +185,139 @@ Content-Type: application/json
 Authorization: Bearer <SUPABASE_ANON_KEY>
 ```
 
+### POST /functions/v1/poll-station
+
+On-demand polling of a single station status. Returns current data with rate limiting.
+
+**Request:**
+```typescript
+interface PollStationRequest {
+  cupr_id: number;  // CUPR ID of the station
+}
+```
+
+**Response (Success):**
+```typescript
+interface PollStationSuccessResponse {
+  ok: true;
+  data: {
+    cp_id: number;
+    port1_status: string | null;
+    port2_status: string | null;
+    overall_status: string | null;
+    observed_at: string;  // ISO timestamp
+  };
+  meta: {
+    fresh: boolean;            // Always false (data from cache)
+    scraper_triggered: boolean; // true if GitHub Action was triggered
+    retry_after: number | null; // seconds until next trigger allowed (if rate limited)
+  };
+}
+```
+
+**Architecture Note:**
+poll-station returns cached data immediately and triggers a GitHub Action scraper in the background.
+The scraper fetches fresh data from Iberdrola API and saves to `station_snapshots`.
+Frontend receives updates via Supabase Realtime subscription (~30-60 seconds after trigger).
+
+**Response (Rate Limited):**
+```typescript
+interface PollStationRateLimitResponse {
+  ok: false;
+  error: {
+    code: 'RATE_LIMITED';
+    message: string;
+    retry_after: number;  // seconds until next poll allowed
+  };
+}
+```
+
+**Response (Error):**
+```typescript
+interface PollStationErrorResponse {
+  ok: false;
+  error: {
+    code: 'VALIDATION_ERROR' | 'NOT_FOUND' | 'UPSTREAM_ERROR' | 'INTERNAL_ERROR';
+    message: string;
+  };
+}
+```
+
+**Headers Required:**
+```
+Content-Type: application/json
+Authorization: Bearer <SUPABASE_ANON_KEY>
+```
+
+**Rate Limiting:**
+- 5-minute cooldown per station (cupr_id)
+- Returns cached data with `RATE_LIMITED` code when within cooldown
+- Client should use `retry_after` value to track when next poll is allowed
+
+---
+
+### POST /functions/v1/start-watch
+
+Subscribe to station notifications with immediate polling. Creates subscription and starts server-side polling task.
+
+**Request:**
+```typescript
+interface StartWatchRequest {
+  cupr_id: number;
+  port: 1 | 2 | null;  // null = any port
+  subscription: {
+    endpoint: string;  // Push subscription endpoint
+    keys: {
+      p256dh: string;  // Base64 encoded
+      auth: string;    // Base64 encoded
+    };
+  };
+}
+```
+
+**Response (Success):**
+```typescript
+interface StartWatchSuccessResponse {
+  ok: true;
+  data: {
+    subscription_id: string;  // UUID of created subscription
+    task_id: string;          // UUID of polling task
+    current_status: {
+      port1_status: string | null;
+      port2_status: string | null;
+      observed_at: string;
+    };
+    fresh: boolean;           // true if data was just fetched, false if from cache
+    next_poll_in: number | null;  // seconds until next poll (if rate limited)
+  };
+}
+```
+
+**Response (Error):**
+```typescript
+interface StartWatchErrorResponse {
+  ok: false;
+  error: {
+    code: 'VALIDATION_ERROR' | 'RATE_LIMITED' | 'INTERNAL_ERROR';
+    message: string;
+    retry_after?: number;
+  };
+}
+```
+
+**Headers Required:**
+```
+Content-Type: application/json
+Authorization: Bearer <SUPABASE_ANON_KEY>
+```
+
+**Behavior:**
+1. Validates subscription and port number
+2. Saves/updates push subscription in database
+3. Triggers immediate poll for current status
+4. Starts background polling task (5-minute intervals)
+5. Returns current status and task metadata
+
 ---
 
 ## 4. Frontend Data Access Patterns
@@ -320,12 +453,33 @@ User selects station (cpId, cuprId)
 |  +-----------+--------------------------+   |
 |  | Fresh     | Stale/Missing            |   |
 |  |           |                          |   |
-|  | Use cache | Set state: 'loading_api' |   |
-|  |           | fetchStationViaEdge()    |   |
+|  | Use cache | Check rate limit cache   |   |
+|  |           |                          |   |
 |  +-----------+--------------------------+   |
+|              |                              |
+|      +-------+-------+                      |
+|      | Rate limited? |                      |
+|      +-------+-------+                      |
+|              |                              |
+|     Yes      |      No                      |
+|      |       |       |                      |
+|      v       |       v                      |
+|  Use stale   |  POST /poll-station          |
+|  cache       |       |                      |
+|              |  +----+----+                 |
+|              |  | Result? |                 |
+|              |  +----+----+                 |
+|              |       |                      |
+|         Success    Rate Limited    Error    |
+|           |           |             |       |
+|           v           v             v       |
+|         Use         Mark in       Show      |
+|         data        cache +       error     |
+|                     stale                   |
 |                                             |
 |  4. Subscribe to realtime (immediate)       |
 |  5. Set state: 'ready' or 'error'           |
+|  6. Set isRateLimited, nextPollIn           |
 +---------------------------------------------+
          |
          v
@@ -336,6 +490,45 @@ User selects station (cpId, cuprId)
          |
          v
     Merge if newer (timestamp check)
+```
+
+### Subscription Flow (start-watch)
+
+```
+User clicks "Get Notified" button
+         |
+         v
++---------------------------------------------+
+|        subscribeWithWatch (pwa.ts)          |
+|                                             |
+|  1. Check push support                      |
+|  2. Request notification permission         |
+|  3. Get/create push subscription            |
+|  4. POST /start-watch with:                 |
+|     - cupr_id                               |
+|     - port (1, 2, or null)                  |
+|     - subscription (endpoint + keys)        |
+|                                             |
+|  Response:                                  |
+|  +--------------------------------------+   |
+|  | subscription_id: UUID                |   |
+|  | task_id: UUID (polling task)         |   |
+|  | current_status: port1/port2 status   |   |
+|  | fresh: boolean (data freshness)      |   |
+|  | next_poll_in: seconds or null        |   |
+|  +--------------------------------------+   |
+|                                             |
+|  5. Return result to component              |
++---------------------------------------------+
+         |
+         v
+    Update button state to "Subscribed"
+         |
+         v
+    Server polls station every 5 min
+         |
+         v
+    Push notification when status changes
 ```
 
 ### Search Flow
@@ -415,7 +608,80 @@ interface StationDataStatus {
   connectionState: RealtimeConnectionState;
   hasRealtime: boolean;
   isStale: boolean;
+  isRateLimited: boolean;      // true if last poll was rate limited
+  nextPollIn: number | null;   // seconds until next poll allowed
 }
+```
+
+### API Response Types
+
+```typescript
+// File: src/types/api.ts
+
+// Unified API response format
+interface ApiSuccessResponse<T> {
+  ok: true;
+  data: T;
+}
+
+interface ApiErrorResponse {
+  ok: false;
+  error: {
+    code: ApiErrorCode;
+    message: string;
+    retry_after?: number;  // Present for RATE_LIMITED errors
+  };
+}
+
+type ApiResponse<T> = ApiSuccessResponse<T> | ApiErrorResponse;
+
+type ApiErrorCode =
+  | 'VALIDATION_ERROR'
+  | 'UNAUTHORIZED'
+  | 'NOT_FOUND'
+  | 'RATE_LIMITED'
+  | 'UPSTREAM_ERROR'
+  | 'INTERNAL_ERROR';
+
+// poll-station response data
+interface PollStationData {
+  cp_id: number;
+  port1_status: string | null;
+  port2_status: string | null;
+  overall_status: string | null;
+  observed_at: string;
+}
+
+// start-watch request
+interface StartWatchRequest {
+  cupr_id: number;
+  port: 1 | 2 | null;
+  subscription: {
+    endpoint: string;
+    keys: {
+      p256dh: string;
+      auth: string;
+    };
+  };
+}
+
+// start-watch response data
+interface StartWatchData {
+  subscription_id: string;
+  task_id: string;
+  current_status: {
+    port1_status: string | null;
+    port2_status: string | null;
+    observed_at: string;
+  };
+  fresh: boolean;
+  next_poll_in: number | null;
+}
+
+// Type guards
+function isApiSuccess<T>(response: ApiResponse<T>): response is ApiSuccessResponse<T>;
+function isRateLimited(response: ApiResponse<unknown>): response is ApiErrorResponse;
+function isApiError(response: ApiResponse<unknown>): response is ApiErrorResponse;
 ```
 
 ### Realtime Types

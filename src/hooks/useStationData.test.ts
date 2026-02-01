@@ -2,9 +2,11 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, waitFor } from '@testing-library/react';
 import { useStationData } from './useStationData';
 import * as charger from '../../api/charger';
-import * as stationApi from '../services/stationApi';
+import * as apiClient from '../services/apiClient';
+import * as rateLimitCache from '../utils/rateLimitCache';
 import * as time from '../utils/time';
 import type { RealtimeConnectionState } from '../../types/realtime';
+import type { ApiResponse, PollStationData } from '../types/api';
 
 // Mock modules
 vi.mock('../../api/charger', () => ({
@@ -14,8 +16,17 @@ vi.mock('../../api/charger', () => ({
   snapshotToChargerStatus: vi.fn(),
 }));
 
-vi.mock('../services/stationApi', () => ({
-  fetchStationViaEdge: vi.fn(),
+vi.mock('../services/apiClient', () => ({
+  pollStation: vi.fn(),
+  isApiSuccess: vi.fn((response: ApiResponse<unknown>) => response.ok === true),
+  isRateLimited: vi.fn(
+    (response: ApiResponse<unknown>) => !response.ok && response.error.code === 'RATE_LIMITED'
+  ),
+}));
+
+vi.mock('../utils/rateLimitCache', () => ({
+  isStationRateLimited: vi.fn(),
+  markRateLimited: vi.fn(),
 }));
 
 vi.mock('../utils/time', () => ({
@@ -73,6 +84,36 @@ describe('useStationData', () => {
     situation_code: 'OPER',
   };
 
+  const mockPollData: PollStationData = {
+    cp_id: 12345,
+    port1_status: 'AVAILABLE',
+    port2_status: 'OCCUPIED',
+    overall_status: 'AVAILABLE',
+    observed_at: '2024-01-01T12:00:00Z',
+  };
+
+  const mockPollSuccessResponse: ApiResponse<PollStationData> = {
+    ok: true,
+    data: mockPollData,
+  };
+
+  const mockPollRateLimitResponse: ApiResponse<PollStationData> = {
+    ok: false,
+    error: {
+      code: 'RATE_LIMITED',
+      message: 'Too many requests',
+      retry_after: 300,
+    },
+  };
+
+  const mockPollNotFoundResponse: ApiResponse<PollStationData> = {
+    ok: false,
+    error: {
+      code: 'NOT_FOUND',
+      message: 'Station not found',
+    },
+  };
+
   // Helper to create mock SubscriptionResult
   const createMockSubscriptionResult = (
     onConnectionStateChange?: (state: RealtimeConnectionState) => void
@@ -97,6 +138,8 @@ describe('useStationData', () => {
         createMockSubscriptionResult(onConnectionStateChange)
     );
     vi.mocked(charger.snapshotToChargerStatus).mockReturnValue(mockChargerStatus);
+    // Default: not rate limited
+    vi.mocked(rateLimitCache.isStationRateLimited).mockReturnValue(false);
   });
 
   afterEach(() => {
@@ -147,13 +190,13 @@ describe('useStationData', () => {
       vi.mocked(charger.getLatestSnapshot).mockResolvedValue(mockSnapshot);
       vi.mocked(charger.getStationMetadata).mockResolvedValue(mockMetadata);
       vi.mocked(time.isDataStale).mockReturnValue(true); // Stale data
-      vi.mocked(stationApi.fetchStationViaEdge).mockResolvedValue(mockChargerStatus);
+      vi.mocked(apiClient.pollStation).mockResolvedValue(mockPollSuccessResponse);
 
       const { result } = renderHook(() => useStationData(12345, 67890));
 
       await waitFor(() => {
         expect(result.current.state).toBe('ready');
-        expect(stationApi.fetchStationViaEdge).toHaveBeenCalledWith(12345, 67890);
+        expect(apiClient.pollStation).toHaveBeenCalledWith(67890);
       });
     });
 
@@ -180,7 +223,7 @@ describe('useStationData', () => {
 
       await waitFor(() => {
         expect(time.isDataStale).toHaveBeenCalledWith(mockSnapshot.created_at, 15);
-        expect(stationApi.fetchStationViaEdge).not.toHaveBeenCalled();
+        expect(apiClient.pollStation).not.toHaveBeenCalled();
       });
     });
 
@@ -188,12 +231,12 @@ describe('useStationData', () => {
       vi.mocked(charger.getLatestSnapshot).mockResolvedValue(mockSnapshot);
       vi.mocked(charger.getStationMetadata).mockResolvedValue(mockMetadata);
       vi.mocked(time.isDataStale).mockReturnValue(true);
-      vi.mocked(stationApi.fetchStationViaEdge).mockResolvedValue(mockChargerStatus);
+      vi.mocked(apiClient.pollStation).mockResolvedValue(mockPollSuccessResponse);
 
       renderHook(() => useStationData(12345, 67890, 5));
 
       await waitFor(() => {
-        expect(stationApi.fetchStationViaEdge).toHaveBeenCalledWith(12345, 67890);
+        expect(apiClient.pollStation).toHaveBeenCalledWith(67890);
       });
     });
 
@@ -207,7 +250,7 @@ describe('useStationData', () => {
       await waitFor(() => {
         // Should still become ready using stale data
         expect(result.current.state).toBe('ready');
-        expect(stationApi.fetchStationViaEdge).not.toHaveBeenCalled();
+        expect(apiClient.pollStation).not.toHaveBeenCalled();
       });
     });
   });
@@ -357,13 +400,13 @@ describe('useStationData', () => {
       vi.mocked(charger.getLatestSnapshot).mockResolvedValue(null);
       vi.mocked(charger.getStationMetadata).mockResolvedValue(mockMetadata);
       vi.mocked(time.isDataStale).mockReturnValue(true);
-      vi.mocked(stationApi.fetchStationViaEdge).mockResolvedValue(mockChargerStatus);
+      vi.mocked(apiClient.pollStation).mockResolvedValue(mockPollSuccessResponse);
 
       const { result } = renderHook(() => useStationData(12345, 67890));
 
       await waitFor(() => {
         expect(result.current.state).toBe('ready');
-        expect(stationApi.fetchStationViaEdge).toHaveBeenCalled();
+        expect(apiClient.pollStation).toHaveBeenCalled();
       });
     });
 
@@ -380,17 +423,64 @@ describe('useStationData', () => {
       });
     });
 
-    it('should show error when Edge returns null', async () => {
+    it('should show error when poll-station returns NOT_FOUND', async () => {
       vi.mocked(charger.getLatestSnapshot).mockResolvedValue(null);
       vi.mocked(charger.getStationMetadata).mockResolvedValue(mockMetadata);
       vi.mocked(time.isDataStale).mockReturnValue(true);
-      vi.mocked(stationApi.fetchStationViaEdge).mockResolvedValue(null);
+      vi.mocked(apiClient.pollStation).mockResolvedValue(mockPollNotFoundResponse);
 
       const { result } = renderHook(() => useStationData(12345, 67890));
 
       await waitFor(() => {
         expect(result.current.state).toBe('error');
         expect(result.current.error).toBe('Station not found');
+      });
+    });
+  });
+
+  describe('rate limiting', () => {
+    it('should use cache when station is rate limited in cache', async () => {
+      vi.mocked(charger.getLatestSnapshot).mockResolvedValue(mockSnapshot);
+      vi.mocked(charger.getStationMetadata).mockResolvedValue(mockMetadata);
+      vi.mocked(time.isDataStale).mockReturnValue(true);
+      vi.mocked(rateLimitCache.isStationRateLimited).mockReturnValue(true);
+
+      const { result } = renderHook(() => useStationData(12345, 67890));
+
+      await waitFor(() => {
+        expect(result.current.state).toBe('ready');
+        expect(result.current.isRateLimited).toBe(true);
+        expect(apiClient.pollStation).not.toHaveBeenCalled();
+      });
+    });
+
+    it('should mark rate limited and use cache on RATE_LIMITED response', async () => {
+      vi.mocked(charger.getLatestSnapshot).mockResolvedValue(mockSnapshot);
+      vi.mocked(charger.getStationMetadata).mockResolvedValue(mockMetadata);
+      vi.mocked(time.isDataStale).mockReturnValue(true);
+      vi.mocked(apiClient.pollStation).mockResolvedValue(mockPollRateLimitResponse);
+
+      const { result } = renderHook(() => useStationData(12345, 67890));
+
+      await waitFor(() => {
+        expect(result.current.state).toBe('ready');
+        expect(result.current.isRateLimited).toBe(true);
+        expect(result.current.nextPollIn).toBe(300);
+        expect(rateLimitCache.markRateLimited).toHaveBeenCalledWith(67890, 300);
+      });
+    });
+
+    it('should show error on rate limit with no cache', async () => {
+      vi.mocked(charger.getLatestSnapshot).mockResolvedValue(null);
+      vi.mocked(charger.getStationMetadata).mockResolvedValue(mockMetadata);
+      vi.mocked(time.isDataStale).mockReturnValue(true);
+      vi.mocked(apiClient.pollStation).mockResolvedValue(mockPollRateLimitResponse);
+
+      const { result } = renderHook(() => useStationData(12345, 67890));
+
+      await waitFor(() => {
+        expect(result.current.state).toBe('error');
+        expect(result.current.error).toBe('Data unavailable (rate limited)');
       });
     });
   });

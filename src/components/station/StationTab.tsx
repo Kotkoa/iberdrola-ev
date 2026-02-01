@@ -6,7 +6,7 @@ import { StationEmptyState } from './StationEmptyState';
 import { StationDetails } from './StationDetails';
 import { PortsList } from '../PortsList';
 import { LoadingSkeleton } from '../LoadingSkeleton';
-import { isPushSupported, isStandaloneApp, subscribeToStationNotifications } from '../../pwa';
+import { isPushSupported, isStandaloneApp, subscribeWithWatch } from '../../pwa';
 import { formatDuration } from '../../utils/time';
 import { calculateDistance } from '../../utils/maps';
 import { useUserLocation } from '../../hooks/useUserLocation';
@@ -20,7 +20,14 @@ interface StationTabProps {
 }
 
 export function StationTab({ onNavigateToSearch }: StationTabProps) {
-  const { primaryStation, loading, error, primaryStationId, connectionState } = usePrimaryStation();
+  const {
+    primaryStation,
+    loading,
+    error,
+    primaryStationId,
+    primaryStationCuprId,
+    connectionState,
+  } = usePrimaryStation();
   const { location: userLocation } = useUserLocation();
   const [now, setNow] = useState(() => new Date());
   const [pushAvailable, setPushAvailable] = useState(() => isPushSupported());
@@ -117,7 +124,7 @@ export function StationTab({ onNavigateToSearch }: StationTabProps) {
 
   const handleSubscribeClick = useCallback(
     async (portNumber: PortNumber) => {
-      if (!primaryStation) return;
+      if (!primaryStation || !primaryStationCuprId) return;
 
       // Debounce check
       const now = Date.now();
@@ -130,7 +137,10 @@ export function StationTab({ onNavigateToSearch }: StationTabProps) {
       setSubscriptionErrors((prev) => ({ ...prev, [portNumber]: null }));
       setSubscriptionState((prev) => ({ ...prev, [portNumber]: 'loading' }));
       try {
-        await subscribeToStationNotifications(primaryStation.cp_id, portNumber);
+        const result = await subscribeWithWatch(primaryStationCuprId, portNumber);
+        console.log(
+          `[StationTab] Subscription created: id=${result.subscriptionId}, fresh=${result.fresh}`
+        );
         setSubscriptionState((prev) => ({ ...prev, [portNumber]: 'success' }));
       } catch (err) {
         setSubscriptionState((prev) => ({ ...prev, [portNumber]: 'error' }));
@@ -140,7 +150,7 @@ export function StationTab({ onNavigateToSearch }: StationTabProps) {
         }));
       }
     },
-    [primaryStation]
+    [primaryStation, primaryStationCuprId]
   );
 
   if (primaryStationId === null) {

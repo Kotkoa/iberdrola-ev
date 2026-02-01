@@ -6,13 +6,47 @@ import {
   snapshotToChargerStatus,
   type StationSnapshot,
 } from '../../api/charger';
-import { fetchStationViaEdge } from '../services/stationApi';
+import { pollStation, isApiSuccess, isRateLimited } from '../services/apiClient';
+import { isStationRateLimited, markRateLimited } from '../utils/rateLimitCache';
 import { isDataStale } from '../utils/time';
 import { ReconnectionManager } from '../utils/reconnectionManager';
 import type { ChargerStatus, StationDataStatus, StationDataState } from '../../types/charger';
 import type { RealtimeConnectionState, SubscriptionResult } from '../../types/realtime';
+import type { PollStationData } from '../types/api';
 
 const TTL_MINUTES = 15;
+
+/**
+ * Converts poll-station API response to ChargerStatus
+ */
+function pollDataToChargerStatus(
+  pollData: PollStationData,
+  metadata?: {
+    cp_name?: string;
+    cp_latitude?: number;
+    cp_longitude?: number;
+    address_full?: string;
+  }
+): ChargerStatus {
+  return {
+    id: `poll-${pollData.cp_id}-${pollData.observed_at}`,
+    created_at: pollData.observed_at,
+    cp_id: pollData.cp_id,
+    cp_name: metadata?.cp_name ?? 'Unknown',
+    schedule: null,
+    port1_status: pollData.port1_status,
+    port2_status: pollData.port2_status,
+    port1_power_kw: null,
+    port1_update_date: pollData.observed_at,
+    port2_power_kw: null,
+    port2_update_date: pollData.observed_at,
+    overall_status: pollData.overall_status,
+    overall_update_date: pollData.observed_at,
+    cp_latitude: metadata?.cp_latitude,
+    cp_longitude: metadata?.cp_longitude,
+    address_full: metadata?.address_full,
+  };
+}
 
 /**
  * Manages station data with TTL-based freshness checking
@@ -55,6 +89,8 @@ export function useStationData(
   const [data, setData] = useState<ChargerStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [connectionState, setConnectionState] = useState<RealtimeConnectionState>('disconnected');
+  const [isRateLimitedState, setIsRateLimitedState] = useState(false);
+  const [nextPollIn, setNextPollIn] = useState<number | null>(null);
   const subscriptionRef = useRef<SubscriptionResult | null>(null);
   const reconnectionManagerRef = useRef<ReconnectionManager>(new ReconnectionManager());
   const metadataRef = useRef<{
@@ -87,6 +123,8 @@ export function useStationData(
           setData(null);
           setError(null);
           setConnectionState('disconnected');
+          setIsRateLimitedState(false);
+          setNextPollIn(null);
           currentDataTimestampRef.current = 0;
           reconnectionManagerRef.current.reset();
         }
@@ -177,23 +215,85 @@ export function useStationData(
           setData(chargerStatus);
           setInternalState('ready');
         } else if (cuprId !== undefined) {
-          // Stale or missing - fetch from Edge
-          console.log(
-            `[useStationData] Cache ${stale ? 'stale' : 'missing'} for ${cpId}, fetching from Edge`
-          );
-          setInternalState('loading_api');
-
-          const edgeData = await fetchStationViaEdge(cpId, cuprId);
-
-          if (!active) return;
-
-          if (edgeData) {
-            currentDataTimestampRef.current = new Date(edgeData.created_at).getTime();
-            setData(edgeData);
-            setInternalState('ready');
+          // Stale or missing - check rate limit cache first
+          if (isStationRateLimited(cuprId)) {
+            // Rate limited - use stale cache if available
+            console.log(`[useStationData] Rate limited for ${cpId}, using cache`);
+            if (snapshot) {
+              const chargerStatus = snapshotToChargerStatus(
+                snapshot,
+                metadataRef.current ?? undefined
+              );
+              currentDataTimestampRef.current = new Date(snapshot.created_at).getTime();
+              setData(chargerStatus);
+              setInternalState('ready');
+              setIsRateLimitedState(true);
+            } else {
+              setError('Data unavailable (rate limited)');
+              setInternalState('error');
+            }
           } else {
-            setError('Station not found');
-            setInternalState('error');
+            // Fetch from Edge via poll-station
+            console.log(
+              `[useStationData] Cache ${stale ? 'stale' : 'missing'} for ${cpId}, fetching from Edge`
+            );
+            setInternalState('loading_api');
+
+            const result = await pollStation(cuprId);
+
+            if (!active) return;
+
+            if (isApiSuccess(result)) {
+              const chargerStatus = pollDataToChargerStatus(
+                result.data,
+                metadataRef.current ?? undefined
+              );
+              currentDataTimestampRef.current = new Date(result.data.observed_at).getTime();
+              setData(chargerStatus);
+              setInternalState('ready');
+              setIsRateLimitedState(false);
+              setNextPollIn(null);
+            } else if (isRateLimited(result)) {
+              // Rate limited - mark in cache and use stale data
+              const retryAfter = result.error.retry_after ?? 300;
+              markRateLimited(cuprId, retryAfter);
+              console.log(`[useStationData] Rate limited for ${cpId}, retry after ${retryAfter}s`);
+
+              if (snapshot) {
+                const chargerStatus = snapshotToChargerStatus(
+                  snapshot,
+                  metadataRef.current ?? undefined
+                );
+                currentDataTimestampRef.current = new Date(snapshot.created_at).getTime();
+                setData(chargerStatus);
+                setInternalState('ready');
+                setIsRateLimitedState(true);
+                setNextPollIn(retryAfter);
+              } else {
+                setError('Data unavailable (rate limited)');
+                setInternalState('error');
+              }
+            } else {
+              // Other API error - try to use stale cache as fallback
+              console.log(
+                `[useStationData] API error for ${cpId}: ${result.error.code}, using cache fallback`
+              );
+
+              if (snapshot) {
+                // Use stale cache with indicator
+                const chargerStatus = snapshotToChargerStatus(
+                  snapshot,
+                  metadataRef.current ?? undefined
+                );
+                currentDataTimestampRef.current = new Date(snapshot.created_at).getTime();
+                setData(chargerStatus);
+                setInternalState('ready');
+              } else {
+                // No cache available, show API error message
+                setError(result.error.message);
+                setInternalState('error');
+              }
+            }
           }
         } else {
           // No cuprId, can't fetch from Edge
@@ -246,6 +346,8 @@ export function useStationData(
       connectionState: 'disconnected',
       hasRealtime: false,
       isStale: false,
+      isRateLimited: false,
+      nextPollIn: null,
     };
   }
 
@@ -259,5 +361,7 @@ export function useStationData(
     connectionState,
     hasRealtime,
     isStale: stale,
+    isRateLimited: isRateLimitedState,
+    nextPollIn,
   };
 }
