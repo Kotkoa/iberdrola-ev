@@ -71,4 +71,8 @@ export interface StationDataStatus {
   hasRealtime: boolean;
   /** Whether current data is stale (older than TTL) */
   isStale: boolean;
+  /** Whether the last poll request was rate limited (data from cache) */
+  isRateLimited: boolean;
+  /** Seconds until next poll is allowed (when rate limited) */
+  nextPollIn: number | null;
 }
