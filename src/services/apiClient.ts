@@ -20,7 +20,15 @@
  * ```
  */
 
-import type { ApiResponse, PollStationData, StartWatchData, StartWatchRequest } from '../types/api';
+import type {
+  ApiResponse,
+  ApiErrorResponse,
+  PollStationData,
+  StartWatchData,
+  StartWatchRequest,
+  SearchNearbySuccessResponse,
+  SearchNearbyRequest,
+} from '../types/api';
 
 // Re-export type guards for convenience
 export { isApiSuccess, isRateLimited, isApiError } from '../types/api';
@@ -124,6 +132,50 @@ export async function startWatch(request: StartWatchRequest): Promise<ApiRespons
     const json = await response.json();
 
     return json as ApiResponse<StartWatchData>;
+  } catch (error) {
+    return {
+      ok: false,
+      error: {
+        code: 'INTERNAL_ERROR',
+        message: error instanceof Error ? error.message : 'Network request failed',
+      },
+    };
+  }
+}
+
+/**
+ * Search for stations near a location
+ *
+ * Returns cached stations from Supabase and triggers GitHub Action geo-search
+ * to fetch fresh data from Iberdrola API.
+ *
+ * @param request - SearchNearbyRequest with latitude, longitude, radiusKm
+ * @returns SearchNearbySuccessResponse with stations and meta info
+ *
+ * @example
+ * ```typescript
+ * const response = await searchNearby({ latitude: 38.8, longitude: -0.1, radiusKm: 10 });
+ * if (response.ok) {
+ *   console.log(`Found ${response.data.count} stations`);
+ *   if (response.meta.scraper_triggered) {
+ *     console.log('Background refresh started');
+ *   }
+ * }
+ * ```
+ */
+export async function searchNearby(
+  request: SearchNearbyRequest
+): Promise<SearchNearbySuccessResponse | ApiErrorResponse> {
+  try {
+    const response = await fetch(`${EDGE_BASE}/search-nearby`, {
+      method: 'POST',
+      headers: getHeaders(),
+      body: JSON.stringify(request),
+    });
+
+    const json = await response.json();
+
+    return json as SearchNearbySuccessResponse | ApiErrorResponse;
   } catch (error) {
     return {
       ok: false,

@@ -1,20 +1,18 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, act, waitFor } from '@testing-library/react';
 import { useStationSearch } from './useStationSearch';
-import * as stationApi from '../services/stationApi';
+import * as apiClient from '../services/apiClient';
 import * as iberdrola from '../services/iberdrola';
-import type { CachedStationInfo } from '../services/stationApi';
+import * as localSearch from '../services/localSearch';
+import type { SearchNearbySuccessResponse, ApiErrorResponse } from '../types/api';
 import type { StationInfoPartial } from '../services/iberdrola';
 
 // Mock modules
-vi.mock('../services/stationApi', async () => {
-  const actual = await vi.importActual('../services/stationApi');
+vi.mock('../services/apiClient', async () => {
+  const actual = await vi.importActual('../services/apiClient');
   return {
     ...actual,
-    getStationsFromCache: vi.fn(),
-    saveSnapshot: vi.fn(),
-    shouldSaveStationToCache: vi.fn().mockReturnValue(false),
-    loadStationsFromCacheNearLocation: vi.fn(),
+    searchNearby: vi.fn(),
   };
 });
 
@@ -23,14 +21,11 @@ vi.mock('../services/iberdrola', async () => {
   return {
     ...actual,
     getUserLocation: vi.fn(),
-    fetchStationsPartial: vi.fn(),
-    enrichStationDetails: vi.fn(),
-    fetchStationDetails: vi.fn(),
   };
 });
 
 vi.mock('../services/localSearch', () => ({
-  searchLocalStations: vi.fn().mockResolvedValue([]),
+  searchLocalStations: vi.fn(),
 }));
 
 // Mock GeolocationPositionError (not available in test environment)
@@ -78,6 +73,36 @@ function createMockCoords(lat: number, lon: number): GeolocationCoordinates {
   };
 }
 
+// Helper to create successful response
+function createSuccessResponse(
+  stations: SearchNearbySuccessResponse['data']['stations'],
+  scraperTriggered = false
+): SearchNearbySuccessResponse {
+  return {
+    ok: true,
+    data: {
+      stations,
+      count: stations.length,
+    },
+    meta: {
+      fresh: false,
+      scraper_triggered: scraperTriggered,
+      retry_after: null,
+    },
+  };
+}
+
+// Helper to create error response
+function createErrorResponse(message: string, code = 'INTERNAL_ERROR'): ApiErrorResponse {
+  return {
+    ok: false,
+    error: {
+      code: code as ApiErrorResponse['error']['code'],
+      message,
+    },
+  };
+}
+
 describe('useStationSearch', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -92,6 +117,7 @@ describe('useStationSearch', () => {
     expect(result.current.error).toBeNull();
     expect(result.current.progress).toEqual({ current: 0, total: 0 });
     expect(result.current.usingCachedData).toBe(false);
+    expect(result.current.scraperTriggered).toBe(false);
   });
 
   it('should provide search and clear functions', () => {
@@ -101,412 +127,194 @@ describe('useStationSearch', () => {
     expect(typeof result.current.clear).toBe('function');
   });
 
-  it('should clear search results', () => {
+  it('should clear search results including scraperTriggered', () => {
     const { result } = renderHook(() => useStationSearch());
 
-    result.current.clear();
+    act(() => {
+      result.current.clear();
+    });
 
     expect(result.current.stations).toEqual([]);
     expect(result.current.error).toBeNull();
-    expect(result.current.progress).toEqual({ current: 0, total: 0 });
+    expect(result.current.usingCachedData).toBe(false);
+    expect(result.current.scraperTriggered).toBe(false);
   });
 
-  it('should perform batch cache lookup before enrichment', async () => {
-    const mockCachedMap = new Map<number, CachedStationInfo>([
-      [
-        123,
-        {
-          cpId: 123,
-          cuprId: 456,
-          name: 'Station 1',
-          latitude: 40.4168,
-          longitude: -3.7038,
-          maxPower: 22,
-          freePorts: 2,
-          priceKwh: 0.35,
-          socketType: 'Type 2',
-          addressFull: 'Street 1, Madrid',
-          emergencyStopPressed: false,
-        },
-      ],
-      [
-        124,
-        {
-          cpId: 124,
-          cuprId: 457,
-          name: 'Station 2',
-          latitude: 40.4268,
-          longitude: -3.7138,
-          maxPower: 50,
-          freePorts: 1,
-          priceKwh: 0.45,
-          socketType: 'CCS',
-          addressFull: 'Street 2, Madrid',
-          emergencyStopPressed: false,
-        },
-      ],
-    ]);
+  it('should call searchNearby Edge Function with correct params', async () => {
+    vi.mocked(iberdrola.getUserLocation).mockResolvedValue({
+      coords: createMockCoords(38.84, -0.12),
+      timestamp: Date.now(),
+    });
 
-    const partialResults: StationInfoPartial[] = [
+    vi.mocked(apiClient.searchNearby).mockResolvedValue(createSuccessResponse([]));
+
+    const { result } = renderHook(() => useStationSearch());
+
+    await act(async () => {
+      await result.current.search(5);
+    });
+
+    expect(apiClient.searchNearby).toHaveBeenCalledWith({
+      latitude: 38.84,
+      longitude: -0.12,
+      radiusKm: 5,
+    });
+  });
+
+  it('should set stations from successful response', async () => {
+    const mockStations = [
       {
         cpId: 123,
         cuprId: 456,
         name: 'Station 1',
-        latitude: 40.4168,
-        longitude: -3.7038,
-        addressFull: 'Street 1, Madrid',
+        latitude: 38.84,
+        longitude: -0.12,
+        addressFull: 'Street 1, Valencia',
         overallStatus: 'AVAILABLE',
-        totalPorts: 2,
-      },
-      {
-        cpId: 124,
-        cuprId: 457,
-        name: 'Station 2',
-        latitude: 40.4268,
-        longitude: -3.7138,
-        addressFull: 'Street 2, Madrid',
-        overallStatus: 'AVAILABLE',
-        totalPorts: 2,
-      },
-    ];
-
-    vi.mocked(iberdrola.getUserLocation).mockResolvedValue({
-      coords: createMockCoords(40.4168, -3.7038),
-      timestamp: Date.now(),
-    });
-
-    vi.mocked(iberdrola.fetchStationsPartial).mockResolvedValue(partialResults);
-    vi.mocked(stationApi.getStationsFromCache).mockResolvedValue(mockCachedMap);
-    vi.mocked(iberdrola.enrichStationDetails).mockImplementation(async (partial, cachedMap) => {
-      const cached = cachedMap?.get(partial.cpId);
-      if (cached) {
-        return {
-          ...partial,
-          maxPower: cached.maxPower,
-          freePorts: cached.freePorts,
-          priceKwh: cached.priceKwh,
-          socketType: cached.socketType,
-          emergencyStopPressed: cached.emergencyStopPressed,
-          _fromCache: true,
-        };
-      }
-      return partial;
-    });
-
-    const { result } = renderHook(() => useStationSearch());
-
-    await act(async () => {
-      await result.current.search(5);
-    });
-
-    await waitFor(() => {
-      expect(result.current.stations).toHaveLength(2);
-    });
-
-    // Verify batch cache lookup was called ONCE with all cpIds
-    expect(stationApi.getStationsFromCache).toHaveBeenCalledTimes(1);
-    expect(stationApi.getStationsFromCache).toHaveBeenCalledWith([123, 124], 15);
-
-    // Verify enriched data from cache
-    expect(result.current.stations[0].maxPower).toBe(22);
-    expect(result.current.stations[1].maxPower).toBe(50);
-  });
-
-  it('should handle empty cache gracefully', async () => {
-    const partialResults: StationInfoPartial[] = [
-      {
-        cpId: 123,
-        cuprId: 456,
-        name: 'Station 1',
-        latitude: 40.4168,
-        longitude: -3.7038,
-        addressFull: 'Street 1, Madrid',
-        overallStatus: 'AVAILABLE',
-        totalPorts: 1,
-      },
-    ];
-
-    vi.mocked(iberdrola.getUserLocation).mockResolvedValue({
-      coords: createMockCoords(40.4168, -3.7038),
-      timestamp: Date.now(),
-    });
-
-    vi.mocked(iberdrola.fetchStationsPartial).mockResolvedValue(partialResults);
-    vi.mocked(stationApi.getStationsFromCache).mockResolvedValue(new Map());
-    vi.mocked(iberdrola.fetchStationDetails).mockResolvedValue({
-      logicalSocket: [
-        {
-          physicalSocket: [
-            {
-              status: { statusCode: 'AVAILABLE' },
-              maxPower: 22,
-              appliedRate: { recharge: { finalPrice: 0 } },
-              socketType: { socketName: 'Type 2' },
-            },
-          ],
-        },
-      ],
-      emergencyStopButtonPressed: false,
-    });
-    vi.mocked(iberdrola.enrichStationDetails).mockImplementation(async (partial) => ({
-      ...partial,
-      maxPower: 22,
-      freePorts: 1,
-      priceKwh: 0,
-      socketType: 'Type 2',
-      emergencyStopPressed: false,
-    }));
-
-    const { result } = renderHook(() => useStationSearch());
-
-    await act(async () => {
-      await result.current.search(5);
-    });
-
-    await waitFor(() => {
-      expect(result.current.stations).toHaveLength(1);
-    });
-
-    // Verify cache lookup was called even if empty
-    expect(stationApi.getStationsFromCache).toHaveBeenCalledTimes(1);
-
-    // Verify API enrichment was used when cache is empty
-    expect(result.current.stations[0].maxPower).toBe(22);
-  });
-
-  it('should handle cache lookup errors gracefully', async () => {
-    const partialResults: StationInfoPartial[] = [
-      {
-        cpId: 123,
-        cuprId: 456,
-        name: 'Station 1',
-        latitude: 40.4168,
-        longitude: -3.7038,
-        addressFull: 'Street 1, Madrid',
-        overallStatus: 'AVAILABLE',
-        totalPorts: 1,
-      },
-    ];
-
-    vi.mocked(iberdrola.getUserLocation).mockResolvedValue({
-      coords: createMockCoords(40.4168, -3.7038),
-      timestamp: Date.now(),
-    });
-
-    vi.mocked(iberdrola.fetchStationsPartial).mockResolvedValue(partialResults);
-    vi.mocked(stationApi.getStationsFromCache).mockRejectedValue(new Error('DB error'));
-    vi.mocked(iberdrola.enrichStationDetails).mockResolvedValue({
-      ...partialResults[0],
-      maxPower: 22,
-      freePorts: 1,
-      priceKwh: 0,
-      socketType: 'Type 2',
-      emergencyStopPressed: false,
-    });
-
-    const { result } = renderHook(() => useStationSearch());
-
-    await act(async () => {
-      await result.current.search(5);
-    });
-
-    // Should handle error and still complete search
-    await waitFor(() => {
-      expect(result.current.error).toBeNull();
-    });
-  });
-
-  it('should NOT call fetchStationDetails when enrichment used cache (_fromCache=true)', async () => {
-    // Test for Bug #3 fix: verify no duplicate API call when data from cache
-    const mockCachedMap = new Map<number, CachedStationInfo>([
-      [
-        123,
-        {
-          cpId: 123,
-          cuprId: 456,
-          name: 'Free Station',
-          latitude: 40.4168,
-          longitude: -3.7038,
-          maxPower: 22,
-          freePorts: 2,
-          priceKwh: 0, // FREE station
-          socketType: 'Type 2',
-          addressFull: 'Street 1, Madrid',
-          emergencyStopPressed: false,
-        },
-      ],
-    ]);
-
-    const partialResults: StationInfoPartial[] = [
-      {
-        cpId: 123,
-        cuprId: 456,
-        name: 'Free Station',
-        latitude: 40.4168,
-        longitude: -3.7038,
-        addressFull: 'Street 1, Madrid',
-        overallStatus: 'AVAILABLE',
-        totalPorts: 2,
-      },
-    ];
-
-    vi.mocked(iberdrola.getUserLocation).mockResolvedValue({
-      coords: createMockCoords(40.4168, -3.7038),
-      timestamp: Date.now(),
-    });
-
-    vi.mocked(iberdrola.fetchStationsPartial).mockResolvedValue(partialResults);
-    vi.mocked(stationApi.getStationsFromCache).mockResolvedValue(mockCachedMap);
-
-    // Mock enrichStationDetails to return _fromCache=true
-    vi.mocked(iberdrola.enrichStationDetails).mockImplementation(async (partial, cachedMap) => {
-      const cached = cachedMap?.get(partial.cpId);
-      if (cached) {
-        return {
-          ...partial,
-          maxPower: cached.maxPower,
-          freePorts: cached.freePorts,
-          priceKwh: cached.priceKwh,
-          socketType: cached.socketType,
-          emergencyStopPressed: cached.emergencyStopPressed,
-          _fromCache: true, // Data from cache
-        };
-      }
-      return partial;
-    });
-
-    // Spy on fetchStationDetails to verify it's NOT called
-    const fetchStationDetailsSpy = vi.spyOn(iberdrola, 'fetchStationDetails');
-
-    const { result } = renderHook(() => useStationSearch());
-
-    await act(async () => {
-      await result.current.search(5);
-    });
-
-    await waitFor(() => {
-      expect(result.current.stations).toHaveLength(1);
-    });
-
-    // CRITICAL: Verify fetchStationDetails was NOT called (Bug #3 fix)
-    expect(fetchStationDetailsSpy).not.toHaveBeenCalled();
-
-    // Verify enriched data is correct
-    expect(result.current.stations[0].priceKwh).toBe(0);
-    expect(result.current.stations[0]._fromCache).toBe(true);
-  });
-
-  it('should call fetchStationDetails when enrichment used API (_fromCache=false)', async () => {
-    // Test for Bug #3 fix: verify API call happens when data NOT from cache
-    const mockCachedMap = new Map<number, CachedStationInfo>(); // Empty cache
-
-    const partialResults: StationInfoPartial[] = [
-      {
-        cpId: 123,
-        cuprId: 456,
-        name: 'Free Station',
-        latitude: 40.4168,
-        longitude: -3.7038,
-        addressFull: 'Street 1, Madrid',
-        overallStatus: 'AVAILABLE',
-        totalPorts: 2,
-      },
-    ];
-
-    vi.mocked(iberdrola.getUserLocation).mockResolvedValue({
-      coords: createMockCoords(40.4168, -3.7038),
-      timestamp: Date.now(),
-    });
-
-    vi.mocked(iberdrola.fetchStationsPartial).mockResolvedValue(partialResults);
-    vi.mocked(stationApi.getStationsFromCache).mockResolvedValue(mockCachedMap);
-
-    // Override shouldSaveStationToCache to return true for free stations
-    vi.mocked(stationApi.shouldSaveStationToCache).mockReturnValue(true);
-
-    // Mock enrichStationDetails to return _fromCache=false (API fetch)
-    vi.mocked(iberdrola.enrichStationDetails).mockResolvedValue({
-      ...partialResults[0],
-      maxPower: 22,
-      freePorts: 2,
-      priceKwh: 0, // FREE station
-      socketType: 'Type 2',
-      emergencyStopPressed: false,
-      _fromCache: false, // Data from API
-    });
-
-    // Mock fetchStationDetails for snapshot saving
-    const fetchStationDetailsMock = vi.mocked(iberdrola.fetchStationDetails);
-    fetchStationDetailsMock.mockResolvedValue({
-      logicalSocket: [
-        {
-          physicalSocket: [
-            {
-              status: { statusCode: 'AVAILABLE' },
-              maxPower: 22,
-              appliedRate: { recharge: { finalPrice: 0 } },
-              socketType: { socketName: 'Type 2' },
-            },
-          ],
-        },
-      ],
-      emergencyStopButtonPressed: false,
-    });
-
-    const { result } = renderHook(() => useStationSearch());
-
-    await act(async () => {
-      await result.current.search(5);
-    });
-
-    await waitFor(() => {
-      expect(result.current.stations).toHaveLength(1);
-    });
-
-    // Wait for async snapshot save to complete
-    await waitFor(
-      () => {
-        expect(fetchStationDetailsMock).toHaveBeenCalledWith(456);
-      },
-      { timeout: 3000 }
-    );
-
-    // Verify enriched data is correct
-    expect(result.current.stations[0].priceKwh).toBe(0);
-    expect(result.current.stations[0]._fromCache).toBe(false);
-  });
-
-  it('should fallback to cached data when API fails', async () => {
-    const cachedStations: StationInfoPartial[] = [
-      {
-        cpId: 123,
-        cuprId: 456,
-        name: 'Cached Station',
-        latitude: 40.4168,
-        longitude: -3.7038,
-        addressFull: 'Street 1, Madrid',
-        overallStatus: 'UNKNOWN',
         totalPorts: 2,
         maxPower: 22,
         freePorts: 1,
         priceKwh: 0,
         socketType: 'Type 2',
+        distanceKm: 0.5,
+      },
+    ];
+
+    vi.mocked(iberdrola.getUserLocation).mockResolvedValue({
+      coords: createMockCoords(38.84, -0.12),
+      timestamp: Date.now(),
+    });
+
+    vi.mocked(apiClient.searchNearby).mockResolvedValue(createSuccessResponse(mockStations));
+
+    const { result } = renderHook(() => useStationSearch());
+
+    await act(async () => {
+      await result.current.search(5);
+    });
+
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+    });
+
+    expect(result.current.stations).toHaveLength(1);
+    expect(result.current.stations[0].cpId).toBe(123);
+    expect(result.current.stations[0].name).toBe('Station 1');
+    expect(result.current.stations[0].maxPower).toBe(22);
+    expect(result.current.stations[0]._fromCache).toBe(true);
+    expect(result.current.usingCachedData).toBe(true);
+    expect(result.current.error).toBeNull();
+  });
+
+  it('should set scraperTriggered when meta.scraper_triggered is true', async () => {
+    const mockStations = [
+      {
+        cpId: 123,
+        cuprId: 456,
+        name: 'Station 1',
+        latitude: 38.84,
+        longitude: -0.12,
+        addressFull: 'Street 1',
+        overallStatus: 'AVAILABLE',
+        totalPorts: 2,
+        maxPower: 22,
+        freePorts: 1,
+        priceKwh: 0,
+        socketType: 'Type 2',
+        distanceKm: 0.5,
+      },
+    ];
+
+    vi.mocked(iberdrola.getUserLocation).mockResolvedValue({
+      coords: createMockCoords(38.84, -0.12),
+      timestamp: Date.now(),
+    });
+
+    vi.mocked(apiClient.searchNearby).mockResolvedValue(
+      createSuccessResponse(mockStations, true) // scraper_triggered = true
+    );
+
+    const { result } = renderHook(() => useStationSearch());
+
+    await act(async () => {
+      await result.current.search(5);
+    });
+
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+    });
+
+    expect(result.current.scraperTriggered).toBe(true);
+  });
+
+  it('should set scraperTriggered to false when meta.scraper_triggered is false', async () => {
+    vi.mocked(iberdrola.getUserLocation).mockResolvedValue({
+      coords: createMockCoords(38.84, -0.12),
+      timestamp: Date.now(),
+    });
+
+    vi.mocked(apiClient.searchNearby).mockResolvedValue(
+      createSuccessResponse([], false) // scraper_triggered = false
+    );
+
+    const { result } = renderHook(() => useStationSearch());
+
+    await act(async () => {
+      await result.current.search(5);
+    });
+
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+    });
+
+    expect(result.current.scraperTriggered).toBe(false);
+  });
+
+  it('should show error when no stations found', async () => {
+    vi.mocked(iberdrola.getUserLocation).mockResolvedValue({
+      coords: createMockCoords(38.84, -0.12),
+      timestamp: Date.now(),
+    });
+
+    vi.mocked(apiClient.searchNearby).mockResolvedValue(createSuccessResponse([]));
+
+    const { result } = renderHook(() => useStationSearch());
+
+    await act(async () => {
+      await result.current.search(5);
+    });
+
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+    });
+
+    expect(result.current.stations).toHaveLength(0);
+    expect(result.current.error).toBe('No stations found in this area.');
+  });
+
+  it('should fallback to local search when Edge Function fails', async () => {
+    const localStations: StationInfoPartial[] = [
+      {
+        cpId: 789,
+        cuprId: 101,
+        name: 'Local Station',
+        latitude: 38.85,
+        longitude: -0.13,
+        addressFull: 'Local Street',
+        overallStatus: 'AVAILABLE',
+        totalPorts: 2,
         _fromCache: true,
       },
     ];
 
     vi.mocked(iberdrola.getUserLocation).mockResolvedValue({
-      coords: createMockCoords(40.4168, -3.7038),
+      coords: createMockCoords(38.84, -0.12),
       timestamp: Date.now(),
     });
 
-    // API fails
-    vi.mocked(iberdrola.fetchStationsPartial).mockRejectedValue(
-      new Error('Failed to fetch stations: all proxies unavailable')
-    );
+    vi.mocked(apiClient.searchNearby).mockResolvedValue(createErrorResponse('Edge Function error'));
 
-    // Cache fallback returns data
-    vi.mocked(stationApi.loadStationsFromCacheNearLocation).mockResolvedValue(cachedStations);
+    vi.mocked(localSearch.searchLocalStations).mockResolvedValue(localStations);
 
     const { result } = renderHook(() => useStationSearch());
 
@@ -518,27 +326,25 @@ describe('useStationSearch', () => {
       expect(result.current.loading).toBe(false);
     });
 
-    // Verify cache fallback was used
-    expect(stationApi.loadStationsFromCacheNearLocation).toHaveBeenCalledWith(40.4168, -3.7038, 5);
+    expect(localSearch.searchLocalStations).toHaveBeenCalledWith(38.84, -0.12, 5, true);
     expect(result.current.stations).toHaveLength(1);
-    expect(result.current.stations[0].name).toBe('Cached Station');
+    expect(result.current.stations[0].name).toBe('Local Station');
     expect(result.current.usingCachedData).toBe(true);
     expect(result.current.error).toBe('Live data unavailable. Showing cached results.');
+    expect(result.current.scraperTriggered).toBe(false);
   });
 
-  it('should show error when both API and cache fail', async () => {
+  it('should show error when both Edge Function and local fallback fail', async () => {
     vi.mocked(iberdrola.getUserLocation).mockResolvedValue({
-      coords: createMockCoords(40.4168, -3.7038),
+      coords: createMockCoords(38.84, -0.12),
       timestamp: Date.now(),
     });
 
-    // API fails
-    vi.mocked(iberdrola.fetchStationsPartial).mockRejectedValue(
-      new Error('Failed to fetch stations: all proxies unavailable')
+    vi.mocked(apiClient.searchNearby).mockResolvedValue(
+      createErrorResponse('Edge Function unavailable')
     );
 
-    // Cache also empty
-    vi.mocked(stationApi.loadStationsFromCacheNearLocation).mockResolvedValue([]);
+    vi.mocked(localSearch.searchLocalStations).mockResolvedValue([]);
 
     const { result } = renderHook(() => useStationSearch());
 
@@ -550,22 +356,102 @@ describe('useStationSearch', () => {
       expect(result.current.loading).toBe(false);
     });
 
-    // Verify error state
     expect(result.current.stations).toHaveLength(0);
     expect(result.current.usingCachedData).toBe(false);
-    expect(result.current.error).toBe('Failed to fetch stations: all proxies unavailable');
+    expect(result.current.error).toBe('Edge Function unavailable');
   });
 
-  it('should clear usingCachedData when calling clear()', () => {
+  it('should handle geolocation error', async () => {
+    vi.mocked(iberdrola.getUserLocation).mockRejectedValue(
+      new GeolocationPositionError('User denied Geolocation', 1)
+    );
+
     const { result } = renderHook(() => useStationSearch());
 
-    // Manually set state to simulate cached data mode
-    act(() => {
-      result.current.clear();
+    await act(async () => {
+      await result.current.search(5);
     });
 
-    expect(result.current.usingCachedData).toBe(false);
-    expect(result.current.stations).toEqual([]);
-    expect(result.current.error).toBeNull();
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+    });
+
+    expect(result.current.error).toBe('Location access denied');
+    expect(result.current.stations).toHaveLength(0);
+  });
+
+  it('should handle network errors', async () => {
+    vi.mocked(iberdrola.getUserLocation).mockResolvedValue({
+      coords: createMockCoords(38.84, -0.12),
+      timestamp: Date.now(),
+    });
+
+    vi.mocked(apiClient.searchNearby).mockRejectedValue(new Error('Network error'));
+
+    const { result } = renderHook(() => useStationSearch());
+
+    await act(async () => {
+      await result.current.search(5);
+    });
+
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+    });
+
+    expect(result.current.error).toBe('Network error');
+  });
+
+  it('should set loading state during search', async () => {
+    vi.mocked(iberdrola.getUserLocation).mockImplementation(
+      () =>
+        new Promise((resolve) =>
+          setTimeout(
+            () =>
+              resolve({
+                coords: createMockCoords(38.84, -0.12),
+                timestamp: Date.now(),
+              }),
+            100
+          )
+        )
+    );
+
+    vi.mocked(apiClient.searchNearby).mockResolvedValue(createSuccessResponse([]));
+
+    const { result } = renderHook(() => useStationSearch());
+
+    act(() => {
+      result.current.search(5);
+    });
+
+    // Should be loading immediately
+    expect(result.current.loading).toBe(true);
+
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+    });
+  });
+
+  it('should reset state when starting new search', async () => {
+    vi.mocked(iberdrola.getUserLocation).mockResolvedValue({
+      coords: createMockCoords(38.84, -0.12),
+      timestamp: Date.now(),
+    });
+
+    vi.mocked(apiClient.searchNearby).mockResolvedValue(createSuccessResponse([]));
+
+    const { result } = renderHook(() => useStationSearch());
+
+    // First search
+    await act(async () => {
+      await result.current.search(5);
+    });
+
+    // Second search should reset scraperTriggered
+    await act(async () => {
+      await result.current.search(10);
+    });
+
+    expect(result.current.scraperTriggered).toBe(false);
   });
 });

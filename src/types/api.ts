@@ -115,6 +115,67 @@ export interface StartWatchRequest {
 }
 
 // ============================================================================
+// search-nearby Types
+// ============================================================================
+
+/**
+ * Single station result from search-nearby
+ */
+export interface SearchNearbyStation {
+  cpId: number;
+  cuprId: number;
+  name: string;
+  latitude: number;
+  longitude: number;
+  addressFull: string;
+  overallStatus: string | null;
+  totalPorts: number | null;
+  maxPower: number | null;
+  freePorts: number | null;
+  priceKwh: number | null;
+  socketType: string | null;
+  distanceKm: number;
+}
+
+/**
+ * Response data from POST /functions/v1/search-nearby
+ */
+export interface SearchNearbyData {
+  stations: SearchNearbyStation[];
+  count: number;
+}
+
+/**
+ * Meta information from search-nearby response
+ */
+export interface SearchNearbyMeta {
+  /** Always false - data from cache */
+  fresh: boolean;
+  /** True if GitHub Action was triggered */
+  scraper_triggered: boolean;
+  /** Seconds until next trigger allowed (null if can trigger now) */
+  retry_after: number | null;
+}
+
+/**
+ * Full success response from search-nearby (includes meta)
+ */
+export interface SearchNearbySuccessResponse {
+  ok: true;
+  data: SearchNearbyData;
+  meta: SearchNearbyMeta;
+}
+
+/**
+ * Request body for POST /functions/v1/search-nearby
+ */
+export interface SearchNearbyRequest {
+  latitude: number;
+  longitude: number;
+  radiusKm: number;
+}
+
+// ============================================================================
 // Type Guards
 // ============================================================================
 

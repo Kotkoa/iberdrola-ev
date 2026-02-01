@@ -1,22 +1,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
-import {
-  fetchStationsPartial,
-  enrichStationDetails,
-  getUserLocation,
-  type StationInfoPartial,
-} from '../services/iberdrola';
-import {
-  saveSnapshot,
-  detailsToSnapshotData,
-  getStationsFromCache,
-  CACHE_TTL_MINUTES,
-  shouldSaveStationToCache,
-  loadStationsFromCacheNearLocation,
-} from '../services/stationApi';
+import { getUserLocation, type StationInfoPartial } from '../services/iberdrola';
+import { searchNearby, isApiSuccess } from '../services/apiClient';
 import { searchLocalStations } from '../services/localSearch';
-import { fetchStationDetails } from '../services/iberdrola';
-
-const CONCURRENCY_LIMIT = 5;
 
 export interface SearchProgress {
   current: number;
@@ -30,6 +15,7 @@ export interface UseStationSearchReturn {
   progress: SearchProgress;
   error: string | null;
   usingCachedData: boolean;
+  scraperTriggered: boolean;
   search: (radius: number) => Promise<void>;
   clear: () => void;
 }
@@ -41,6 +27,7 @@ export function useStationSearch(): UseStationSearchReturn {
   const [progress, setProgress] = useState<SearchProgress>({ current: 0, total: 0 });
   const [error, setError] = useState<string | null>(null);
   const [usingCachedData, setUsingCachedData] = useState(false);
+  const [scraperTriggered, setScraperTriggered] = useState(false);
   const abortControllerRef = useRef<AbortController | null>(null);
 
   const search = useCallback(async (radius: number) => {
@@ -54,132 +41,69 @@ export function useStationSearch(): UseStationSearchReturn {
       setError(null);
       setStations([]);
       setUsingCachedData(false);
+      setScraperTriggered(false);
       setProgress({ current: 0, total: 0 });
 
       const pos = await getUserLocation();
       if (controller.signal.aborted) return;
 
-      // Priority 1: Try local library first (no network, instant)
-      const localResults = await searchLocalStations(
-        pos.coords.latitude,
-        pos.coords.longitude,
-        radius,
-        true // only free stations
-      );
+      // Use Edge Function (returns cache + triggers GitHub Action)
+      console.log('[Search] Calling search-nearby Edge Function');
+      const response = await searchNearby({
+        latitude: pos.coords.latitude,
+        longitude: pos.coords.longitude,
+        radiusKm: radius,
+      });
 
-      if (localResults.length > 0) {
-        console.log('[Search] Using local library:', localResults.length, 'stations');
-        setStations(localResults);
+      if (controller.signal.aborted) return;
+
+      if (isApiSuccess(response)) {
+        // Convert response to StationInfoPartial format
+        const results: StationInfoPartial[] = response.data.stations.map((s) => ({
+          cpId: s.cpId,
+          cuprId: s.cuprId,
+          name: s.name,
+          latitude: s.latitude,
+          longitude: s.longitude,
+          addressFull: s.addressFull,
+          overallStatus: s.overallStatus || 'Unknown',
+          totalPorts: s.totalPorts || 2,
+          maxPower: s.maxPower ?? undefined,
+          freePorts: s.freePorts ?? undefined,
+          priceKwh: s.priceKwh ?? undefined,
+          socketType: s.socketType ?? undefined,
+          _fromCache: true,
+        }));
+
+        setStations(results);
         setUsingCachedData(true);
-        setLoading(false);
-        return;
-      }
+        setScraperTriggered(response.meta.scraper_triggered);
 
-      // Priority 2: Try Iberdrola API (currently blocked)
-      let partialResults: StationInfoPartial[];
-
-      try {
-        partialResults = await fetchStationsPartial(
-          pos.coords.latitude,
-          pos.coords.longitude,
-          radius
-        );
-      } catch (fetchError) {
-        // API failed - try Supabase cache
-        console.warn('[Search] API failed, loading from Supabase cache:', fetchError);
-
-        const cachedStations = await loadStationsFromCacheNearLocation(
-          pos.coords.latitude,
-          pos.coords.longitude,
-          radius
-        );
-
-        if (cachedStations.length > 0) {
-          setStations(cachedStations);
-          setUsingCachedData(true);
-          setError('Live data unavailable. Showing cached results.');
-          setLoading(false);
-          return;
+        if (response.meta.scraper_triggered) {
+          console.log('[Search] GitHub Action triggered, fresh data coming via Realtime');
         }
 
-        // No cache available either
-        throw fetchError;
-      }
+        if (results.length === 0) {
+          setError('No stations found in this area.');
+        }
+      } else {
+        // Edge Function failed - fallback to local search (no GitHub trigger)
+        console.warn('[Search] Edge Function error, using local fallback:', response.error);
 
-      if (controller.signal.aborted) return;
-
-      setStations(partialResults);
-      setLoading(false);
-
-      if (partialResults.length === 0) return;
-
-      setEnriching(true);
-      setProgress({ current: 0, total: partialResults.length });
-
-      // Batch cache lookup for all stations (single database query)
-      const allCpIds = partialResults.map((s) => s.cpId);
-      let cachedMap = new Map();
-      try {
-        cachedMap = await getStationsFromCache(allCpIds, CACHE_TTL_MINUTES);
-      } catch (cacheErr) {
-        console.warn('Cache lookup failed, continuing with API enrichment:', cacheErr);
-      }
-      if (controller.signal.aborted) return;
-
-      let completed = 0;
-
-      const chunks: StationInfoPartial[][] = [];
-      for (let i = 0; i < partialResults.length; i += CONCURRENCY_LIMIT) {
-        chunks.push(partialResults.slice(i, i + CONCURRENCY_LIMIT));
-      }
-
-      for (const chunk of chunks) {
-        if (controller.signal.aborted) break;
-
-        const enrichedChunk = await Promise.all(
-          chunk.map(async (station) => {
-            if (controller.signal.aborted) return station;
-
-            const enriched = await enrichStationDetails(station, cachedMap);
-            completed++;
-
-            if (!controller.signal.aborted) {
-              setProgress({ current: completed, total: partialResults.length });
-            }
-
-            // Only fetch and save snapshot if data came from API (not cache)
-            // If _fromCache=true, snapshot already exists in DB
-            if (shouldSaveStationToCache(enriched.priceKwh) && !enriched._fromCache) {
-              fetchStationDetails(station.cuprId)
-                .then((details) => {
-                  if (details && !controller.signal.aborted) {
-                    saveSnapshot({
-                      cpId: station.cpId,
-                      cuprId: station.cuprId,
-                      source: 'user_nearby',
-                      stationData: detailsToSnapshotData(details),
-                    }).catch((err) => console.error('Failed to save snapshot:', err));
-                  }
-                })
-                .catch(() => {});
-            }
-
-            return enriched;
-          })
+        const localResults = await searchLocalStations(
+          pos.coords.latitude,
+          pos.coords.longitude,
+          radius,
+          true
         );
 
-        if (controller.signal.aborted) break;
-
-        setStations((prev) => {
-          const updated = [...prev];
-          for (const enriched of enrichedChunk) {
-            const idx = updated.findIndex((s) => s.cpId === enriched.cpId);
-            if (idx !== -1) {
-              updated[idx] = enriched;
-            }
-          }
-          return updated;
-        });
+        if (localResults.length > 0) {
+          setStations(localResults);
+          setUsingCachedData(true);
+          setError('Live data unavailable. Showing cached results.');
+        } else {
+          setError(response.error.message);
+        }
       }
     } catch (err) {
       if (controller.signal.aborted) return;
@@ -205,6 +129,7 @@ export function useStationSearch(): UseStationSearchReturn {
     setError(null);
     setEnriching(false);
     setUsingCachedData(false);
+    setScraperTriggered(false);
   }, []);
 
   useEffect(() => {
@@ -220,6 +145,7 @@ export function useStationSearch(): UseStationSearchReturn {
     progress,
     error,
     usingCachedData,
+    scraperTriggered,
     search,
     clear,
   };
