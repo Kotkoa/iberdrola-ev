@@ -58,9 +58,13 @@ export interface PollStationData {
   port1_status: string | null;
   /** Port 2 status */
   port2_status: string | null;
+  /** Timestamp when port 1 status last changed */
+  port1_update_date: string | null;
+  /** Timestamp when port 2 status last changed */
+  port2_update_date: string | null;
   /** Overall station status */
   overall_status: string | null;
-  /** Timestamp when data was observed */
+  /** Timestamp when snapshot was recorded */
   observed_at: string;
 }
 

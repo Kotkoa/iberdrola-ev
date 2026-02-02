@@ -15,6 +15,8 @@ interface SnapshotRow {
   cp_id: number;
   port1_status: string | null;
   port2_status: string | null;
+  port1_update_date: string | null;
+  port2_update_date: string | null;
   overall_status: string | null;
   created_at: string;
 }
@@ -115,7 +117,9 @@ Deno.serve(async (req) => {
     // 2. Get latest snapshot from cache
     const { data: snapshot } = await supabaseAdmin
       .from('station_snapshots')
-      .select('cp_id, port1_status, port2_status, overall_status, created_at')
+      .select(
+        'cp_id, port1_status, port2_status, port1_update_date, port2_update_date, overall_status, created_at'
+      )
       .eq('cp_id', cpId)
       .order('created_at', { ascending: false })
       .limit(1)
@@ -164,6 +168,8 @@ Deno.serve(async (req) => {
             cp_id: row.cp_id,
             port1_status: row.port1_status,
             port2_status: row.port2_status,
+            port1_update_date: row.port1_update_date,
+            port2_update_date: row.port2_update_date,
             overall_status: row.overall_status,
             observed_at: row.created_at,
           },
