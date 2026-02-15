@@ -1,10 +1,8 @@
 name: Notification Polling
 
 on:
-  # Schedule disabled until shadow mode is validated.
-  # Uncomment to enable 5-minute polling:
-  # schedule:
-  #   - cron: '*/5 * * * *'
+  schedule:
+    - cron: '*/5 * * * *'
   workflow_dispatch: {} # Manual trigger for testing
 
 jobs:

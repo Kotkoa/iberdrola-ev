@@ -27,12 +27,15 @@ Deno.serve(async (req) => {
     const { stationId, portNumber }: SendPushRequest = await req.json();
 
     // Get all active subscriptions for this station and port
+    // Dedup guard: skip subscriptions notified within the last 5 minutes
+    const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
     const { data: subscriptions, error } = await supabaseAdmin
       .from('subscriptions')
-      .select('id, endpoint, p256dh, auth')
+      .select('id, endpoint, p256dh, auth, last_notified_at')
       .eq('station_id', stationId)
       .eq('port_number', portNumber)
-      .eq('is_active', true);
+      .eq('is_active', true)
+      .or(`last_notified_at.is.null,last_notified_at.lt.${fiveMinAgo}`);
 
     if (error) {
       console.error('Failed to fetch subscriptions:', error);

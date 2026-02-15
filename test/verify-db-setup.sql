@@ -53,33 +53,32 @@ SELECT
   END as status;
 
 -- ============================================
--- 4. Check database trigger exists and is enabled
+-- 4. Check database trigger is DISABLED (polling replaces trigger)
 -- ============================================
 SELECT
   tgname as trigger_name,
   CASE tgenabled
-    WHEN 'O' THEN '✅ ENABLED'
-    WHEN 'D' THEN '❌ DISABLED'
+    WHEN 'D' THEN '✅ DISABLED (expected — polling active)'
+    WHEN 'O' THEN '❌ ENABLED (should be disabled — polling handles notifications)'
     ELSE '❓ UNKNOWN'
   END as status,
-  proname as function_name,
-  pg_get_triggerdef(pg_trigger.oid) as trigger_definition
+  proname as function_name
 FROM pg_trigger
 JOIN pg_proc ON pg_trigger.tgfoid = pg_proc.oid
 WHERE tgrelid = 'station_snapshots'::regclass
   AND tgname = 'trigger_port_available';
 
--- Expected: trigger_port_available | ✅ ENABLED
+-- Expected: trigger_port_available | ✅ DISABLED
 
 -- ============================================
--- 5. Check trigger function exists
+-- 5. Check polling RPC function exists
 -- ============================================
 SELECT
-  'notify_port_available function' as component,
+  'process_polling_tasks function' as component,
   CASE
     WHEN EXISTS (
       SELECT 1 FROM pg_proc
-      WHERE proname = 'notify_port_available'
+      WHERE proname = 'process_polling_tasks'
     ) THEN '✅ EXISTS'
     ELSE '❌ MISSING'
   END as status;
@@ -147,8 +146,37 @@ SELECT
   END as command,
   CASE WHEN permissive THEN 'PERMISSIVE' ELSE 'RESTRICTIVE' END as type
 FROM pg_policies
-WHERE tablename IN ('subscriptions', 'station_snapshots')
+WHERE tablename IN ('subscriptions', 'station_snapshots', 'polling_tasks')
 ORDER BY tablename, policyname;
+
+-- Expected: subscriptions has 4 policies (SELECT/INSERT/UPDATE/DELETE) for service_role
+
+-- ============================================
+-- 9b. Verify subscriptions grants revoked from anon/authenticated
+-- ============================================
+SELECT
+  grantee,
+  privilege_type,
+  CASE
+    WHEN grantee IN ('anon', 'authenticated') THEN '❌ SHOULD BE REVOKED'
+    ELSE '✅ OK'
+  END as status
+FROM information_schema.table_privileges
+WHERE table_name = 'subscriptions'
+  AND grantee IN ('anon', 'authenticated');
+
+-- Expected: 0 rows (all grants revoked)
+
+-- ============================================
+-- 9c. Check polling_tasks health
+-- ============================================
+SELECT
+  status,
+  COUNT(*) as count,
+  MAX(last_checked_at) as last_checked
+FROM polling_tasks
+GROUP BY status
+ORDER BY status;
 
 -- ============================================
 -- 10. Summary Report
@@ -168,16 +196,21 @@ SELECT
     THEN '✅' ELSE '❌' END
 UNION ALL
 SELECT
-  'Database trigger',
+  'Trigger DISABLED (polling active)',
   CASE WHEN EXISTS (
     SELECT 1 FROM pg_trigger
     WHERE tgname = 'trigger_port_available'
-      AND tgenabled = 'O'
+      AND tgenabled = 'D'
   ) THEN '✅' ELSE '❌' END
 UNION ALL
 SELECT
-  'Trigger function',
-  CASE WHEN EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'notify_port_available')
+  'Polling RPC function',
+  CASE WHEN EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'process_polling_tasks')
+    THEN '✅' ELSE '❌' END
+UNION ALL
+SELECT
+  'Subscriptions RLS policies',
+  CASE WHEN (SELECT COUNT(*) FROM pg_policies WHERE tablename = 'subscriptions') >= 4
     THEN '✅' ELSE '❌' END
 UNION ALL
 SELECT
@@ -245,24 +278,32 @@ EXPECTED RESULTS:
 
 ✅ subscriptions table: EXISTS
 ✅ station_snapshots table: EXISTS
-✅ trigger_port_available: ENABLED
-✅ notify_port_available function: EXISTS
+✅ trigger_port_available: DISABLED (polling handles notifications)
+✅ process_polling_tasks function: EXISTS
+✅ Subscriptions RLS: 4 policies (service_role only)
 ✅ Station 147988 snapshot: EXISTS
 ⚠️  Active subscriptions: 0 (will be created during test)
 
 TROUBLESHOOTING:
 ================
 
-If trigger is DISABLED:
+If trigger is ENABLED (should be DISABLED):
+  -- Polling engine replaces the old trigger-based notifications.
+  -- Trigger is kept for emergency rollback only.
   ALTER TABLE station_snapshots
-  ENABLE TRIGGER trigger_port_available;
+  DISABLE TRIGGER trigger_port_available;
 
-If table is missing:
-  Run Supabase migrations:
+If polling function is missing:
+  Check migrations are applied:
   npx supabase db push
 
-If function is missing:
-  Check Edge Functions deployment:
+If Edge Function is missing:
+  Deploy via Supabase MCP or CLI:
+  npx supabase functions deploy process-polling
   npx supabase functions deploy send-push-notification
+
+EMERGENCY ROLLBACK (re-enable trigger, disable polling):
+  ALTER TABLE station_snapshots ENABLE TRIGGER trigger_port_available;
+  -- Then disable notification-polling.yml workflow in GitHub Actions
 
 */

@@ -23,6 +23,8 @@ This document describes the API architecture for the Iberdrola EV Charger Monito
 | `station_metadata` | Static station info (location, address, IDs) | `cp_id` |
 | `snapshot_throttle` | Deduplication table (5-min TTL) | `cp_id` |
 | `station_verification_queue` | Queue of stations pending price verification | `cp_id` |
+| `subscriptions` | Push notification subscriptions (one-active-per-browser) | `id` (UUID) |
+| `polling_tasks` | Polling tasks for confirmed notification dispatch | `id` (UUID) |
 
 ### station_snapshots
 
@@ -94,6 +96,59 @@ CREATE TABLE station_verification_queue (
   updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now()
 );
 ```
+
+### subscriptions
+
+```sql
+CREATE TABLE subscriptions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  station_id TEXT NOT NULL,
+  endpoint TEXT NOT NULL,
+  p256dh TEXT NOT NULL,
+  auth TEXT NOT NULL,
+  user_id UUID,
+  is_active BOOLEAN NOT NULL DEFAULT true,
+  last_notified_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  port_number INTEGER DEFAULT 1,
+  target_status TEXT DEFAULT 'Available'
+);
+
+-- Partial unique: one active subscription per station/port/endpoint
+CREATE UNIQUE INDEX subscriptions_unique_active
+  ON subscriptions (station_id, port_number, endpoint) WHERE (is_active = true);
+
+-- Performance index for send-push-notification queries
+CREATE INDEX idx_subscriptions_station_port_active
+  ON subscriptions (station_id, port_number) WHERE (is_active = true);
+```
+
+**RLS**: Enabled, service_role only. anon/authenticated have no grants.
+
+### polling_tasks
+
+```sql
+CREATE TABLE polling_tasks (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  subscription_id UUID,
+  cp_id INTEGER NOT NULL,
+  cupr_id INTEGER NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending',  -- pending|running|dispatching|completed|expired
+  target_port INTEGER,
+  target_status TEXT NOT NULL DEFAULT 'Available',
+  initial_status JSONB,
+  poll_count INTEGER DEFAULT 0,
+  max_polls INTEGER DEFAULT 72,            -- 72 x 10min = 12 hours
+  consecutive_available INTEGER NOT NULL DEFAULT 0,
+  last_checked_at TIMESTAMPTZ,
+  last_seen_port_update_at TIMESTAMPTZ,
+  last_seen_status TEXT,
+  created_at TIMESTAMPTZ DEFAULT now(),
+  expires_at TIMESTAMPTZ DEFAULT (now() + interval '12 hours')
+);
+```
+
+**RLS**: Enabled, service_role only.
 
 ---
 
@@ -175,6 +230,50 @@ RETURNS TABLE (
   attempt_count INTEGER,
   locked_at TIMESTAMPTZ
 );
+```
+
+### process_polling_tasks
+
+Processes active polling tasks: checks latest snapshots, tracks `consecutive_available`, returns tasks ready for notification dispatch.
+
+```sql
+CREATE FUNCTION process_polling_tasks(p_dry_run BOOLEAN DEFAULT true) RETURNS JSONB;
+-- Returns: { processed, expired, ready: [{task_id, subscription_id, station_id, cp_id, target_port, consecutive_available}], dry_run }
+-- p_dry_run=false marks ready tasks as 'dispatching'
+```
+
+**Dispatch criteria**: `consecutive_available >= 2` (port confirmed Available across 2+ separate Iberdrola observations via `port_update_date` change).
+
+### can_poll_station
+
+Checks if a station can be polled (5-minute cooldown based on latest snapshot).
+
+```sql
+CREATE FUNCTION can_poll_station(p_cupr_id INTEGER)
+RETURNS TABLE (can_poll BOOLEAN, last_observed TIMESTAMPTZ, seconds_until_next INTEGER);
+```
+
+### create_polling_task
+
+Creates a polling task linked to a subscription.
+
+```sql
+CREATE FUNCTION create_polling_task(
+  p_subscription_id UUID,
+  p_target_port INTEGER DEFAULT NULL,
+  p_target_status TEXT DEFAULT 'Available'
+) RETURNS UUID;
+```
+
+### get_station_with_snapshot
+
+Gets station metadata + latest snapshot.
+
+```sql
+CREATE FUNCTION get_station_with_snapshot(
+  p_cp_id INTEGER DEFAULT NULL,
+  p_cupr_id INTEGER DEFAULT NULL
+) RETURNS TABLE (cp_id, cupr_id, name, latitude, longitude, address_full, port1_status, port2_status, overall_status, observed_at);
 ```
 
 ### mark_processing_timeout
@@ -435,6 +534,61 @@ Single orchestrator for station verification lifecycle.
 
 ---
 
+### POST /functions/v1/process-polling
+
+Processes polling tasks and dispatches push notifications for confirmed availability. Called by GitHub Actions cron every 5 minutes.
+
+**Request:** Empty body `{}`
+
+**Response:**
+```typescript
+{
+  ok: true;
+  data: {
+    processed: number;  // Tasks checked
+    expired: number;    // Tasks expired (max polls or deadline)
+    ready: number;      // Tasks dispatched
+    dispatched: number; // Successful push sends
+    failed: number;     // Failed push sends
+  };
+}
+```
+
+**Architecture:**
+```
+GitHub Actions (cron */5) → process-polling Edge Function → RPC process_polling_tasks()
+  → for each ready task: POST send-push-notification → mark completed
+```
+
+### POST /functions/v1/send-push-notification
+
+Sends Web Push notifications to all active subscriptions matching station + port.
+
+**Request:**
+```typescript
+{ stationId: string; portNumber: number }
+```
+
+**Dedup guard:** Skips subscriptions where `last_notified_at < 5 min ago`.
+
+**Behavior:** After sending, deactivates all matched subscriptions (one-time notification model).
+
+### POST /functions/v1/check-subscription
+
+Checks if browser has active subscriptions for a station.
+
+**Request:**
+```typescript
+{ stationId: string; endpoint: string }
+```
+
+**Response:**
+```typescript
+{ subscribedPorts: number[] }
+```
+
+---
+
 ### POST /functions/v1/search-nearby (current behavior)
 
 Returns cached nearby stations, but FREE output is now based on verification lifecycle.
@@ -541,32 +695,42 @@ Transitions:
 
 ---
 
-## 6. Push Notifications API
+## 6. Push Notifications
 
-### POST /functions/v1/save-subscription
+### Architecture (Polling-Based)
 
-Saves push notification subscription to backend.
-
-**Request:**
-```typescript
-{
-  stationId: string;
-  portNumber?: number;
-  subscription: PushSubscription;
-}
+```
+User subscribes → start-watch → creates subscription + polling_task
+                                         ↓
+GitHub Actions cron (*/5 min) → process-polling Edge Function
+                                         ↓
+                              RPC process_polling_tasks()
+                              - reads latest station_snapshots
+                              - tracks consecutive_available via port_update_date
+                              - dispatches when confirmed >= 2 observations
+                                         ↓
+                              send-push-notification → Web Push → deactivate subscription
 ```
 
-**Headers:**
-```
-Content-Type: application/json
-apikey: <SUPABASE_ANON_KEY>
-Authorization: Bearer <SUPABASE_ANON_KEY>
-```
+**Key design**: Notifications are only sent after a port is confirmed Available across 2+ separate Iberdrola API observations (different `port_update_date`). This eliminates false positives from stale/cached data.
 
-**Retry Logic:**
-- Max attempts: 3
-- Delay: 1s, 2s, 3s (linear backoff)
-- No retry on 4xx errors
+**Trigger (DISABLED)**: `trigger_port_available` on `station_snapshots` is preserved but disabled. Emergency rollback: `ALTER TABLE station_snapshots ENABLE TRIGGER trigger_port_available;`
+
+### Subscription Flow
+
+1. Frontend calls `POST /start-watch` with cupr_id, port, push subscription
+2. start-watch deactivates any existing active subscriptions for this browser
+3. Creates/updates subscription record with correct `port_number`
+4. Creates `polling_task` linked to subscription
+5. Returns current station status
+
+### Notification Dispatch
+
+1. `process-polling` runs every 5 min via GitHub Actions
+2. For each active task: reads latest snapshot, compares `port_update_date`
+3. If target port is Available with new observation: `consecutive_available++`
+4. When `consecutive_available >= 2`: dispatches push via `send-push-notification`
+5. Subscription deactivated after successful send (one-time model)
 
 ---
 
