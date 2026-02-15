@@ -58,9 +58,20 @@ Deno.serve(async (req) => {
 
     webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY);
 
+    // Fetch station metadata for human-readable notification
+    const { data: meta } = await supabaseAdmin
+      .from('station_metadata')
+      .select('address_street, address_town')
+      .eq('cp_id', Number(stationId))
+      .maybeSingle();
+
+    const location = meta
+      ? [meta.address_street, meta.address_town].filter(Boolean).join(', ')
+      : `station ${stationId}`;
+
     const payload = JSON.stringify({
       title: 'Charger Available!',
-      body: `Port ${portNumber} at station ${stationId} is now available`,
+      body: `Port ${portNumber} at ${location} is now available`,
       url: `/?station=${stationId}`,
     });
 
