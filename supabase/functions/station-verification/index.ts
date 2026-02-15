@@ -196,7 +196,7 @@ Deno.serve(async (req) => {
 
         const nextAttempt = (item.attempt_count ?? 0) + 1;
 
-        if (nextAttempt >= 5) {
+        if (nextAttempt >= 2) {
           await Promise.all([
             supabaseAdmin
               .from('station_metadata')
