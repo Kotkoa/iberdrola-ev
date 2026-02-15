@@ -22,6 +22,7 @@ This document describes the API architecture for the Iberdrola EV Charger Monito
 | `station_snapshots` | Current and historical station status data | `id` (UUID) |
 | `station_metadata` | Static station info (location, address, IDs) | `cp_id` |
 | `snapshot_throttle` | Deduplication table (5-min TTL) | `cp_id` |
+| `station_verification_queue` | Queue of stations pending price verification | `cp_id` |
 
 ### station_snapshots
 
@@ -61,6 +62,9 @@ CREATE TABLE station_metadata (
   address_full TEXT,
   is_free BOOLEAN,                    -- TRUE if all prices = 0, FALSE if any > 0, NULL if unknown
   price_verified BOOLEAN DEFAULT false, -- TRUE after scraper verifies pricing
+  verification_state TEXT NOT NULL DEFAULT 'unprocessed'
+    CHECK (verification_state IN ('unprocessed','verified_free','verified_paid','failed','dead_letter')),
+  price_verified_at TIMESTAMP WITH TIME ZONE,
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT now()
 );
 ```
@@ -72,6 +76,22 @@ CREATE TABLE snapshot_throttle (
   cp_id INTEGER PRIMARY KEY,
   last_payload_hash TEXT,
   last_snapshot_at TIMESTAMP WITH TIME ZONE
+);
+```
+
+### station_verification_queue
+
+```sql
+CREATE TABLE station_verification_queue (
+  cp_id INTEGER PRIMARY KEY,
+  cupr_id INTEGER NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'processing')),
+  attempt_count INTEGER NOT NULL DEFAULT 0,
+  next_attempt_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
+  locked_at TIMESTAMP WITH TIME ZONE,
+  last_error TEXT,
+  created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
+  updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now()
 );
 ```
 
@@ -133,6 +153,47 @@ CREATE FUNCTION should_store_snapshot(
   p_hash TEXT,
   p_minutes INTEGER DEFAULT 5
 ) RETURNS BOOLEAN;
+```
+
+### enqueue_verification_candidates
+
+Batch enqueue of stations for verification (deduplicated by `cp_id`).
+
+```sql
+CREATE FUNCTION enqueue_verification_candidates(p_items JSONB) RETURNS INTEGER;
+```
+
+### claim_verification_batch
+
+Claims pending verification rows using `FOR UPDATE SKIP LOCKED`.
+
+```sql
+CREATE FUNCTION claim_verification_batch(p_limit INTEGER DEFAULT 1)
+RETURNS TABLE (
+  cp_id INTEGER,
+  cupr_id INTEGER,
+  attempt_count INTEGER,
+  locked_at TIMESTAMPTZ
+);
+```
+
+### mark_processing_timeout
+
+Moves stale `processing` rows back to `pending`.
+
+```sql
+CREATE FUNCTION mark_processing_timeout(p_timeout_minutes INTEGER DEFAULT 20) RETURNS INTEGER;
+```
+
+### reconcile_verification_queue
+
+Resolves queue rows after scraper updates `station_metadata` (`is_free`, `price_verified`).
+
+```sql
+CREATE FUNCTION reconcile_verification_queue(
+  p_max_retries INTEGER DEFAULT 5,
+  p_timeout_minutes INTEGER DEFAULT 20
+) RETURNS JSONB;
 ```
 
 ---
@@ -317,6 +378,82 @@ Authorization: Bearer <SUPABASE_ANON_KEY>
 3. Triggers immediate poll for current status
 4. Starts background polling task (5-minute intervals)
 5. Returns current status and task metadata
+
+---
+
+### POST /functions/v1/station-verification
+
+Single orchestrator for station verification lifecycle.
+
+**Modes:**
+- `enqueue` — add candidates to verification queue (dedup, skip already verified)
+- `run` — claim queue rows and dispatch existing GitHub `scraper.yml` (single `cupr_id` per dispatch)
+- `reconcile` — resolve `processing` rows using fresh `station_metadata`
+- `complete` — optional manual completion API (also runs reconcile)
+
+**Request (enqueue):**
+```typescript
+{
+  mode: 'enqueue';
+  items: Array<{ cp_id: number; cupr_id: number }>;
+}
+```
+
+**Request (run):**
+```typescript
+{
+  mode: 'run';
+  batch_size?: number; // capped in function (current implementation: max 5)
+}
+```
+
+**Request (reconcile):**
+```typescript
+{
+  mode: 'reconcile';
+}
+```
+
+**Response (run):**
+```typescript
+{
+  ok: true;
+  data: {
+    claimed: number;
+    dispatched: number;
+    dispatch_failures: Array<{ cp_id: number; reason: string }>;
+  };
+}
+```
+
+**Failure Policy:**
+- Retry limit: 5 attempts
+- Backoff: 2m, 5m, 15m, 30m, 60m
+- Timeout: `processing` older than 20 minutes is retried or moved to `dead_letter`
+
+**Important:** current external scraper workflow accepts a single `cupr_id` input, so `run` dispatches one workflow call per claimed row.
+
+---
+
+### POST /functions/v1/search-nearby (current behavior)
+
+Returns cached nearby stations, but FREE output is now based on verification lifecycle.
+
+**Current FREE source of truth:**
+- Include station in results only when `station_metadata.verification_state = 'verified_free'`
+
+**Side effect:**
+- Nearby stations with non-verified states are batch-enqueued via `enqueue_verification_candidates`.
+
+**Meta fields:**
+```typescript
+{
+  fresh: false;
+  scraper_triggered: boolean;
+  retry_after: number | null;
+  verification_enqueued: number;
+}
+```
 
 ---
 
@@ -678,6 +815,30 @@ interface StartWatchData {
   next_poll_in: number | null;
 }
 
+interface SearchNearbyStation {
+  cpId: number;
+  cuprId: number;
+  name: string;
+  latitude: number;
+  longitude: number;
+  addressFull: string;
+  overallStatus: string | null;
+  totalPorts: number | null;
+  maxPower: number | null;
+  freePorts: number | null;
+  priceKwh: number | null;
+  socketType: string | null;
+  distanceKm: number;
+  verificationState: 'verified_free' | 'verified_paid' | 'unprocessed' | 'failed' | 'dead_letter';
+}
+
+interface SearchNearbyMeta {
+  fresh: boolean;
+  scraper_triggered: boolean;
+  retry_after: number | null;
+  verification_enqueued?: number;
+}
+
 // Type guards
 function isApiSuccess<T>(response: ApiResponse<T>): response is ApiSuccessResponse<T>;
 function isRateLimited(response: ApiResponse<unknown>): response is ApiErrorResponse;
@@ -761,7 +922,8 @@ VITE_CHECK_SUB_URL=/functions/v1/check-subscription
 
 1. **Iberdrola API Blocked**: Direct API calls return 403. All data comes from Supabase cache.
 2. **Edge Functions Limited**: Cannot fetch from Iberdrola API (IP blocked).
-3. **Only FREE Stations Cached**: Paid stations are filtered out in cache operations.
+3. **FREE Results Are Verification-Gated**: Search returns FREE stations only when `verification_state='verified_free'`.
+4. **Existing Scraper Input Is Single-Station**: GitHub workflow currently accepts one `cupr_id` per dispatch.
 
 ---
 
@@ -777,6 +939,7 @@ VITE_CHECK_SUB_URL=/functions/v1/check-subscription
 | Station Data Hook | `src/hooks/useStationData.ts` | TTL-based data loading |
 | Search Hook | `src/hooks/useStationSearch.ts` | Geo search with enrichment |
 | Edge Function | `supabase/functions/save-snapshot/index.ts` | Snapshot persistence |
+| Edge Function | `supabase/functions/station-verification/index.ts` | Verification queue orchestrator |
 | PWA | `src/pwa.ts` | Push subscription management |
 | Types | `types/charger.ts`, `types/realtime.ts` | Core type definitions |
 
