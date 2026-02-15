@@ -131,29 +131,78 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Upsert subscription
-    const { data: subData, error: subError } = await supabaseAdmin
+    // Save subscription (check existing, then insert or update)
+    const stationId = String(metadata.cp_id);
+    const portNumber = port ?? null;
+
+    // Deactivate ALL existing active subscriptions for this endpoint (one-active-per-browser model)
+    await supabaseAdmin
       .from('subscriptions')
-      .upsert(
-        {
+      .update({ is_active: false })
+      .eq('endpoint', subscription.endpoint)
+      .eq('is_active', true);
+
+    // Check if subscription already exists for this exact station + port + endpoint
+    let existingQuery = supabaseAdmin
+      .from('subscriptions')
+      .select('id')
+      .eq('station_id', stationId)
+      .eq('endpoint', subscription.endpoint);
+
+    if (portNumber !== null) {
+      existingQuery = existingQuery.eq('port_number', portNumber);
+    } else {
+      existingQuery = existingQuery.is('port_number', null);
+    }
+
+    const { data: existing } = await existingQuery.maybeSingle();
+
+    let subData: { id: string } | null = null;
+    let subError: { message: string } | null = null;
+
+    if (existing) {
+      // Update existing subscription
+      const result = await supabaseAdmin
+        .from('subscriptions')
+        .update({
+          p256dh: subscription.keys.p256dh,
+          auth: subscription.keys.auth,
+          is_active: true,
+          target_status: target_status,
+        })
+        .eq('id', existing.id)
+        .select('id')
+        .single();
+      subData = result.data;
+      subError = result.error;
+    } else {
+      // Insert new subscription
+      const result = await supabaseAdmin
+        .from('subscriptions')
+        .insert({
+          station_id: stationId,
+          port_number: portNumber,
           endpoint: subscription.endpoint,
           p256dh: subscription.keys.p256dh,
           auth: subscription.keys.auth,
-          station_id: String(metadata.cp_id),
           is_active: true,
           target_status: target_status,
-        },
-        { onConflict: 'endpoint' }
-      )
-      .select('id')
-      .single();
+        })
+        .select('id')
+        .single();
+      subData = result.data;
+      subError = result.error;
+    }
 
-    if (subError) {
-      console.error('Subscription upsert error:', subError);
+    if (subError || !subData) {
+      console.error('Subscription save error:', subError);
       return new Response(
         JSON.stringify({
           ok: false,
-          error: { code: 'SUBSCRIPTION_ERROR', message: subError.message },
+          error: {
+            code: 'SUBSCRIPTION_ERROR',
+            message: subError?.message ?? 'Failed to save subscription',
+          },
         }),
         { status: 500, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } }
       );
