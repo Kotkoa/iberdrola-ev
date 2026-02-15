@@ -233,7 +233,7 @@ $$;
 
 -- 8) Helper: reconcile processing queue with metadata updates written by existing scraper.
 create or replace function public.reconcile_verification_queue(
-  p_max_retries integer default 5,
+  p_max_retries integer default 2,
   p_timeout_minutes integer default 20
 )
 returns jsonb
