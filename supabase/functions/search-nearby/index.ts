@@ -27,6 +27,7 @@ interface StationResult {
   priceKwh: number | null;
   socketType: string | null;
   distanceKm: number;
+  verificationState: string;
 }
 
 /**
@@ -134,6 +135,8 @@ Deno.serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     );
 
+    const bbox = radiusToBbox(latitude, longitude, radiusKm);
+
     // 1. Get stations from cache using RPC
     const { data: stations, error: searchError } = await supabaseAdmin.rpc(
       'search_stations_nearby',
@@ -141,7 +144,7 @@ Deno.serve(async (req) => {
         p_lat: latitude,
         p_lon: longitude,
         p_radius_km: radiusKm,
-        p_only_free: true,
+        p_only_free: false,
       }
     );
 
@@ -156,8 +159,75 @@ Deno.serve(async (req) => {
       );
     }
 
-    // 2. Check if we should trigger GitHub Action (rate limit: 5 min per bbox)
-    const bbox = radiusToBbox(latitude, longitude, radiusKm);
+    // 2. Keep only stations explicitly verified as FREE in station_metadata
+    const rows = (stations || []) as Record<string, unknown>[];
+    const cpIds = rows.map((s) => s.cp_id).filter((id): id is number => typeof id === 'number');
+
+    const verificationMap = new Map<number, string>();
+    if (cpIds.length > 0) {
+      const { data: verificationRows, error: verificationError } = await supabaseAdmin
+        .from('station_metadata')
+        .select('cp_id, verification_state')
+        .in('cp_id', cpIds);
+
+      if (verificationError) {
+        console.warn(
+          '[search-nearby] verification state lookup failed:',
+          verificationError.message
+        );
+      } else {
+        for (const row of verificationRows || []) {
+          verificationMap.set(
+            row.cp_id as number,
+            (row.verification_state as string) || 'unprocessed'
+          );
+        }
+      }
+    }
+
+    const verifiedRows = rows.filter((s) => {
+      const cpId = s.cp_id as number;
+      return verificationMap.get(cpId) === 'verified_free';
+    });
+
+    // 3. Enqueue nearby unverified stations for verification (single batched RPC)
+    let verificationEnqueued = 0;
+    const { data: candidates, error: candidatesError } = await supabaseAdmin
+      .from('station_metadata')
+      .select('cp_id, cupr_id, verification_state')
+      .gte('latitude', bbox.latMin)
+      .lte('latitude', bbox.latMax)
+      .gte('longitude', bbox.lonMin)
+      .lte('longitude', bbox.lonMax)
+      .limit(300);
+
+    if (candidatesError) {
+      console.warn('[search-nearby] candidate lookup failed:', candidatesError.message);
+    } else {
+      const enqueueItems = (candidates || [])
+        .filter(
+          (c) =>
+            typeof c.cp_id === 'number' &&
+            typeof c.cupr_id === 'number' &&
+            c.verification_state !== 'verified_free' &&
+            c.verification_state !== 'verified_paid'
+        )
+        .map((c) => ({ cp_id: c.cp_id as number, cupr_id: c.cupr_id as number }));
+
+      if (enqueueItems.length > 0) {
+        const { data: enqueued, error: enqueueError } = await supabaseAdmin.rpc(
+          'enqueue_verification_candidates',
+          { p_items: enqueueItems }
+        );
+        if (enqueueError) {
+          console.warn('[search-nearby] enqueue failed:', enqueueError.message);
+        } else {
+          verificationEnqueued = Number(enqueued ?? 0);
+        }
+      }
+    }
+
+    // 4. Check if we should trigger GitHub Action (rate limit: 5 min per bbox)
 
     // Use a hash of bbox as throttle key
     const bboxKey = `geo_${Math.round(bbox.latMin * 100)}_${Math.round(bbox.lonMin * 100)}_${Math.round(bbox.latMax * 100)}_${Math.round(bbox.lonMax * 100)}`;
@@ -199,7 +269,7 @@ Deno.serve(async (req) => {
     }
 
     // 5. Transform results to frontend format
-    const results: StationResult[] = (stations || []).map((s: Record<string, unknown>) => ({
+    const results: StationResult[] = verifiedRows.map((s: Record<string, unknown>) => ({
       cpId: s.cp_id as number,
       cuprId: s.cupr_id as number,
       name: (s.name as string) || 'Unknown',
@@ -213,6 +283,7 @@ Deno.serve(async (req) => {
       priceKwh: s.price_kwh as number | null,
       socketType: s.socket_type as string | null,
       distanceKm: s.distance_km as number,
+      verificationState: 'verified_free',
     }));
 
     return new Response(
@@ -226,6 +297,7 @@ Deno.serve(async (req) => {
           fresh: false, // Always from cache
           scraper_triggered: scraperTriggered,
           retry_after: retryAfter,
+          verification_enqueued: verificationEnqueued,
         },
       }),
       { headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } }

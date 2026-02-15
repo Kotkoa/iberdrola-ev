@@ -139,6 +139,7 @@ export interface SearchNearbyStation {
   priceKwh: number | null;
   socketType: string | null;
   distanceKm: number;
+  verificationState: 'verified_free' | 'verified_paid' | 'unprocessed' | 'failed' | 'dead_letter';
 }
 
 /**
@@ -159,6 +160,8 @@ export interface SearchNearbyMeta {
   scraper_triggered: boolean;
   /** Seconds until next trigger allowed (null if can trigger now) */
   retry_after: number | null;
+  /** Number of stations enqueued for verification in this request */
+  verification_enqueued?: number;
 }
 
 /**

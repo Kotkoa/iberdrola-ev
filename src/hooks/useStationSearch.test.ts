@@ -185,6 +185,7 @@ describe('useStationSearch', () => {
         priceKwh: 0,
         socketType: 'Type 2',
         distanceKm: 0.5,
+        verificationState: 'verified_free',
       },
     ];
 
@@ -227,6 +228,7 @@ describe('useStationSearch', () => {
         priceKwh: 0,
         socketType: 'Type 2',
         distanceKm: 0.5,
+        verificationState: 'verified_free',
       },
     ];
 
