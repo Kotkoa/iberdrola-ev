@@ -278,7 +278,7 @@ Deno.serve(async (req) => {
       const { data: reconcileData, error: reconcileError } = await supabaseAdmin.rpc(
         'reconcile_verification_queue',
         {
-          p_max_retries: 5,
+          p_max_retries: 2,
           p_timeout_minutes: 20,
         }
       );
@@ -308,7 +308,7 @@ Deno.serve(async (req) => {
     const { data: reconcileData, error: reconcileError } = await supabaseAdmin.rpc(
       'reconcile_verification_queue',
       {
-        p_max_retries: 5,
+        p_max_retries: 2,
         p_timeout_minutes: 20,
       }
     );
