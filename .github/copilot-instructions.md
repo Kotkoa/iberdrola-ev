@@ -31,11 +31,11 @@ Push notifications use Web Push API + service worker pattern:
 isPushSupported() // from src/pwa.ts
 
 // Subscribe flow
-subscribeToStationNotifications(stationId, portNumber)
+subscribeWithWatch(cuprId, portNumber)
   → Request permission
   → Register service worker
   → Subscribe to push
-  → Save to backend
+  → Start server-side polling via API
 ```
 
 **Service Worker**: [public/sw.js](public/sw.js) handles push events and notification clicks

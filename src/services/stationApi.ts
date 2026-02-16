@@ -8,9 +8,7 @@ import type {
 import { extractPhysicalSockets } from './iberdrola';
 import { buildRawAddress } from '../utils/address';
 import { supabase } from '../../api/supabase';
-import { CHARGING_POINT_STATUS, GEO_CONSTANTS } from '../constants';
-
-const EDGE_BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`;
+import { CHARGING_POINT_STATUS, GEO_CONSTANTS, EDGE_BASE } from '../constants';
 
 /**
  * Determines if a station should be saved to database cache.

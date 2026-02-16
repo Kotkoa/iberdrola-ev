@@ -5,7 +5,6 @@ import Button from '@mui/material/Button';
 import Typography from '@mui/material/Typography';
 import Alert from '@mui/material/Alert';
 import Snackbar from '@mui/material/Snackbar';
-// import Switch from '@mui/material/Switch'; // TODO: temporarily hidden
 import RoomOutlinedIcon from '@mui/icons-material/RoomOutlined';
 import { RadiusSelector } from './RadiusSelector';
 import { SearchResults } from './SearchResults';
@@ -22,8 +21,6 @@ interface SearchTabProps {
 export function SearchTab({ onStationSelected }: SearchTabProps) {
   const [radius, setRadius] = useState(5);
   const [snackbarOpen, setSnackbarOpen] = useState(false);
-  // const [showPaid, setShowPaid] = useState(false); // TODO: temporarily hidden
-
   const { stations, loading, enriching, progress, error, usingCachedData, search } =
     useStationSearch();
 
@@ -88,35 +85,6 @@ export function SearchTab({ onStationSelected }: SearchTabProps) {
               {loading ? 'Searching...' : 'Find Stations'}
             </Button>
           </Stack>
-
-          {/* TODO: temporarily hidden paid stations switcher
-          <Switch
-            checked={showPaid}
-            onChange={(e) => setShowPaid(e.target.checked)}
-            size="medium"
-            sx={{
-              ml: 'auto',
-              '& .MuiSwitch-switchBase': {
-                color: 'success.main',
-                '&:hover': {
-                  backgroundColor: 'rgba(76, 175, 80, 0.08)',
-                },
-              },
-              '& .MuiSwitch-switchBase + .MuiSwitch-track': {
-                backgroundColor: 'success.main',
-              },
-              '& .MuiSwitch-switchBase.Mui-checked': {
-                color: 'warning.main',
-                '&:hover': {
-                  backgroundColor: 'rgba(255, 152, 0, 0.08)',
-                },
-              },
-              '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': {
-                backgroundColor: 'warning.main',
-              },
-            }}
-          />
-          */}
         </Stack>
 
         {(loading || enriching) && progress.total > 0 && (
@@ -137,7 +105,7 @@ export function SearchTab({ onStationSelected }: SearchTabProps) {
             primaryStationId={primaryStationId}
             onSetPrimary={handleSetPrimary}
             userLocation={userLocation}
-            showPaid={false} // TODO: temporarily always false
+            showPaid={false}
           />
         )}
 

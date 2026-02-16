@@ -1,14 +1,7 @@
 import { startWatch, isApiSuccess } from './services/apiClient';
 import type { StartWatchData } from './types/api';
 
-const SAVE_SUBSCRIPTION_ENDPOINT =
-  import.meta.env.VITE_SAVE_SUBSCRIPTION_URL ?? '/save-subscription';
-
 const VAPID_PUBLIC_KEY = import.meta.env.VITE_VAPID_PUBLIC_KEY;
-const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
-
-const MAX_RETRY_ATTEMPTS = 3;
-const RETRY_DELAY_MS = 1000;
 
 /**
  * Result from start-watch API call
@@ -112,63 +105,6 @@ async function ensurePushSubscription(): Promise<PushSubscription> {
   }
 
   return subscription;
-}
-
-export async function subscribeToStationNotifications(stationId: number, portNumber?: number) {
-  const subscription = await ensurePushSubscription();
-  await saveSubscriptionWithRetry(stationId, portNumber, subscription);
-  return subscription;
-}
-
-async function saveSubscriptionWithRetry(
-  stationId: number,
-  portNumber: number | undefined,
-  subscription: PushSubscription
-): Promise<void> {
-  let lastError: Error | null = null;
-
-  for (let attempt = 0; attempt < MAX_RETRY_ATTEMPTS; attempt++) {
-    try {
-      const response = await fetch(SAVE_SUBSCRIPTION_ENDPOINT, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(SUPABASE_ANON_KEY
-            ? {
-                apikey: SUPABASE_ANON_KEY,
-                Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-              }
-            : {}),
-        },
-        body: JSON.stringify({
-          stationId: String(stationId),
-          portNumber,
-          subscription,
-        }),
-      });
-
-      if (response.ok) {
-        return;
-      }
-
-      // Don't retry on 4xx client errors - these are validation/auth issues
-      if (response.status >= 400 && response.status < 500) {
-        const errorText = await response.text().catch(() => '');
-        throw new Error(errorText || `Client error: ${response.status} ${response.statusText}`);
-      }
-
-      lastError = new Error(`Server returned ${response.status}`);
-    } catch (e) {
-      lastError = e instanceof Error ? e : new Error('Network error');
-    }
-
-    // Wait before retrying (exponential backoff)
-    if (attempt < MAX_RETRY_ATTEMPTS - 1) {
-      await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS * (attempt + 1)));
-    }
-  }
-
-  throw lastError ?? new Error('Failed to save subscription after retries');
 }
 
 function urlBase64ToUint8Array(base64String: string) {

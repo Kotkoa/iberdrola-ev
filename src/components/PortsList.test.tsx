@@ -35,7 +35,6 @@ describe('PortsList', () => {
     subscriptionState: { 1: 'idle', 2: 'idle' } as Record<PortNumber, SubscriptionStatus>,
     subscriptionErrors: { 1: null, 2: null } as Record<PortNumber, string | null>,
     pushAvailable: true,
-    isStandalone: false,
     onSubscribeClick: vi.fn(),
   };
 

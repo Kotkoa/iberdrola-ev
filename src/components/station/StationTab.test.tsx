@@ -45,8 +45,7 @@ vi.mock('../../hooks/useUserLocation', () => ({
 // Mock PWA functions
 vi.mock('../../pwa', () => ({
   isPushSupported: vi.fn(() => true),
-  isStandaloneApp: vi.fn(() => false),
-  subscribeToStationNotifications: vi.fn(),
+  subscribeWithWatch: vi.fn(),
 }));
 
 describe('StationTab', () => {

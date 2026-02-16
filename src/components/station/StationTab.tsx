@@ -6,7 +6,7 @@ import { StationEmptyState } from './StationEmptyState';
 import { StationDetails } from './StationDetails';
 import { PortsList } from '../PortsList';
 import { LoadingSkeleton } from '../LoadingSkeleton';
-import { isPushSupported, isStandaloneApp, subscribeWithWatch } from '../../pwa';
+import { isPushSupported, subscribeWithWatch } from '../../pwa';
 import { formatDuration } from '../../utils/time';
 import { calculateDistance } from '../../utils/maps';
 import { useUserLocation } from '../../hooks/useUserLocation';
@@ -31,7 +31,6 @@ export function StationTab({ onNavigateToSearch }: StationTabProps) {
   const { location: userLocation } = useUserLocation();
   const [now, setNow] = useState(() => new Date());
   const [pushAvailable, setPushAvailable] = useState(() => isPushSupported());
-  const [isStandalone, setIsStandalone] = useState(() => isStandaloneApp());
   const [subscriptionState, setSubscriptionState] = useState<
     Record<PortNumber, SubscriptionStatus>
   >({
@@ -102,24 +101,6 @@ export function StationTab({ onNavigateToSearch }: StationTabProps) {
 
   useEffect(() => {
     setPushAvailable(isPushSupported());
-    setIsStandalone(isStandaloneApp());
-
-    const mediaQuery =
-      typeof window !== 'undefined' && typeof window.matchMedia === 'function'
-        ? window.matchMedia('(display-mode: standalone)')
-        : null;
-
-    if (!mediaQuery) return;
-
-    const handleDisplayModeChange = (e: MediaQueryListEvent) => {
-      setIsStandalone(e.matches);
-    };
-
-    mediaQuery.addEventListener('change', handleDisplayModeChange);
-
-    return () => {
-      mediaQuery.removeEventListener('change', handleDisplayModeChange);
-    };
   }, []);
 
   const handleSubscribeClick = useCallback(
@@ -245,7 +226,6 @@ export function StationTab({ onNavigateToSearch }: StationTabProps) {
         subscriptionState={subscriptionState}
         subscriptionErrors={subscriptionErrors}
         pushAvailable={pushAvailable}
-        isStandalone={isStandalone}
         onSubscribeClick={handleSubscribeClick}
       />
     </Box>

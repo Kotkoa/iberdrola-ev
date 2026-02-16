@@ -33,13 +33,9 @@ import type {
 // Re-export type guards for convenience
 export { isApiSuccess, isRateLimited, isApiError } from '../types/api';
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL ?? '';
-const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY ?? '';
+import { EDGE_BASE } from '../constants';
 
-/**
- * Base URL for Edge Functions
- */
-const EDGE_BASE = `${SUPABASE_URL}/functions/v1`;
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY ?? '';
 
 /**
  * Default headers for Edge Function requests

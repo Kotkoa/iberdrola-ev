@@ -16,7 +16,6 @@ interface PortsListProps {
   subscriptionState: Record<PortNumber, SubscriptionStatus>;
   subscriptionErrors: Record<PortNumber, string | null>;
   pushAvailable: boolean;
-  isStandalone: boolean;
   onSubscribeClick: (portNumber: PortNumber) => void;
 }
 

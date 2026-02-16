@@ -96,3 +96,8 @@ export const TAB_NAMES = {
   STATION: 'station',
   SEARCH: 'search',
 } as const;
+
+// ========================
+// API Endpoints
+// ========================
+export const EDGE_BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`;
