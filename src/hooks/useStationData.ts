@@ -220,113 +220,96 @@ export function useStationData(
         createSubscription();
         unsubscribe = () => subscriptionRef.current?.unsubscribe();
 
+        // Helpers to reduce repetition
+        const applySnapshot = (snap: StationSnapshot) => {
+          const chargerStatus = snapshotToChargerStatus(snap, metadataRef.current ?? undefined);
+          currentDataTimestampRef.current = getObservationTimeMs(snap);
+          setData(chargerStatus);
+          setInternalState('ready');
+        };
+
+        const showError = (message: string) => {
+          setError(message);
+          setInternalState('error');
+        };
+
         // Check if snapshot is fresh
         const stale = isDataStale(getObservationTimestamp(snapshot), ttlMinutes);
 
+        // 1. Fresh cache hit (skip on station switch to trigger on-demand scrape)
         if (snapshot && !stale && !cpIdChanged) {
-          // Fresh data available from cache (skip on station switch to trigger on-demand scrape)
           console.log(`[useStationData] Using fresh cache for ${cpId}`);
-          const chargerStatus = snapshotToChargerStatus(snapshot, metadataRef.current ?? undefined);
-          currentDataTimestampRef.current = getObservationTimeMs(snapshot);
+          applySnapshot(snapshot);
+          return;
+        }
+
+        // 2. No cuprId — can't fetch from API, use whatever we have
+        if (cuprId === undefined) {
+          if (snapshot) {
+            console.log(`[useStationData] Using stale data for ${cpId} (no cuprId for refresh)`);
+            applySnapshot(snapshot);
+          } else {
+            showError('No data available');
+          }
+          return;
+        }
+
+        // 3. Rate limited in local cache — skip API call
+        if (isStationRateLimited(cuprId)) {
+          console.log(`[useStationData] Rate limited for ${cpId}, using cache`);
+          if (snapshot) {
+            applySnapshot(snapshot);
+            setIsRateLimitedState(true);
+          } else {
+            showError('Data unavailable (rate limited)');
+          }
+          return;
+        }
+
+        // 4. Fetch from Edge via poll-station
+        console.log(
+          `[useStationData] Cache ${stale ? 'stale' : 'missing'} for ${cpId}, fetching from Edge`
+        );
+        setInternalState('loading_api');
+
+        const result = await pollStation(cuprId);
+        if (!active) return;
+
+        if (isApiSuccess(result)) {
+          const chargerStatus = pollDataToChargerStatus(
+            result.data,
+            metadataRef.current ?? undefined
+          );
+          currentDataTimestampRef.current = new Date(result.data.observed_at).getTime();
           setData(chargerStatus);
           setInternalState('ready');
-        } else if (cuprId !== undefined) {
-          // Stale or missing - check rate limit cache first
-          if (isStationRateLimited(cuprId)) {
-            // Rate limited - use stale cache if available
-            console.log(`[useStationData] Rate limited for ${cpId}, using cache`);
-            if (snapshot) {
-              const chargerStatus = snapshotToChargerStatus(
-                snapshot,
-                metadataRef.current ?? undefined
-              );
-              currentDataTimestampRef.current = getObservationTimeMs(snapshot);
-              setData(chargerStatus);
-              setInternalState('ready');
-              setIsRateLimitedState(true);
-            } else {
-              setError('Data unavailable (rate limited)');
-              setInternalState('error');
-            }
-          } else {
-            // Fetch from Edge via poll-station
-            console.log(
-              `[useStationData] Cache ${stale ? 'stale' : 'missing'} for ${cpId}, fetching from Edge`
-            );
-            setInternalState('loading_api');
+          setIsRateLimitedState(false);
+          setNextPollIn(null);
+          return;
+        }
 
-            const result = await pollStation(cuprId);
-
-            if (!active) return;
-
-            if (isApiSuccess(result)) {
-              const chargerStatus = pollDataToChargerStatus(
-                result.data,
-                metadataRef.current ?? undefined
-              );
-              currentDataTimestampRef.current = new Date(result.data.observed_at).getTime();
-              setData(chargerStatus);
-              setInternalState('ready');
-              setIsRateLimitedState(false);
-              setNextPollIn(null);
-            } else if (isRateLimited(result)) {
-              // Rate limited - mark in cache and use stale data
-              const retryAfter = result.error.retry_after ?? 300;
-              markRateLimited(cuprId, retryAfter);
-              console.log(`[useStationData] Rate limited for ${cpId}, retry after ${retryAfter}s`);
-
-              if (snapshot) {
-                const chargerStatus = snapshotToChargerStatus(
-                  snapshot,
-                  metadataRef.current ?? undefined
-                );
-                currentDataTimestampRef.current = getObservationTimeMs(snapshot);
-                setData(chargerStatus);
-                setInternalState('ready');
-                setIsRateLimitedState(true);
-                setNextPollIn(retryAfter);
-              } else {
-                setError('Data unavailable (rate limited)');
-                setInternalState('error');
-              }
-            } else {
-              // Other API error - try to use stale cache as fallback
-              console.log(
-                `[useStationData] API error for ${cpId}: ${result.error.code}, using cache fallback`
-              );
-
-              if (snapshot) {
-                // Use stale cache with indicator
-                const chargerStatus = snapshotToChargerStatus(
-                  snapshot,
-                  metadataRef.current ?? undefined
-                );
-                currentDataTimestampRef.current = getObservationTimeMs(snapshot);
-                setData(chargerStatus);
-                setInternalState('ready');
-              } else {
-                // No cache available, show API error message
-                setError(result.error.message);
-                setInternalState('error');
-              }
-            }
-          }
-        } else {
-          // No cuprId, can't fetch from Edge
+        if (isRateLimited(result)) {
+          const retryAfter = result.error.retry_after ?? 300;
+          markRateLimited(cuprId, retryAfter);
+          console.log(`[useStationData] Rate limited for ${cpId}, retry after ${retryAfter}s`);
           if (snapshot) {
-            // Use stale data (better than nothing)
-            console.log(`[useStationData] Using stale data for ${cpId} (no cuprId for refresh)`);
-            const chargerStatus = snapshotToChargerStatus(
-              snapshot,
-              metadataRef.current ?? undefined
-            );
-            currentDataTimestampRef.current = getObservationTimeMs(snapshot);
-            setData(chargerStatus);
-            setInternalState('ready');
+            applySnapshot(snapshot);
+            setIsRateLimitedState(true);
+            setNextPollIn(retryAfter);
           } else {
-            setError('No data available');
-            setInternalState('error');
+            showError('Data unavailable (rate limited)');
           }
+          return;
+        }
+
+        // Other API error — fallback to stale cache
+        console.log(
+          `[useStationData] API error for ${cpId}: ${result.error.code}, using cache fallback`
+        );
+        if (snapshot) {
+          applySnapshot(snapshot);
+        } else {
+          showError(result.error.message);
         }
       } catch (e) {
         if (active) {

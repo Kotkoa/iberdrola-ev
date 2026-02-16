@@ -137,16 +137,6 @@ export interface StationInfo {
 }
 
 /**
- * @deprecated Iberdrola API is blocked (403). Always returns null.
- * Data should come from Supabase cache (populated by GitHub Actions scraper).
- */
-export async function fetchStationDetails(cuprId: number): Promise<StationDetails | null> {
-  void cuprId;
-  console.warn('[fetchStationDetails] Iberdrola API is blocked. Use cache instead.');
-  return null;
-}
-
-/**
  * Flattens nested logical/physical socket structure into a flat array.
  */
 export function extractPhysicalSockets(details: StationDetails | null): PhysicalSocket[] {
