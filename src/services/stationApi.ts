@@ -3,7 +3,9 @@ import type {
   StationDetails,
   ChargerStatusFromApi,
   StationInfoPartial,
+  PhysicalSocket,
 } from './iberdrola';
+import { extractPhysicalSockets } from './iberdrola';
 import { buildRawAddress } from '../utils/address';
 import { supabase } from '../../api/supabase';
 import { CHARGING_POINT_STATUS, GEO_CONSTANTS } from '../constants';
@@ -201,20 +203,23 @@ export async function saveSnapshot(request: SaveSnapshotRequest): Promise<{ stor
   return response.json();
 }
 
-export function stationInfoToSnapshotData(
-  station: StationInfo,
-  details: StationDetails | null
-): SaveSnapshotRequest['stationData'] {
-  const logical = details?.logicalSocket || [];
-  const flattened = logical.flatMap((ls) => ls.physicalSocket || []);
-  const port1 = flattened[0];
-  const port2 = flattened[1];
-
+function buildPortSnapshotFields(
+  port1: PhysicalSocket | undefined,
+  port2: PhysicalSocket | undefined
+): Pick<
+  SaveSnapshotRequest['stationData'],
+  | 'port1Status'
+  | 'port1PowerKw'
+  | 'port1PriceKwh'
+  | 'port1UpdateDate'
+  | 'port1SocketType'
+  | 'port2Status'
+  | 'port2PowerKw'
+  | 'port2PriceKwh'
+  | 'port2UpdateDate'
+  | 'port2SocketType'
+> {
   return {
-    cpName: details?.locationData?.cuprName,
-    latitude: station.latitude,
-    longitude: station.longitude,
-    addressFull: station.addressFull,
     port1Status: port1?.status?.statusCode,
     port1PowerKw: port1?.maxPower,
     port1PriceKwh: port1?.appliedRate?.recharge?.finalPrice ?? 0,
@@ -225,6 +230,21 @@ export function stationInfoToSnapshotData(
     port2PriceKwh: port2?.appliedRate?.recharge?.finalPrice ?? 0,
     port2UpdateDate: port2?.status?.updateDate,
     port2SocketType: port2?.socketType?.socketName,
+  };
+}
+
+export function stationInfoToSnapshotData(
+  station: StationInfo,
+  details: StationDetails | null
+): SaveSnapshotRequest['stationData'] {
+  const sockets = extractPhysicalSockets(details);
+
+  return {
+    cpName: details?.locationData?.cuprName,
+    latitude: station.latitude,
+    longitude: station.longitude,
+    addressFull: station.addressFull,
+    ...buildPortSnapshotFields(sockets[0], sockets[1]),
     overallStatus: details?.cpStatus?.statusCode,
     emergencyStopPressed: details?.emergencyStopButtonPressed,
     situationCode: details?.locationData?.situationCode,
@@ -232,29 +252,15 @@ export function stationInfoToSnapshotData(
 }
 
 export function detailsToSnapshotData(details: StationDetails): SaveSnapshotRequest['stationData'] {
-  const logical = details.logicalSocket || [];
-  const flattened = logical.flatMap((ls) => ls.physicalSocket || []);
-  const port1 = flattened[0];
-  const port2 = flattened[1];
-
+  const sockets = extractPhysicalSockets(details);
   const addr = details.locationData?.supplyPointData?.cpAddress;
-  const addressFull = addr ? buildRawAddress(addr) : undefined;
 
   return {
     cpName: details.locationData?.cuprName,
     latitude: details.locationData?.latitude,
     longitude: details.locationData?.longitude,
-    addressFull,
-    port1Status: port1?.status?.statusCode,
-    port1PowerKw: port1?.maxPower,
-    port1PriceKwh: port1?.appliedRate?.recharge?.finalPrice ?? 0,
-    port1UpdateDate: port1?.status?.updateDate,
-    port1SocketType: port1?.socketType?.socketName,
-    port2Status: port2?.status?.statusCode,
-    port2PowerKw: port2?.maxPower,
-    port2PriceKwh: port2?.appliedRate?.recharge?.finalPrice ?? 0,
-    port2UpdateDate: port2?.status?.updateDate,
-    port2SocketType: port2?.socketType?.socketName,
+    addressFull: addr ? buildRawAddress(addr) : undefined,
+    ...buildPortSnapshotFields(sockets[0], sockets[1]),
     overallStatus: details.cpStatus?.statusCode,
     emergencyStopPressed: details.emergencyStopButtonPressed,
     situationCode: details.locationData?.situationCode,
