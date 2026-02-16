@@ -191,21 +191,6 @@ export function extractStationInfo(
 }
 
 /**
- * @deprecated Iberdrola API is blocked (403). Always throws error.
- * Data should come from Supabase cache (populated by GitHub Actions scraper).
- */
-export async function fetchStationsPartial(
-  latitude: number,
-  longitude: number,
-  radiusKm: number
-): Promise<StationInfoPartial[]> {
-  void latitude;
-  void longitude;
-  void radiusKm;
-  throw new Error('Iberdrola API is blocked. Use loadStationsFromCacheNearLocation instead.');
-}
-
-/**
  * Enriches partial station info with detailed data from cache.
  * API path is disabled (Iberdrola blocks all proxies with 403).
  *
@@ -250,9 +235,6 @@ export async function getUserLocation(): Promise<GeolocationPosition> {
   });
 }
 
-/**
- * @deprecated Iberdrola API is blocked (403). Always returns null.
- */
 export interface ChargerStatusFromApi {
   id: string;
   created_at: string;
@@ -276,17 +258,4 @@ export interface ChargerStatusFromApi {
   port2_socket_type?: string | null;
   emergency_stop_pressed?: boolean | null;
   situation_code?: string | null;
-}
-
-/**
- * @deprecated Iberdrola API is blocked (403). Always returns null.
- */
-export async function fetchStationAsChargerStatus(
-  cuprId: number,
-  cpId: number
-): Promise<ChargerStatusFromApi | null> {
-  void cuprId;
-  void cpId;
-  console.warn('[fetchStationAsChargerStatus] Iberdrola API is blocked. Use cache instead.');
-  return null;
 }

@@ -22,34 +22,6 @@ export function shouldSaveStationToCache(priceKwh: number | undefined): boolean 
 }
 export const CACHE_TTL_MINUTES = 15;
 
-/**
- * Get fresh snapshots for multiple stations
- * @param cpIds Array of station IDs
- * @param ttlMinutes Cache TTL in minutes
- * @returns Map of cpId to cached station info (only fresh data within TTL)
- */
-export async function getFreshSnapshots(
-  cpIds: number[],
-  ttlMinutes: number
-): Promise<Map<number, CachedStationInfo>> {
-  // Use existing getStationsFromCache implementation
-  return getStationsFromCache(cpIds, ttlMinutes);
-}
-
-/**
- * Get fresh snapshot for a single station
- * @param cpId Station ID
- * @param ttlMinutes Cache TTL in minutes
- * @returns Cached station info or null if stale/missing
- */
-export async function getFreshSnapshot(
-  cpId: number,
-  ttlMinutes: number
-): Promise<CachedStationInfo | null> {
-  const result = await getFreshSnapshots([cpId], ttlMinutes);
-  return result.get(cpId) ?? null;
-}
-
 export interface CachedStationInfo {
   cpId: number;
   cuprId: number;
