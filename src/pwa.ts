@@ -59,9 +59,13 @@ export async function registerServiceWorker() {
   }
 }
 
-export async function subscribeToStationNotifications(stationId: number, portNumber?: number) {
+/**
+ * Ensures push notifications are supported, permission is granted,
+ * and returns a valid PushSubscription (creating or re-creating if needed).
+ */
+async function ensurePushSubscription(): Promise<PushSubscription> {
   if (!isPushSupported()) {
-    throw new Error('Push notifications are not supported in this browser.'); // on english.
+    throw new Error('Push notifications are not supported in this browser.');
   }
 
   if (!VAPID_PUBLIC_KEY) {
@@ -81,14 +85,12 @@ export async function subscribeToStationNotifications(stationId: number, portNum
   }
 
   const registration = await navigator.serviceWorker.ready;
-  const existing = await registration.pushManager.getSubscription();
+  let subscription = await registration.pushManager.getSubscription();
 
-  // Check if existing subscription has matching VAPID key
-  let subscription = existing;
-  if (existing) {
+  if (subscription) {
     const expectedKey = urlBase64ToUint8Array(VAPID_PUBLIC_KEY);
-    const existingKey = existing.options?.applicationServerKey
-      ? new Uint8Array(existing.options.applicationServerKey as ArrayBuffer)
+    const existingKey = subscription.options?.applicationServerKey
+      ? new Uint8Array(subscription.options.applicationServerKey as ArrayBuffer)
       : null;
 
     const keysMatch =
@@ -97,27 +99,24 @@ export async function subscribeToStationNotifications(stationId: number, portNum
       existingKey.every((byte, i) => byte === expectedKey[i]);
 
     if (!keysMatch) {
-      // VAPID key mismatch - unsubscribe and re-subscribe
-      await existing.unsubscribe();
-      subscription = await registration.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: expectedKey,
-      });
+      await subscription.unsubscribe();
+      subscription = null;
     }
-  } else {
+  }
+
+  if (!subscription) {
     subscription = await registration.pushManager.subscribe({
       userVisibleOnly: true,
       applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
     });
   }
 
-  // Save subscription with retry logic
-  // At this point subscription is guaranteed to be non-null:
-  // - If existing was null, we created a new one (line 94-97)
-  // - If existing had wrong key, we re-subscribed (line 88-91)
-  // - If existing had correct key, it's the original non-null existing
-  await saveSubscriptionWithRetry(stationId, portNumber, subscription!);
+  return subscription;
+}
 
+export async function subscribeToStationNotifications(stationId: number, portNumber?: number) {
+  const subscription = await ensurePushSubscription();
+  await saveSubscriptionWithRetry(stationId, portNumber, subscription);
   return subscription;
 }
 
@@ -202,55 +201,7 @@ export async function subscribeWithWatch(
   cuprId: number,
   portNumber: 1 | 2 | null
 ): Promise<StartWatchResult> {
-  if (!isPushSupported()) {
-    throw new Error('Push notifications are not supported in this browser.');
-  }
-
-  if (!VAPID_PUBLIC_KEY) {
-    throw new Error('VAPID public key not set.');
-  }
-
-  // Request notification permission
-  let permission: NotificationPermission = Notification.permission;
-
-  if (permission === 'default') {
-    permission = await Notification.requestPermission();
-  } else if (permission === 'denied') {
-    throw new Error('Notifications are blocked. Please allow them in browser settings.');
-  }
-
-  if (permission !== 'granted') {
-    throw new Error('Subscription is not possible without notification permission.');
-  }
-
-  // Get push subscription
-  const registration = await navigator.serviceWorker.ready;
-  let subscription = await registration.pushManager.getSubscription();
-
-  // Check if existing subscription has matching VAPID key
-  if (subscription) {
-    const expectedKey = urlBase64ToUint8Array(VAPID_PUBLIC_KEY);
-    const existingKey = subscription.options?.applicationServerKey
-      ? new Uint8Array(subscription.options.applicationServerKey as ArrayBuffer)
-      : null;
-
-    const keysMatch =
-      existingKey &&
-      existingKey.length === expectedKey.length &&
-      existingKey.every((byte, i) => byte === expectedKey[i]);
-
-    if (!keysMatch) {
-      await subscription.unsubscribe();
-      subscription = null;
-    }
-  }
-
-  if (!subscription) {
-    subscription = await registration.pushManager.subscribe({
-      userVisibleOnly: true,
-      applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
-    });
-  }
+  const subscription = await ensurePushSubscription();
 
   // Call start-watch API
   const result = await startWatch({
