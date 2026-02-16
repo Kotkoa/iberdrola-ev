@@ -109,8 +109,8 @@ export function useStationData(
       return;
     }
 
-    // Detect cpId change and reset state
-    const cpIdChanged = prevCpIdRef.current !== cpId;
+    // Detect station switch (not initial mount) to force on-demand scrape
+    const cpIdChanged = prevCpIdRef.current !== null && prevCpIdRef.current !== cpId;
     prevCpIdRef.current = cpId;
 
     let active = true;
@@ -207,8 +207,8 @@ export function useStationData(
         // Check if snapshot is fresh
         const stale = isDataStale(snapshot?.created_at ?? null, ttlMinutes);
 
-        if (snapshot && !stale) {
-          // Fresh data available from cache
+        if (snapshot && !stale && !cpIdChanged) {
+          // Fresh data available from cache (skip on station switch to trigger on-demand scrape)
           console.log(`[useStationData] Using fresh cache for ${cpId}`);
           const chargerStatus = snapshotToChargerStatus(snapshot, metadataRef.current ?? undefined);
           currentDataTimestampRef.current = new Date(snapshot.created_at).getTime();
