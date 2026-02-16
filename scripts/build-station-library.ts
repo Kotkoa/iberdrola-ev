@@ -11,16 +11,10 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
+import { buildRawAddress } from '../src/utils/address';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-
-interface IberdrolaAddress {
-  streetName?: string;
-  streetNum?: string;
-  townName?: string;
-  regionName?: string;
-}
 
 interface IberdrolaPhysicalSocket {
   socketType?: {
@@ -83,12 +77,6 @@ const SOCKET_TYPE_MAP: Record<string, string> = {
   '4': 'CCS Combo 2',
 };
 
-function formatAddress(addr?: IberdrolaAddress): string {
-  if (!addr) return 'Address unknown';
-  const parts = [addr.streetName, addr.streetNum, addr.townName, addr.regionName].filter(Boolean);
-  return parts.join(', ');
-}
-
 function extractStation(item: IberdrolaStation): LibraryStation | null {
   if (!item.cpId || !item.locationData) {
     return null;
@@ -111,7 +99,7 @@ function extractStation(item: IberdrolaStation): LibraryStation | null {
     name: locationData.cuprName,
     lat: locationData.latitude,
     lon: locationData.longitude,
-    address: formatAddress(locationData.supplyPointData?.cpAddress),
+    address: buildRawAddress(locationData.supplyPointData?.cpAddress),
     socketType,
     maxPower,
     priceKwh,

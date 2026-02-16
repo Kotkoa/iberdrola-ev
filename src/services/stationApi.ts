@@ -4,6 +4,7 @@ import type {
   ChargerStatusFromApi,
   StationInfoPartial,
 } from './iberdrola';
+import { buildRawAddress } from '../utils/address';
 import { supabase } from '../../api/supabase';
 import { CHARGING_POINT_STATUS, GEO_CONSTANTS } from '../constants';
 
@@ -237,9 +238,7 @@ export function detailsToSnapshotData(details: StationDetails): SaveSnapshotRequ
   const port2 = flattened[1];
 
   const addr = details.locationData?.supplyPointData?.cpAddress;
-  const addressFull = addr
-    ? `${addr.streetName || ''} ${addr.streetNum || ''}, ${addr.townName || ''}, ${addr.regionName || ''}`.trim()
-    : undefined;
+  const addressFull = addr ? buildRawAddress(addr) : undefined;
 
   return {
     cpName: details.locationData?.cuprName,

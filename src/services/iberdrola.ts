@@ -1,15 +1,6 @@
 import { CHARGING_POINT_STATUS } from '../constants';
+import { buildRawAddress } from '../utils/address';
 import { type CachedStationInfo } from './stationApi';
-
-function formatAddress(addr?: {
-  streetName?: string;
-  streetNum?: string;
-  townName?: string;
-  regionName?: string;
-}): string {
-  if (!addr) return 'Address unknown';
-  return `${addr.streetName || ''} ${addr.streetNum || ''}, ${addr.townName || ''}, ${addr.regionName || ''}`.trim();
-}
 
 // API Response Types
 export interface PhysicalSocket {
@@ -110,7 +101,7 @@ export function extractPartialFromBatch(item: StationListItemFull): StationInfoP
     name: item.locationData.cuprName,
     latitude: item.locationData.latitude,
     longitude: item.locationData.longitude,
-    addressFull: formatAddress(addr),
+    addressFull: buildRawAddress(addr),
     overallStatus: item.cpStatus.statusCode,
     totalPorts: item.socketNum,
     supportsReservation: item.locationData.cuprReservationIndicator,
@@ -156,6 +147,14 @@ export async function fetchStationDetails(cuprId: number): Promise<StationDetail
 }
 
 /**
+ * Flattens nested logical/physical socket structure into a flat array.
+ */
+export function extractPhysicalSockets(details: StationDetails | null): PhysicalSocket[] {
+  const logical = details?.logicalSocket || [];
+  return logical.flatMap((ls) => ls.physicalSocket || []);
+}
+
+/**
  * Extracts station information from detailed data
  */
 export function extractStationInfo(
@@ -165,8 +164,7 @@ export function extractStationInfo(
 ): StationInfo | null {
   if (!details) return null;
 
-  const logical = details.logicalSocket || [];
-  const flattened = logical.flatMap((ls) => ls.physicalSocket || []);
+  const flattened = extractPhysicalSockets(details);
   const availableSockets = flattened.filter(
     (ps) => ps.status?.statusCode === CHARGING_POINT_STATUS.AVAILABLE
   );
@@ -174,9 +172,7 @@ export function extractStationInfo(
   const maxPower = flattened.reduce((acc, ps) => Math.max(acc, ps.maxPower || 0), 0) || 0;
 
   const addr = details.locationData?.supplyPointData?.cpAddress;
-  const addressFull = addr
-    ? `${addr.streetName || ''} ${addr.streetNum || ''}, ${addr.townName || ''}, ${addr.regionName || ''}`.trim()
-    : 'Address unknown';
+  const addressFull = buildRawAddress(addr);
 
   const firstSocket = flattened[0];
   const socketType = firstSocket?.socketType?.socketName

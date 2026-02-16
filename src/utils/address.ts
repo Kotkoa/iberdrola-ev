@@ -1,3 +1,19 @@
+interface AddressParts {
+  streetName?: string;
+  streetNum?: string;
+  townName?: string;
+  regionName?: string;
+}
+
+/**
+ * Builds a raw address string from structured address parts.
+ * Output: "Street Name 13, Town, Region"
+ */
+export function buildRawAddress(addr?: AddressParts): string {
+  if (!addr) return 'Address unknown';
+  return `${addr.streetName || ''} ${addr.streetNum || ''}, ${addr.townName || ''}, ${addr.regionName || ''}`.trim();
+}
+
 /**
  * Converts a string to Title Case (capitalizes first letter of each word)
  */
