@@ -222,7 +222,7 @@ describe('useStationData', () => {
       renderHook(() => useStationData(12345, 67890, 15));
 
       await waitFor(() => {
-        expect(time.isDataStale).toHaveBeenCalledWith(mockSnapshot.created_at, 15);
+        expect(time.isDataStale).toHaveBeenCalledWith(mockSnapshot.observed_at, 15);
         expect(apiClient.pollStation).not.toHaveBeenCalled();
       });
     });
@@ -338,6 +338,7 @@ describe('useStationData', () => {
       const newerSnapshot = {
         ...mockSnapshot,
         port1_status: 'OCCUPIED',
+        observed_at: '2024-01-01T13:00:00Z',
         created_at: '2024-01-01T13:00:00Z',
       };
 

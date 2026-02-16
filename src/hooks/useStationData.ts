@@ -16,6 +16,22 @@ import type { PollStationData } from '../types/api';
 
 const TTL_MINUTES = 15;
 
+function getObservationTimestamp(
+  value: { observed_at?: string | null; created_at?: string | null } | null | undefined
+): string | null {
+  return value?.observed_at ?? value?.created_at ?? null;
+}
+
+function getObservationTimeMs(
+  value: { observed_at?: string | null; created_at?: string | null } | null | undefined
+): number {
+  const timestamp = getObservationTimestamp(value);
+  if (!timestamp) return 0;
+
+  const parsed = new Date(timestamp).getTime();
+  return Number.isNaN(parsed) ? 0 : parsed;
+}
+
 /**
  * Converts poll-station API response to ChargerStatus
  */
@@ -158,7 +174,7 @@ export function useStationData(
               if (!active) return;
 
               // Only update if new data is fresher than current
-              const newTimestamp = new Date(newSnapshot.created_at).getTime();
+              const newTimestamp = getObservationTimeMs(newSnapshot);
 
               if (newTimestamp > currentDataTimestampRef.current) {
                 console.log(`[useStationData] Realtime update for ${cpId}, newer data received`);
@@ -205,13 +221,13 @@ export function useStationData(
         unsubscribe = () => subscriptionRef.current?.unsubscribe();
 
         // Check if snapshot is fresh
-        const stale = isDataStale(snapshot?.created_at ?? null, ttlMinutes);
+        const stale = isDataStale(getObservationTimestamp(snapshot), ttlMinutes);
 
         if (snapshot && !stale && !cpIdChanged) {
           // Fresh data available from cache (skip on station switch to trigger on-demand scrape)
           console.log(`[useStationData] Using fresh cache for ${cpId}`);
           const chargerStatus = snapshotToChargerStatus(snapshot, metadataRef.current ?? undefined);
-          currentDataTimestampRef.current = new Date(snapshot.created_at).getTime();
+          currentDataTimestampRef.current = getObservationTimeMs(snapshot);
           setData(chargerStatus);
           setInternalState('ready');
         } else if (cuprId !== undefined) {
@@ -224,7 +240,7 @@ export function useStationData(
                 snapshot,
                 metadataRef.current ?? undefined
               );
-              currentDataTimestampRef.current = new Date(snapshot.created_at).getTime();
+              currentDataTimestampRef.current = getObservationTimeMs(snapshot);
               setData(chargerStatus);
               setInternalState('ready');
               setIsRateLimitedState(true);
@@ -264,7 +280,7 @@ export function useStationData(
                   snapshot,
                   metadataRef.current ?? undefined
                 );
-                currentDataTimestampRef.current = new Date(snapshot.created_at).getTime();
+                currentDataTimestampRef.current = getObservationTimeMs(snapshot);
                 setData(chargerStatus);
                 setInternalState('ready');
                 setIsRateLimitedState(true);
@@ -285,7 +301,7 @@ export function useStationData(
                   snapshot,
                   metadataRef.current ?? undefined
                 );
-                currentDataTimestampRef.current = new Date(snapshot.created_at).getTime();
+                currentDataTimestampRef.current = getObservationTimeMs(snapshot);
                 setData(chargerStatus);
                 setInternalState('ready');
               } else {
@@ -304,7 +320,7 @@ export function useStationData(
               snapshot,
               metadataRef.current ?? undefined
             );
-            currentDataTimestampRef.current = new Date(snapshot.created_at).getTime();
+            currentDataTimestampRef.current = getObservationTimeMs(snapshot);
             setData(chargerStatus);
             setInternalState('ready');
           } else {
@@ -333,9 +349,57 @@ export function useStationData(
     };
   }, [cpId, cuprId, ttlMinutes]);
 
+  // Periodic re-fetch: trigger pollStation when data becomes stale
+  // Checks every 60s, respects rate limits. Also serves as fallback
+  // if realtime subscription is disconnected.
+  useEffect(() => {
+    if (!cpId || cuprId === undefined) return;
+
+    let active = true;
+    const CHECK_INTERVAL_MS = 60_000;
+    const ttlMs = ttlMinutes * 60 * 1000;
+
+    const intervalId = setInterval(async () => {
+      if (!active) return;
+
+      const timestamp = currentDataTimestampRef.current;
+      if (timestamp === 0) return;
+
+      const ageMs = Date.now() - timestamp;
+      if (ageMs <= ttlMs) return;
+
+      if (isStationRateLimited(cuprId)) return;
+
+      console.log(`[useStationData] Periodic refresh for ${cpId}`);
+      const result = await pollStation(cuprId);
+
+      if (!active) return;
+
+      if (isApiSuccess(result)) {
+        const newTimestamp = new Date(result.data.observed_at).getTime();
+        if (newTimestamp > currentDataTimestampRef.current) {
+          const chargerStatus = pollDataToChargerStatus(
+            result.data,
+            metadataRef.current ?? undefined
+          );
+          currentDataTimestampRef.current = newTimestamp;
+          setData(chargerStatus);
+        }
+      } else if (isRateLimited(result)) {
+        const retryAfter = result.error.retry_after ?? 300;
+        markRateLimited(cuprId, retryAfter);
+      }
+    }, CHECK_INTERVAL_MS);
+
+    return () => {
+      active = false;
+      clearInterval(intervalId);
+    };
+  }, [cpId, cuprId, ttlMinutes]);
+
   // Derive state: 'idle' when cpId is null, otherwise use internal state
   const state: StationDataState = cpId === null ? 'idle' : internalState;
-  const stale = data?.created_at ? isDataStale(data.created_at, ttlMinutes) : false;
+  const stale = isDataStale(data?.overall_update_date ?? data?.created_at ?? null, ttlMinutes);
 
   // Return idle state with nulls when no station selected
   if (cpId === null) {
