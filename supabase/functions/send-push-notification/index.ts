@@ -73,6 +73,8 @@ Deno.serve(async (req) => {
       title: 'Charger Available!',
       body: `Port ${portNumber} at ${location} is now available`,
       url: `/?station=${stationId}`,
+      stationId,
+      portNumber,
     });
 
     const pushResults = await Promise.allSettled(

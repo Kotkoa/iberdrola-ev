@@ -17,14 +17,23 @@ self.addEventListener('push', (event) => {
   const { title, body, url } = payload;
 
   event.waitUntil(
-    self.registration.showNotification(title ?? 'Iberdrola EV Watcher', {
-      body,
-      data: { url },
-      icon: '/icon-192.png',
-      badge: '/icon-192.png',
-      silent: false,
-      requireInteraction: true,
-    })
+    self.registration
+      .showNotification(title ?? 'Iberdrola EV Watcher', {
+        body,
+        data: { url },
+        icon: '/icon-192.png',
+        badge: '/icon-192.png',
+        silent: false,
+        requireInteraction: true,
+      })
+      .then(() =>
+        // Notify all open clients so the UI can reset subscription state
+        self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
+          for (const client of clientList) {
+            client.postMessage({ type: 'PUSH_RECEIVED', ...payload });
+          }
+        })
+      )
   );
 });
 
