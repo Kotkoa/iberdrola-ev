@@ -1,7 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, act } from '@testing-library/react';
 import { StationTab } from './StationTab';
 import type { StationSnapshot } from '../../../api/charger';
+
+type MessageHandler = (event: { data: unknown }) => void;
 
 // Mock the context
 const mockPrimaryStation: StationSnapshot = {
@@ -186,6 +188,105 @@ describe('StationTab', () => {
         },
         { timeout: 1000 }
       );
+    });
+  });
+
+  describe('SW postMessage PUSH_RECEIVED', () => {
+    /**
+     * Helper: extracts the 'message' event handler registered on
+     * navigator.serviceWorker.addEventListener during render.
+     */
+    function getSwMessageHandler(): MessageHandler {
+      const addEventListenerMock = navigator.serviceWorker.addEventListener as ReturnType<
+        typeof vi.fn
+      >;
+      const call = addEventListenerMock.mock.calls.find((c: unknown[]) => c[0] === 'message');
+      if (!call) throw new Error('No message handler registered on serviceWorker');
+      return call[1] as MessageHandler;
+    }
+
+    it('should reset subscription state to idle when PUSH_RECEIVED matches station and port', async () => {
+      // Restore subscription state so port 1 shows "Alert active"
+      globalThis.fetch = vi.fn().mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ subscribedPorts: [1] }),
+      });
+
+      render(<StationTab onNavigateToSearch={mockNavigate} />);
+
+      // Wait for "Alert active" to appear (subscription restored)
+      await waitFor(
+        () => {
+          expect(screen.getByRole('button', { name: /alert active/i })).toBeInTheDocument();
+        },
+        { timeout: 2000 }
+      );
+
+      // Simulate SW sending PUSH_RECEIVED for the same station and port
+      const handler = getSwMessageHandler();
+      act(() => {
+        handler({ data: { type: 'PUSH_RECEIVED', stationId: '147988', portNumber: 1 } });
+      });
+
+      // Button should revert to "Get notified"
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /get notified/i })).toBeInTheDocument();
+      });
+      expect(screen.queryByRole('button', { name: /alert active/i })).not.toBeInTheDocument();
+    });
+
+    it('should ignore PUSH_RECEIVED when stationId does not match', async () => {
+      // Restore subscription state so port 1 shows "Alert active"
+      globalThis.fetch = vi.fn().mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ subscribedPorts: [1] }),
+      });
+
+      render(<StationTab onNavigateToSearch={mockNavigate} />);
+
+      await waitFor(
+        () => {
+          expect(screen.getByRole('button', { name: /alert active/i })).toBeInTheDocument();
+        },
+        { timeout: 2000 }
+      );
+
+      // Dispatch PUSH_RECEIVED for a different station
+      const handler = getSwMessageHandler();
+      act(() => {
+        handler({ data: { type: 'PUSH_RECEIVED', stationId: '999999', portNumber: 1 } });
+      });
+
+      // Button should still show "Alert active" (not reset)
+      expect(screen.getByRole('button', { name: /alert active/i })).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /get notified/i })).not.toBeInTheDocument();
+    });
+
+    it('should ignore PUSH_RECEIVED when portNumber does not match any valid port', async () => {
+      // Restore subscription state so port 1 shows "Alert active"
+      globalThis.fetch = vi.fn().mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ subscribedPorts: [1] }),
+      });
+
+      render(<StationTab onNavigateToSearch={mockNavigate} />);
+
+      await waitFor(
+        () => {
+          expect(screen.getByRole('button', { name: /alert active/i })).toBeInTheDocument();
+        },
+        { timeout: 2000 }
+      );
+
+      // Dispatch PUSH_RECEIVED with an invalid port number
+      const handler = getSwMessageHandler();
+      act(() => {
+        handler({ data: { type: 'PUSH_RECEIVED', stationId: '147988', portNumber: 3 } });
+      });
+
+      // Button should still show "Alert active" (not reset)
+      expect(screen.getByRole('button', { name: /alert active/i })).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /get notified/i })).not.toBeInTheDocument();
     });
   });
 });

@@ -71,22 +71,44 @@ Deno.serve(async (req) => {
           }),
         });
 
-        if (pushRes.ok) {
-          // Mark task as completed
+        const pushData = await pushRes.json();
+        // Backwards-compatible: old format uses { success: true }, new uses { status: "sent" }
+        const pushStatus = pushData.status ?? (pushData.success ? 'sent' : undefined);
+
+        if (pushRes.ok && pushStatus === 'sent') {
+          // Notifications were actually sent
           await supabaseAdmin
             .from('polling_tasks')
             .update({ status: 'completed' })
             .eq('id', task.task_id);
           dispatched++;
           console.log(
-            `[process-polling] Dispatched notification for task=${task.task_id} station=${task.station_id} port=${task.target_port}`
+            `[process-polling] Dispatched notification for task=${task.task_id} station=${task.station_id} port=${task.target_port} sent=${pushData.sent ?? 'unknown'}`
+          );
+        } else if (pushRes.ok && pushStatus === 'cooldown') {
+          // Active subscriptions exist but in dedup cooldown — retry next cycle
+          await supabaseAdmin
+            .from('polling_tasks')
+            .update({ status: 'running' })
+            .eq('id', task.task_id);
+          console.log(
+            `[process-polling] Cooldown for task=${task.task_id} station=${task.station_id} port=${task.target_port}, retry_after=${pushData.retry_after_seconds}s`
+          );
+        } else if (pushRes.ok && pushStatus === 'no_subscriptions') {
+          // No active subscriptions at all — mark completed
+          await supabaseAdmin
+            .from('polling_tasks')
+            .update({ status: 'completed' })
+            .eq('id', task.task_id);
+          dispatched++;
+          console.log(
+            `[process-polling] No subscriptions for task=${task.task_id} station=${task.station_id} port=${task.target_port}, marking completed`
           );
         } else {
-          const errText = await pushRes.text();
+          // Non-200 or unknown status — revert to running for retry
           console.error(
-            `[process-polling] Push failed for task=${task.task_id}: ${pushRes.status} ${errText}`
+            `[process-polling] Push failed for task=${task.task_id}: status=${pushRes.status} body=${JSON.stringify(pushData)}`
           );
-          // Revert to running so it retries next cycle
           await supabaseAdmin
             .from('polling_tasks')
             .update({ status: 'running' })

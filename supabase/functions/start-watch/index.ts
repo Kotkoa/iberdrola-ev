@@ -169,6 +169,7 @@ Deno.serve(async (req) => {
           auth: subscription.keys.auth,
           is_active: true,
           target_status: target_status,
+          last_notified_at: null,
         })
         .eq('id', existing.id)
         .select('id')

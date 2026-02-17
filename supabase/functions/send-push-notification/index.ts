@@ -8,6 +8,8 @@ const CORS_HEADERS = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+const DEDUP_WINDOW_MS = 5 * 60 * 1000;
+
 interface SendPushRequest {
   stationId: string;
   portNumber: number;
@@ -26,16 +28,13 @@ Deno.serve(async (req) => {
 
     const { stationId, portNumber }: SendPushRequest = await req.json();
 
-    // Get all active subscriptions for this station and port
-    // Dedup guard: skip subscriptions notified within the last 5 minutes
-    const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
-    const { data: subscriptions, error } = await supabaseAdmin
+    // Step 1: fetch ALL active subscriptions (no dedup filter)
+    const { data: allActive, error } = await supabaseAdmin
       .from('subscriptions')
       .select('id, endpoint, p256dh, auth, last_notified_at')
       .eq('station_id', stationId)
       .eq('port_number', portNumber)
-      .eq('is_active', true)
-      .or(`last_notified_at.is.null,last_notified_at.lt.${fiveMinAgo}`);
+      .eq('is_active', true);
 
     if (error) {
       console.error('Failed to fetch subscriptions:', error);
@@ -45,13 +44,40 @@ Deno.serve(async (req) => {
       });
     }
 
-    if (!subscriptions || subscriptions.length === 0) {
-      return new Response(JSON.stringify({ message: 'No active subscriptions for this port' }), {
+    // Case A: no active subscriptions at all
+    if (!allActive || allActive.length === 0) {
+      return new Response(JSON.stringify({ status: 'no_subscriptions' }), {
         headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
       });
     }
 
-    // Send push notification to each subscriber
+    // Step 2: filter for dedup — only subscriptions outside the 5-minute cooldown
+    const fiveMinAgo = new Date(Date.now() - DEDUP_WINDOW_MS);
+    const readyToNotify = allActive.filter(
+      (sub) => !sub.last_notified_at || new Date(sub.last_notified_at) < fiveMinAgo
+    );
+
+    // Case B: subscriptions exist but all are in cooldown
+    if (readyToNotify.length === 0) {
+      const now = Date.now();
+      const retryAfterSeconds = Math.max(
+        1,
+        Math.ceil(
+          Math.min(
+            ...allActive.map((sub) => {
+              const notifiedAt = new Date(sub.last_notified_at!).getTime();
+              return notifiedAt + DEDUP_WINDOW_MS - now;
+            })
+          ) / 1000
+        )
+      );
+      return new Response(
+        JSON.stringify({ status: 'cooldown', retry_after_seconds: retryAfterSeconds }),
+        { headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Case C: send notifications
     const VAPID_PRIVATE_KEY = Deno.env.get('VAPID_PRIVATE_KEY')!;
     const VAPID_PUBLIC_KEY = Deno.env.get('VAPID_PUBLIC_KEY')!;
     const VAPID_SUBJECT = Deno.env.get('VAPID_SUBJECT') ?? 'mailto:noreply@example.com';
@@ -78,7 +104,7 @@ Deno.serve(async (req) => {
     });
 
     const pushResults = await Promise.allSettled(
-      subscriptions.map(async (sub) => {
+      readyToNotify.map(async (sub) => {
         return webpush.sendNotification(
           {
             endpoint: sub.endpoint,
@@ -96,27 +122,26 @@ Deno.serve(async (req) => {
     const successCount = pushResults.filter((r) => r.status === 'fulfilled').length;
     const failedCount = pushResults.filter((r) => r.status === 'rejected').length;
 
-    // Deactivate ALL subscriptions after sending (one-time notification model)
+    // Deactivate ONLY the subscriptions we actually sent to (by ID)
+    const notifiedIds = readyToNotify.map((s) => s.id);
     await supabaseAdmin
       .from('subscriptions')
       .update({
         last_notified_at: new Date().toISOString(),
         is_active: false,
       })
-      .eq('station_id', stationId)
-      .eq('port_number', portNumber)
-      .eq('is_active', true);
+      .in('id', notifiedIds);
 
     console.log(
-      `Notifications sent for station ${stationId} port ${portNumber}: success=${successCount}, failed=${failedCount}, subscriptions deactivated`
+      `Notifications sent for station ${stationId} port ${portNumber}: success=${successCount}, failed=${failedCount}, deactivated=${notifiedIds.length}`
     );
 
     return new Response(
       JSON.stringify({
-        success: true,
+        status: 'sent',
         sent: successCount,
         failed: failedCount,
-        deactivated: subscriptions.length,
+        deactivated: notifiedIds.length,
       }),
       { headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } }
     );
