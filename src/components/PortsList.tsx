@@ -85,6 +85,7 @@ export function PortsList({
                       color="success"
                       fullWidth
                       disabled={isDisabled}
+                      data-testid={`subscribe-button-${portNumber}`}
                       onClick={() => onSubscribeClick(portNumber)}
                       sx={{
                         textTransform: 'none',
@@ -107,7 +108,7 @@ export function PortsList({
         )}
       </Stack>
       {subscribedOccupiedCount > 0 && (
-        <Alert severity="success" sx={{ mt: 1.5 }}>
+        <Alert severity="success" data-testid="subscription-promo" sx={{ mt: 1.5 }}>
           {alertMessage}
         </Alert>
       )}

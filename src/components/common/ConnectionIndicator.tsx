@@ -59,6 +59,7 @@ export function ConnectionIndicator({ state, size = 'small' }: ConnectionIndicat
       color={config.color}
       variant="outlined"
       size={size}
+      data-testid="connection-indicator"
       icon={
         config.animate ? (
           <CircularProgress size={12} color="inherit" sx={{ ml: 0.5 }} />

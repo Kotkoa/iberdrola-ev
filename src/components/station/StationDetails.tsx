@@ -53,6 +53,7 @@ export function StationDetails({
         <Typography
           variant="h5"
           component="h1"
+          data-testid="station-availability"
           sx={{ fontSize: { xs: '1.1rem', sm: '1.5rem' } }}
           color={availableCount > 0 ? 'success' : 'warning'}
         >
@@ -86,6 +87,7 @@ export function StationDetails({
           color="default"
           variant="outlined"
           size="small"
+          data-testid="station-id-chip"
           sx={{
             borderRadius: '4px',
             fontSize: { xs: '0.7rem', sm: '0.813rem' },
@@ -131,6 +133,7 @@ export function StationDetails({
         <Alert
           severity="error"
           icon={<WarningAmberIcon />}
+          data-testid="emergency-alert"
           sx={{ mt: 1, mb: 1, fontSize: { xs: '0.7rem', sm: '0.875rem' } }}
         >
           Emergency stop activated - station unavailable
@@ -138,7 +141,11 @@ export function StationDetails({
       )}
 
       {situationCode && situationCode !== 'OPER' && (
-        <Alert severity="warning" sx={{ mt: 1, mb: 1, fontSize: { xs: '0.7rem', sm: '0.875rem' } }}>
+        <Alert
+          severity="warning"
+          data-testid="maintenance-alert"
+          sx={{ mt: 1, mb: 1, fontSize: { xs: '0.7rem', sm: '0.875rem' } }}
+        >
           Station status:{' '}
           {situationCode === 'MAINT'
             ? 'Maintenance'

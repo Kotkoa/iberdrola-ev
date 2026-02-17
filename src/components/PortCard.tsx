@@ -25,6 +25,7 @@ export function PortCard({
 }: PortCardProps) {
   return (
     <Box
+      data-testid={`port-card-${portNumber}`}
       sx={{
         border: 1,
         borderColor: isAvailable ? 'success.main' : 'warning.main',
