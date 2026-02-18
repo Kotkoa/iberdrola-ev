@@ -134,6 +134,22 @@ describe('useStationData', () => {
     };
   };
 
+  // Helper to capture realtime callback from subscribeToSnapshots mock.
+  // Uses object ref to avoid TS 5.4+ closure narrowing (variable assigned
+  // inside mockImplementation closure would be narrowed to `null`/`never`).
+  const createRealtimeCallbackCapture = () => {
+    const ref = { current: null as ((snapshot: StationSnapshot) => void) | null };
+
+    vi.mocked(charger.subscribeToSnapshots).mockImplementation(
+      (_cpId, callback, onConnectionStateChange) => {
+        ref.current = callback;
+        return createMockSubscriptionResult(onConnectionStateChange);
+      }
+    );
+
+    return ref;
+  };
+
   beforeEach(() => {
     vi.clearAllMocks();
     // Default mock: returns SubscriptionResult object and calls connectionState callback
@@ -306,20 +322,7 @@ describe('useStationData', () => {
     });
 
     it('should update data on realtime event with newer timestamp', async () => {
-      let realtimeCallback: ((snapshot: StationSnapshot) => void) | null = null;
-
-      vi.mocked(charger.subscribeToSnapshots).mockImplementation(
-        (_cpId, callback, onConnectionStateChange) => {
-          realtimeCallback = callback;
-          if (onConnectionStateChange) {
-            queueMicrotask(() => onConnectionStateChange('connected'));
-          }
-          return {
-            unsubscribe: vi.fn(),
-            getConnectionState: vi.fn().mockReturnValue('connected'),
-          };
-        }
-      );
+      const callbackRef = createRealtimeCallbackCapture();
       vi.mocked(charger.getLatestSnapshot).mockResolvedValue(mockSnapshot);
       vi.mocked(charger.getStationMetadata).mockResolvedValue(mockMetadata);
       vi.mocked(time.isDataStale).mockReturnValue(false);
@@ -347,8 +350,8 @@ describe('useStationData', () => {
         created_at: '2024-01-01T13:00:00Z',
       };
 
-      if (realtimeCallback) {
-        realtimeCallback(newerSnapshot);
+      if (callbackRef.current) {
+        callbackRef.current(newerSnapshot);
       }
 
       await waitFor(() => {
@@ -463,20 +466,7 @@ describe('useStationData', () => {
     });
 
     it('should reset scraperTriggered on Realtime update', async () => {
-      let realtimeCallback: ((snapshot: StationSnapshot) => void) | null = null;
-
-      vi.mocked(charger.subscribeToSnapshots).mockImplementation(
-        (_cpId, callback, onConnectionStateChange) => {
-          realtimeCallback = callback;
-          if (onConnectionStateChange) {
-            queueMicrotask(() => onConnectionStateChange('connected'));
-          }
-          return {
-            unsubscribe: vi.fn(),
-            getConnectionState: vi.fn().mockReturnValue('connected'),
-          };
-        }
-      );
+      const callbackRef = createRealtimeCallbackCapture();
       vi.mocked(charger.getLatestSnapshot).mockResolvedValue(mockSnapshot);
       vi.mocked(charger.getStationMetadata).mockResolvedValue(mockMetadata);
       vi.mocked(time.isDataStale).mockReturnValue(true);
@@ -505,8 +495,8 @@ describe('useStationData', () => {
       };
       vi.mocked(charger.snapshotToChargerStatus).mockReturnValue(updatedChargerStatus);
 
-      if (realtimeCallback) {
-        realtimeCallback(newerSnapshot);
+      if (callbackRef.current) {
+        callbackRef.current(newerSnapshot);
       }
 
       await waitFor(() => {
@@ -528,20 +518,7 @@ describe('useStationData', () => {
     });
 
     it('should not downgrade data when poll returns older timestamp', async () => {
-      let realtimeCallback: ((snapshot: StationSnapshot) => void) | null = null;
-
-      vi.mocked(charger.subscribeToSnapshots).mockImplementation(
-        (_cpId, callback, onConnectionStateChange) => {
-          realtimeCallback = callback;
-          if (onConnectionStateChange) {
-            queueMicrotask(() => onConnectionStateChange('connected'));
-          }
-          return {
-            unsubscribe: vi.fn(),
-            getConnectionState: vi.fn().mockReturnValue('connected'),
-          };
-        }
-      );
+      const callbackRef = createRealtimeCallbackCapture();
       vi.mocked(charger.getLatestSnapshot).mockResolvedValue(mockSnapshot);
       vi.mocked(charger.getStationMetadata).mockResolvedValue(mockMetadata);
       vi.mocked(time.isDataStale).mockReturnValue(false);
@@ -567,8 +544,8 @@ describe('useStationData', () => {
       };
       vi.mocked(charger.snapshotToChargerStatus).mockReturnValue(newerChargerStatus);
 
-      if (realtimeCallback) {
-        realtimeCallback(newerSnapshot);
+      if (callbackRef.current) {
+        callbackRef.current(newerSnapshot);
       }
 
       await waitFor(() => {

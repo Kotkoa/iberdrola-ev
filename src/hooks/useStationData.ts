@@ -267,6 +267,9 @@ export function useStationData(
         }
 
         // Call pollStation in background (triggers scraper)
+        // Show "Updating..." immediately while poll is in flight
+        setScraperTriggered(true);
+        scraperTriggeredRef.current = true;
         console.log(`[useStationData] Calling pollStation for ${cpId}`);
         const result = await pollStation(cuprId);
         if (!active) return;
@@ -281,11 +284,12 @@ export function useStationData(
           setIsRateLimitedState(false);
           setNextPollIn(null);
 
-          // Read meta — was scraper triggered?
-          if (result.meta.scraper_triggered) {
-            setScraperTriggered(true);
-            scraperTriggeredRef.current = true;
-
+          // Read meta — was scraper actually triggered?
+          if (!result.meta.scraper_triggered) {
+            // Poll returned fresh data directly — no scraper needed
+            setScraperTriggered(false);
+            scraperTriggeredRef.current = false;
+          } else {
             // Start fallback timer in case Realtime doesn't deliver
             fallbackTimerRef.current = setTimeout(async () => {
               if (!active) return;
@@ -306,6 +310,10 @@ export function useStationData(
           }
           return;
         }
+
+        // Poll failed — reset optimistic scraperTriggered
+        setScraperTriggered(false);
+        scraperTriggeredRef.current = false;
 
         if (isRateLimited(result)) {
           const retryAfter = result.error.retry_after ?? 300;
