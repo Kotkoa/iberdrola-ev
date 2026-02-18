@@ -25,6 +25,14 @@ interface PrimaryStationContextValue {
    * @deprecated Use connectionState === 'connected' instead
    */
   hasRealtime: boolean;
+  /** Whether current data is stale (older than TTL) */
+  isStale: boolean;
+  /** Whether GitHub Action scraper was triggered and we're waiting for fresh data */
+  scraperTriggered: boolean;
+  /** Display-only timestamp of when data was last observed (ISO string) */
+  observedAt: string | null;
+  /** Whether the last poll request was rate limited */
+  isRateLimited: boolean;
   setPrimaryStation: (station: StationInfoPartial) => void;
   clearPrimaryStation: () => void;
 }
@@ -47,13 +55,14 @@ export function PrimaryStationProvider({ children }: PrimaryStationProviderProps
     error,
     connectionState,
     hasRealtime,
-  } = useStationData(
-    stationData?.cpId ?? null,
-    stationData?.cuprId,
-    5 // TTL minutes
-  );
+    isStale,
+    scraperTriggered,
+    observedAt,
+    isRateLimited,
+  } = useStationData(stationData?.cpId ?? null, stationData?.cuprId);
 
-  const loading = state === 'loading_cache' || state === 'loading_api';
+  // Skeleton only when there's nothing to show (no cached data at all)
+  const loading = state === 'loading_cache' || (state === 'loading_api' && primaryStation === null);
 
   const setPrimaryStation = useCallback((station: StationInfoPartial) => {
     saveToStorage(station.cpId, station.cuprId);
@@ -85,6 +94,10 @@ export function PrimaryStationProvider({ children }: PrimaryStationProviderProps
     error,
     connectionState,
     hasRealtime,
+    isStale,
+    scraperTriggered,
+    observedAt,
+    isRateLimited,
     setPrimaryStation,
     clearPrimaryStation,
   };

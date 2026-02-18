@@ -98,6 +98,18 @@ export const TAB_NAMES = {
 } as const;
 
 // ========================
+// Data Freshness
+// ========================
+export const DATA_FRESHNESS = {
+  /** TTL for station data freshness (minutes). Matches server-side throttle (5 min). */
+  STATION_TTL_MINUTES: 5,
+  /** Expected scraper round-trip: GitHub Actions queue + execution (~20-30s) */
+  SCRAPER_EXPECTED_DELAY_MS: 25_000,
+  /** Fallback timeout if Realtime doesn't deliver after scraper trigger */
+  REALTIME_FALLBACK_TIMEOUT_MS: 40_000,
+} as const;
+
+// ========================
 // API Endpoints
 // ========================
 export const EDGE_BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`;

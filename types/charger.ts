@@ -75,4 +75,8 @@ export interface StationDataStatus {
   isRateLimited: boolean;
   /** Seconds until next poll is allowed (when rate limited) */
   nextPollIn: number | null;
+  /** Whether GitHub Action scraper was triggered and we're waiting for fresh data */
+  scraperTriggered: boolean;
+  /** Display-only timestamp of when Iberdrola data was last observed (ISO string) */
+  observedAt: string | null;
 }

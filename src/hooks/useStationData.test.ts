@@ -6,7 +6,7 @@ import * as apiClient from '../services/apiClient';
 import * as rateLimitCache from '../utils/rateLimitCache';
 import * as time from '../utils/time';
 import type { RealtimeConnectionState } from '../../types/realtime';
-import type { ApiResponse, PollStationData } from '../types/api';
+import type { PollStationSuccessResponse, ApiErrorResponse, PollStationData } from '../types/api';
 
 // Mock modules
 vi.mock('../../api/charger', () => ({
@@ -18,9 +18,9 @@ vi.mock('../../api/charger', () => ({
 
 vi.mock('../services/apiClient', () => ({
   pollStation: vi.fn(),
-  isApiSuccess: vi.fn((response: ApiResponse<unknown>) => response.ok === true),
   isRateLimited: vi.fn(
-    (response: ApiResponse<unknown>) => !response.ok && response.error.code === 'RATE_LIMITED'
+    (response: { ok: boolean; error?: { code: string } }) =>
+      !response.ok && response.error?.code === 'RATE_LIMITED'
   ),
 }));
 
@@ -92,12 +92,13 @@ describe('useStationData', () => {
     observed_at: '2024-01-01T12:00:00Z',
   };
 
-  const mockPollSuccessResponse: ApiResponse<PollStationData> = {
+  const mockPollSuccessResponse: PollStationSuccessResponse = {
     ok: true,
     data: mockPollData,
+    meta: { fresh: false, scraper_triggered: false, retry_after: null },
   };
 
-  const mockPollRateLimitResponse: ApiResponse<PollStationData> = {
+  const mockPollRateLimitResponse: ApiErrorResponse = {
     ok: false,
     error: {
       code: 'RATE_LIMITED',
@@ -106,7 +107,7 @@ describe('useStationData', () => {
     },
   };
 
-  const mockPollNotFoundResponse: ApiResponse<PollStationData> = {
+  const mockPollNotFoundResponse: ApiErrorResponse = {
     ok: false,
     error: {
       code: 'NOT_FOUND',
@@ -186,7 +187,7 @@ describe('useStationData', () => {
       });
     });
 
-    it('should transition to loading_api when cache is stale', async () => {
+    it('should show stale data immediately and poll in background when cache is stale', async () => {
       vi.mocked(charger.getLatestSnapshot).mockResolvedValue(mockSnapshot);
       vi.mocked(charger.getStationMetadata).mockResolvedValue(mockMetadata);
       vi.mocked(time.isDataStale).mockReturnValue(true); // Stale data
@@ -196,6 +197,7 @@ describe('useStationData', () => {
 
       await waitFor(() => {
         expect(result.current.state).toBe('ready');
+        expect(result.current.data).toBeTruthy(); // Stale data shown immediately
         expect(apiClient.pollStation).toHaveBeenCalledWith(67890);
       });
     });
@@ -219,10 +221,10 @@ describe('useStationData', () => {
       vi.mocked(charger.getStationMetadata).mockResolvedValue(mockMetadata);
       vi.mocked(time.isDataStale).mockReturnValue(false);
 
-      renderHook(() => useStationData(12345, 67890, 15));
+      renderHook(() => useStationData(12345, 67890));
 
       await waitFor(() => {
-        expect(time.isDataStale).toHaveBeenCalledWith(mockSnapshot.observed_at, 15);
+        expect(time.isDataStale).toHaveBeenCalledWith(mockSnapshot.observed_at, 5);
         expect(apiClient.pollStation).not.toHaveBeenCalled();
       });
     });
@@ -435,6 +437,180 @@ describe('useStationData', () => {
       await waitFor(() => {
         expect(result.current.state).toBe('error');
         expect(result.current.error).toBe('Station not found');
+      });
+    });
+  });
+
+  describe('freshness tracking', () => {
+    it('should set scraperTriggered when meta.scraper_triggered is true', async () => {
+      vi.mocked(charger.getLatestSnapshot).mockResolvedValue(mockSnapshot);
+      vi.mocked(charger.getStationMetadata).mockResolvedValue(mockMetadata);
+      vi.mocked(time.isDataStale).mockReturnValue(true);
+      vi.mocked(apiClient.pollStation).mockResolvedValue({
+        ok: true,
+        data: mockPollData,
+        meta: { fresh: false, scraper_triggered: true, retry_after: null },
+      });
+
+      const { result } = renderHook(() => useStationData(12345, 67890));
+
+      await waitFor(() => {
+        expect(result.current.scraperTriggered).toBe(true);
+      });
+    });
+
+    it('should reset scraperTriggered on Realtime update', async () => {
+      let realtimeCallback: ((snapshot: charger.StationSnapshot) => void) | null = null;
+
+      vi.mocked(charger.subscribeToSnapshots).mockImplementation(
+        (_cpId, callback, onConnectionStateChange) => {
+          realtimeCallback = callback;
+          if (onConnectionStateChange) {
+            queueMicrotask(() => onConnectionStateChange('connected'));
+          }
+          return {
+            unsubscribe: vi.fn(),
+            getConnectionState: vi.fn().mockReturnValue('connected'),
+          };
+        }
+      );
+      vi.mocked(charger.getLatestSnapshot).mockResolvedValue(mockSnapshot);
+      vi.mocked(charger.getStationMetadata).mockResolvedValue(mockMetadata);
+      vi.mocked(time.isDataStale).mockReturnValue(true);
+      vi.mocked(apiClient.pollStation).mockResolvedValue({
+        ok: true,
+        data: mockPollData,
+        meta: { fresh: false, scraper_triggered: true, retry_after: null },
+      });
+
+      const { result } = renderHook(() => useStationData(12345, 67890));
+
+      await waitFor(() => {
+        expect(result.current.scraperTriggered).toBe(true);
+      });
+
+      // Simulate realtime update with newer data
+      const newerSnapshot = {
+        ...mockSnapshot,
+        observed_at: '2024-01-01T13:00:00Z',
+        created_at: '2024-01-01T13:00:00Z',
+      };
+
+      const updatedChargerStatus = {
+        ...mockChargerStatus,
+        created_at: '2024-01-01T13:00:00Z',
+      };
+      vi.mocked(charger.snapshotToChargerStatus).mockReturnValue(updatedChargerStatus);
+
+      if (realtimeCallback) {
+        realtimeCallback(newerSnapshot);
+      }
+
+      await waitFor(() => {
+        expect(result.current.scraperTriggered).toBe(false);
+      });
+    });
+
+    it('should expose observedAt from data', async () => {
+      vi.mocked(charger.getLatestSnapshot).mockResolvedValue(mockSnapshot);
+      vi.mocked(charger.getStationMetadata).mockResolvedValue(mockMetadata);
+      vi.mocked(time.isDataStale).mockReturnValue(false);
+
+      const { result } = renderHook(() => useStationData(12345, 67890));
+
+      await waitFor(() => {
+        expect(result.current.state).toBe('ready');
+        expect(result.current.observedAt).toBeTruthy();
+      });
+    });
+
+    it('should not downgrade data when poll returns older timestamp', async () => {
+      let realtimeCallback: ((snapshot: charger.StationSnapshot) => void) | null = null;
+
+      vi.mocked(charger.subscribeToSnapshots).mockImplementation(
+        (_cpId, callback, onConnectionStateChange) => {
+          realtimeCallback = callback;
+          if (onConnectionStateChange) {
+            queueMicrotask(() => onConnectionStateChange('connected'));
+          }
+          return {
+            unsubscribe: vi.fn(),
+            getConnectionState: vi.fn().mockReturnValue('connected'),
+          };
+        }
+      );
+      vi.mocked(charger.getLatestSnapshot).mockResolvedValue(mockSnapshot);
+      vi.mocked(charger.getStationMetadata).mockResolvedValue(mockMetadata);
+      vi.mocked(time.isDataStale).mockReturnValue(false);
+
+      // Initial data has T1 timestamp
+      const { result } = renderHook(() => useStationData(12345, 67890));
+
+      await waitFor(() => {
+        expect(result.current.state).toBe('ready');
+      });
+
+      // Realtime delivers T2 (newer)
+      const newerSnapshot = {
+        ...mockSnapshot,
+        port1_status: 'OCCUPIED',
+        observed_at: '2024-01-01T14:00:00Z',
+        created_at: '2024-01-01T14:00:00Z',
+      };
+      const newerChargerStatus = {
+        ...mockChargerStatus,
+        port1_status: 'OCCUPIED',
+        created_at: '2024-01-01T14:00:00Z',
+      };
+      vi.mocked(charger.snapshotToChargerStatus).mockReturnValue(newerChargerStatus);
+
+      if (realtimeCallback) {
+        realtimeCallback(newerSnapshot);
+      }
+
+      await waitFor(() => {
+        expect(result.current.data?.port1_status).toBe('OCCUPIED');
+      });
+
+      // Now rerender with stale data to trigger a poll that returns T1 (older)
+      vi.mocked(time.isDataStale).mockReturnValue(true);
+      vi.mocked(apiClient.pollStation).mockResolvedValue({
+        ok: true,
+        data: {
+          ...mockPollData,
+          observed_at: '2024-01-01T12:00:00Z', // T1 — older than T2
+        },
+        meta: { fresh: false, scraper_triggered: false, retry_after: null },
+      });
+
+      // Data should still be the newer T2 version
+      expect(result.current.data?.port1_status).toBe('OCCUPIED');
+    });
+
+    it('should show loading_api only when no cached data', async () => {
+      // Use a deferred promise to control when pollStation resolves
+      let resolvePoll!: (value: PollStationSuccessResponse | ApiErrorResponse) => void;
+      const pollPromise = new Promise<PollStationSuccessResponse | ApiErrorResponse>((resolve) => {
+        resolvePoll = resolve;
+      });
+
+      vi.mocked(charger.getLatestSnapshot).mockResolvedValue(null);
+      vi.mocked(charger.getStationMetadata).mockResolvedValue(mockMetadata);
+      vi.mocked(time.isDataStale).mockReturnValue(true);
+      vi.mocked(apiClient.pollStation).mockReturnValue(pollPromise);
+
+      const { result } = renderHook(() => useStationData(12345, 67890));
+
+      // Should transition through loading_api when no snapshot
+      await waitFor(() => {
+        expect(result.current.state).toBe('loading_api');
+      });
+
+      // Resolve the poll
+      resolvePoll(mockPollSuccessResponse);
+
+      await waitFor(() => {
+        expect(result.current.state).toBe('ready');
       });
     });
   });

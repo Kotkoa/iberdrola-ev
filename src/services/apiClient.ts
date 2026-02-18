@@ -23,7 +23,7 @@
 import type {
   ApiResponse,
   ApiErrorResponse,
-  PollStationData,
+  PollStationSuccessResponse,
   StartWatchData,
   StartWatchRequest,
   SearchNearbySuccessResponse,
@@ -51,21 +51,26 @@ function getHeaders(): HeadersInit {
 /**
  * Poll a station for fresh data
  *
- * Fetches current status directly from Iberdrola API via Edge Function.
- * May return RATE_LIMITED error if polled too frequently (5 min interval).
+ * Returns cached station data from Supabase and triggers GitHub Action scraper
+ * if data is stale (5 min cooldown). Response includes meta with scraper status.
  *
  * @param cuprId - CUPR ID of the station to poll
- * @returns ApiResponse with PollStationData on success
+ * @returns PollStationSuccessResponse with data + meta, or ApiErrorResponse
  *
  * @example
  * ```typescript
  * const response = await pollStation(144569);
- * if (isApiSuccess(response)) {
- *   const { port1_status, port2_status } = response.data;
+ * if (response.ok) {
+ *   console.log(response.data.port1_status);
+ *   if (response.meta.scraper_triggered) {
+ *     console.log('Background refresh started');
+ *   }
  * }
  * ```
  */
-export async function pollStation(cuprId: number): Promise<ApiResponse<PollStationData>> {
+export async function pollStation(
+  cuprId: number
+): Promise<PollStationSuccessResponse | ApiErrorResponse> {
   try {
     const response = await fetch(`${EDGE_BASE}/poll-station`, {
       method: 'POST',
@@ -75,10 +80,8 @@ export async function pollStation(cuprId: number): Promise<ApiResponse<PollStati
 
     const json = await response.json();
 
-    // Edge Function always returns valid JSON with ok field
-    return json as ApiResponse<PollStationData>;
+    return json as PollStationSuccessResponse | ApiErrorResponse;
   } catch (error) {
-    // Network error or JSON parse error
     return {
       ok: false,
       error: {

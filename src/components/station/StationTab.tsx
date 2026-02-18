@@ -27,6 +27,10 @@ export function StationTab({ onNavigateToSearch }: StationTabProps) {
     primaryStationId,
     primaryStationCuprId,
     connectionState,
+    isStale,
+    scraperTriggered,
+    observedAt,
+    isRateLimited,
   } = usePrimaryStation();
   const { location: userLocation } = useUserLocation();
   const [now, setNow] = useState(() => new Date());
@@ -244,6 +248,10 @@ export function StationTab({ onNavigateToSearch }: StationTabProps) {
         longitude={primaryStation.cp_longitude}
         distanceKm={distanceKm}
         connectionState={connectionState}
+        observedAt={observedAt}
+        isStale={isStale}
+        scraperTriggered={scraperTriggered}
+        isRateLimited={isRateLimited}
       />
 
       <PortsList

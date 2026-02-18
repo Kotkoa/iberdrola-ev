@@ -6,15 +6,14 @@ import {
   snapshotToChargerStatus,
   type StationSnapshot,
 } from '../../api/charger';
-import { pollStation, isApiSuccess, isRateLimited } from '../services/apiClient';
+import { pollStation, isRateLimited } from '../services/apiClient';
 import { isStationRateLimited, markRateLimited } from '../utils/rateLimitCache';
 import { isDataStale } from '../utils/time';
 import { ReconnectionManager } from '../utils/reconnectionManager';
 import type { ChargerStatus, StationDataStatus, StationDataState } from '../../types/charger';
 import type { RealtimeConnectionState, SubscriptionResult } from '../../types/realtime';
 import type { PollStationData } from '../types/api';
-
-const TTL_MINUTES = 15;
+import { DATA_FRESHNESS } from '../constants';
 
 function getObservationTimestamp(
   value: { observed_at?: string | null; created_at?: string | null } | null | undefined
@@ -65,41 +64,21 @@ function pollDataToChargerStatus(
 }
 
 /**
- * Manages station data with TTL-based freshness checking
+ * Manages station data with TTL-based freshness checking and honest staleness reporting.
  *
  * Flow:
  * 1. Fetch snapshot + metadata from Supabase (parallel)
- * 2. Check if snapshot is fresh (< 5 min old)
- * 3. If stale/missing → fetch from Edge
- * 4. Subscribe to realtime (immediately, not after load)
- * 5. Merge realtime updates by timestamp (only if newer)
- *
- * @param cpId Station ID to load
- * @param cuprId CUPR ID for Edge fallback
- * @param ttlMinutes Cache TTL (default 5)
- * @returns Station data status with state machine
- *
- * @example
- * ```typescript
- * const { state, data, error, hasRealtime } = useStationData(cpId, cuprId);
- *
- * if (state === 'loading_cache' || state === 'loading_api') {
- *   return <Skeleton />;
- * }
- *
- * if (state === 'error') {
- *   return <Error message={error} />;
- * }
- *
- * return <StationDetails station={data} />;
- * ```
+ * 2. Show data immediately (even if stale) — no skeleton when cache exists
+ * 3. If stale → call pollStation in background to trigger scraper
+ * 4. Subscribe to Realtime (immediately, not after load)
+ * 5. All data updates go through applyIfNewer (timestamp-based gate)
+ * 6. Fallback: if Realtime doesn't deliver within 40s, re-fetch snapshot
  */
 export function useStationData(
   cpId: number | null,
   cuprId: number | undefined,
-  ttlMinutes: number = TTL_MINUTES
+  ttlMinutes: number = DATA_FRESHNESS.STATION_TTL_MINUTES
 ): StationDataStatus {
-  // Internal state for when cpId is valid - 'idle' is derived from cpId === null
   const [internalState, setInternalState] =
     useState<Exclude<StationDataState, 'idle'>>('loading_cache');
   const [data, setData] = useState<ChargerStatus | null>(null);
@@ -107,6 +86,7 @@ export function useStationData(
   const [connectionState, setConnectionState] = useState<RealtimeConnectionState>('disconnected');
   const [isRateLimitedState, setIsRateLimitedState] = useState(false);
   const [nextPollIn, setNextPollIn] = useState<number | null>(null);
+  const [scraperTriggered, setScraperTriggered] = useState(false);
   const subscriptionRef = useRef<SubscriptionResult | null>(null);
   const reconnectionManagerRef = useRef<ReconnectionManager>(new ReconnectionManager());
   const metadataRef = useRef<{
@@ -117,37 +97,52 @@ export function useStationData(
   } | null>(null);
   const prevCpIdRef = useRef<number | null>(null);
   const currentDataTimestampRef = useRef<number>(0);
+  const scraperTriggeredRef = useRef(false);
+  const fallbackTimerRef = useRef<ReturnType<typeof setTimeout>>();
 
   useEffect(() => {
-    // If cpId is null, skip loading - state will be derived as 'idle'
     if (!cpId) {
       prevCpIdRef.current = null;
       return;
     }
 
-    // Detect station switch (not initial mount) to force on-demand scrape
     const cpIdChanged = prevCpIdRef.current !== null && prevCpIdRef.current !== cpId;
     prevCpIdRef.current = cpId;
 
     let active = true;
     let unsubscribe: (() => void) | null = null;
 
+    /**
+     * Single gate for all data updates. Prevents race conditions between
+     * poll-station, Realtime, and fallback by comparing timestamps.
+     */
+    const applyIfNewer = (chargerStatus: ChargerStatus, timestamp: number, source: string) => {
+      if (!active) return false;
+      if (timestamp <= currentDataTimestampRef.current) return false;
+      console.log(`[useStationData] Applying update from ${source} for ${cpId}`);
+      currentDataTimestampRef.current = timestamp;
+      setData(chargerStatus);
+      setInternalState('ready');
+      return true;
+    };
+
     const load = async () => {
       try {
-        // Reset state if cpId changed
         if (cpIdChanged) {
           setData(null);
           setError(null);
           setConnectionState('disconnected');
           setIsRateLimitedState(false);
           setNextPollIn(null);
+          setScraperTriggered(false);
+          scraperTriggeredRef.current = false;
           currentDataTimestampRef.current = 0;
           reconnectionManagerRef.current.reset();
+          clearTimeout(fallbackTimerRef.current);
         }
         setInternalState('loading_cache');
         setError(null);
 
-        // Fetch snapshot + metadata in parallel
         const [snapshot, metadata] = await Promise.all([
           getLatestSnapshot(cpId),
           getStationMetadata(cpId),
@@ -155,7 +150,6 @@ export function useStationData(
 
         if (!active) return;
 
-        // Store metadata for realtime updates
         metadataRef.current = metadata
           ? {
               cp_name: metadata.address_full?.split(',')[0] || 'Unknown',
@@ -165,7 +159,7 @@ export function useStationData(
             }
           : null;
 
-        // Function to create realtime subscription
+        // Realtime subscription — created immediately
         const createSubscription = () => {
           setConnectionState('connecting');
           subscriptionRef.current = subscribeToSnapshots(
@@ -173,18 +167,17 @@ export function useStationData(
             (newSnapshot: StationSnapshot) => {
               if (!active) return;
 
-              // Only update if new data is fresher than current
               const newTimestamp = getObservationTimeMs(newSnapshot);
+              const chargerStatus = snapshotToChargerStatus(
+                newSnapshot,
+                metadataRef.current ?? undefined
+              );
 
-              if (newTimestamp > currentDataTimestampRef.current) {
-                console.log(`[useStationData] Realtime update for ${cpId}, newer data received`);
-                const chargerStatus = snapshotToChargerStatus(
-                  newSnapshot,
-                  metadataRef.current ?? undefined
-                );
-                currentDataTimestampRef.current = newTimestamp;
-                setData(chargerStatus);
-                setInternalState('ready');
+              if (applyIfNewer(chargerStatus, newTimestamp, 'realtime')) {
+                // Fresh data arrived — clear fallback timer and scraper flag
+                clearTimeout(fallbackTimerRef.current);
+                setScraperTriggered(false);
+                scraperTriggeredRef.current = false;
               }
             },
             (newState: RealtimeConnectionState) => {
@@ -192,11 +185,9 @@ export function useStationData(
               console.log(`[useStationData] Connection state changed to: ${newState}`);
 
               if (newState === 'connected') {
-                // Reset reconnection manager on successful connection
                 reconnectionManagerRef.current.reset();
                 setConnectionState('connected');
               } else if (newState === 'error' || newState === 'disconnected') {
-                // Schedule reconnection attempt
                 setConnectionState('reconnecting');
                 const scheduled = reconnectionManagerRef.current.scheduleReconnect(() => {
                   if (!active) return;
@@ -206,7 +197,6 @@ export function useStationData(
                 });
 
                 if (!scheduled) {
-                  // Max attempts reached
                   setConnectionState('error');
                 }
               } else {
@@ -216,38 +206,33 @@ export function useStationData(
           );
         };
 
-        // Subscribe to realtime immediately (not after load)
         createSubscription();
         unsubscribe = () => subscriptionRef.current?.unsubscribe();
-
-        // Helpers to reduce repetition
-        const applySnapshot = (snap: StationSnapshot) => {
-          const chargerStatus = snapshotToChargerStatus(snap, metadataRef.current ?? undefined);
-          currentDataTimestampRef.current = getObservationTimeMs(snap);
-          setData(chargerStatus);
-          setInternalState('ready');
-        };
 
         const showError = (message: string) => {
           setError(message);
           setInternalState('error');
         };
 
-        // Check if snapshot is fresh
         const stale = isDataStale(getObservationTimestamp(snapshot), ttlMinutes);
 
         // 1. Fresh cache hit (skip on station switch to trigger on-demand scrape)
         if (snapshot && !stale && !cpIdChanged) {
           console.log(`[useStationData] Using fresh cache for ${cpId}`);
-          applySnapshot(snapshot);
+          const chargerStatus = snapshotToChargerStatus(snapshot, metadataRef.current ?? undefined);
+          applyIfNewer(chargerStatus, getObservationTimeMs(snapshot), 'cache');
           return;
         }
 
-        // 2. No cuprId — can't fetch from API, use whatever we have
+        // 2. No cuprId — can't call Edge, use whatever we have
         if (cuprId === undefined) {
           if (snapshot) {
             console.log(`[useStationData] Using stale data for ${cpId} (no cuprId for refresh)`);
-            applySnapshot(snapshot);
+            const chargerStatus = snapshotToChargerStatus(
+              snapshot,
+              metadataRef.current ?? undefined
+            );
+            applyIfNewer(chargerStatus, getObservationTimeMs(snapshot), 'cache-stale');
           } else {
             showError('No data available');
           }
@@ -258,7 +243,11 @@ export function useStationData(
         if (isStationRateLimited(cuprId)) {
           console.log(`[useStationData] Rate limited for ${cpId}, using cache`);
           if (snapshot) {
-            applySnapshot(snapshot);
+            const chargerStatus = snapshotToChargerStatus(
+              snapshot,
+              metadataRef.current ?? undefined
+            );
+            applyIfNewer(chargerStatus, getObservationTimeMs(snapshot), 'cache-ratelimited');
             setIsRateLimitedState(true);
           } else {
             showError('Data unavailable (rate limited)');
@@ -266,25 +255,55 @@ export function useStationData(
           return;
         }
 
-        // 4. Fetch from Edge via poll-station
-        console.log(
-          `[useStationData] Cache ${stale ? 'stale' : 'missing'} for ${cpId}, fetching from Edge`
-        );
-        setInternalState('loading_api');
+        // 4. Stale or missing — show stale data immediately, poll in background
+        if (snapshot) {
+          // Show stale data right away (no loading_api skeleton)
+          console.log(`[useStationData] Showing stale data for ${cpId}, polling in background`);
+          const chargerStatus = snapshotToChargerStatus(snapshot, metadataRef.current ?? undefined);
+          applyIfNewer(chargerStatus, getObservationTimeMs(snapshot), 'cache-stale');
+        } else {
+          // No cache at all — show loading state
+          setInternalState('loading_api');
+        }
 
+        // Call pollStation in background (triggers scraper)
+        console.log(`[useStationData] Calling pollStation for ${cpId}`);
         const result = await pollStation(cuprId);
         if (!active) return;
 
-        if (isApiSuccess(result)) {
+        if (result.ok) {
           const chargerStatus = pollDataToChargerStatus(
             result.data,
             metadataRef.current ?? undefined
           );
-          currentDataTimestampRef.current = new Date(result.data.observed_at).getTime();
-          setData(chargerStatus);
-          setInternalState('ready');
+          const newTimestamp = new Date(result.data.observed_at).getTime();
+          applyIfNewer(chargerStatus, newTimestamp, 'poll-station');
           setIsRateLimitedState(false);
           setNextPollIn(null);
+
+          // Read meta — was scraper triggered?
+          if (result.meta.scraper_triggered) {
+            setScraperTriggered(true);
+            scraperTriggeredRef.current = true;
+
+            // Start fallback timer in case Realtime doesn't deliver
+            fallbackTimerRef.current = setTimeout(async () => {
+              if (!active) return;
+              if (!scraperTriggeredRef.current) return; // Already resolved by Realtime
+
+              console.log(`[useStationData] Realtime fallback for ${cpId}`);
+              const freshSnapshot = await getLatestSnapshot(cpId);
+              if (!active) return;
+
+              if (freshSnapshot) {
+                const ts = getObservationTimeMs(freshSnapshot);
+                const cs = snapshotToChargerStatus(freshSnapshot, metadataRef.current ?? undefined);
+                applyIfNewer(cs, ts, 'fallback');
+              }
+              setScraperTriggered(false);
+              scraperTriggeredRef.current = false;
+            }, DATA_FRESHNESS.REALTIME_FALLBACK_TIMEOUT_MS);
+          }
           return;
         }
 
@@ -293,7 +312,7 @@ export function useStationData(
           markRateLimited(cuprId, retryAfter);
           console.log(`[useStationData] Rate limited for ${cpId}, retry after ${retryAfter}s`);
           if (snapshot) {
-            applySnapshot(snapshot);
+            // Stale data already shown above — just set flags
             setIsRateLimitedState(true);
             setNextPollIn(retryAfter);
           } else {
@@ -302,13 +321,11 @@ export function useStationData(
           return;
         }
 
-        // Other API error — fallback to stale cache
+        // Other API error — stale data already shown if available
         console.log(
           `[useStationData] API error for ${cpId}: ${result.error.code}, using cache fallback`
         );
-        if (snapshot) {
-          applySnapshot(snapshot);
-        } else {
+        if (!snapshot) {
           showError(result.error.message);
         }
       } catch (e) {
@@ -322,19 +339,18 @@ export function useStationData(
 
     load();
 
-    // Copy ref value for cleanup to avoid stale ref warning
     const reconnectionManager = reconnectionManagerRef.current;
 
     return () => {
       active = false;
       unsubscribe?.();
       reconnectionManager.cancelPending();
+      clearTimeout(fallbackTimerRef.current);
     };
   }, [cpId, cuprId, ttlMinutes]);
 
-  // Periodic re-fetch: trigger pollStation when data becomes stale
-  // Checks every 60s, respects rate limits. Also serves as fallback
-  // if realtime subscription is disconnected.
+  // Periodic re-fetch: trigger pollStation when data becomes stale.
+  // Skips if scraperTriggered (fallback timer handles that case).
   useEffect(() => {
     if (!cpId || cuprId === undefined) return;
 
@@ -344,6 +360,9 @@ export function useStationData(
 
     const intervalId = setInterval(async () => {
       if (!active) return;
+
+      // Skip if fallback timer is handling scraper wait
+      if (scraperTriggeredRef.current) return;
 
       const timestamp = currentDataTimestampRef.current;
       if (timestamp === 0) return;
@@ -358,7 +377,7 @@ export function useStationData(
 
       if (!active) return;
 
-      if (isApiSuccess(result)) {
+      if (result.ok) {
         const newTimestamp = new Date(result.data.observed_at).getTime();
         if (newTimestamp > currentDataTimestampRef.current) {
           const chargerStatus = pollDataToChargerStatus(
@@ -367,6 +386,11 @@ export function useStationData(
           );
           currentDataTimestampRef.current = newTimestamp;
           setData(chargerStatus);
+        }
+
+        if (result.meta.scraper_triggered) {
+          setScraperTriggered(true);
+          scraperTriggeredRef.current = true;
         }
       } else if (isRateLimited(result)) {
         const retryAfter = result.error.retry_after ?? 300;
@@ -380,11 +404,11 @@ export function useStationData(
     };
   }, [cpId, cuprId, ttlMinutes]);
 
-  // Derive state: 'idle' when cpId is null, otherwise use internal state
+  // Derive state
   const state: StationDataState = cpId === null ? 'idle' : internalState;
   const stale = isDataStale(data?.overall_update_date ?? data?.created_at ?? null, ttlMinutes);
+  const observedAt = data?.overall_update_date ?? data?.created_at ?? null;
 
-  // Return idle state with nulls when no station selected
   if (cpId === null) {
     return {
       state: 'idle',
@@ -395,10 +419,11 @@ export function useStationData(
       isStale: false,
       isRateLimited: false,
       nextPollIn: null,
+      scraperTriggered: false,
+      observedAt: null,
     };
   }
 
-  // Derive hasRealtime for backwards compatibility
   const hasRealtime = connectionState === 'connected';
 
   return {
@@ -410,5 +435,7 @@ export function useStationData(
     isStale: stale,
     isRateLimited: isRateLimitedState,
     nextPollIn,
+    scraperTriggered,
+    observedAt,
   };
 }

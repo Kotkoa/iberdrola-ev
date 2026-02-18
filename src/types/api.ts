@@ -69,6 +69,28 @@ export interface PollStationData {
 }
 
 /**
+ * Meta information from poll-station response
+ */
+export interface PollStationMeta {
+  /** Always false — data is from Supabase cache, not live Iberdrola API */
+  fresh: boolean;
+  /** True if GitHub Action scraper was dispatched */
+  scraper_triggered: boolean;
+  /** Seconds until next scraper trigger allowed (null if can trigger now) */
+  retry_after: number | null;
+}
+
+/**
+ * Full success response from poll-station (includes meta).
+ * Separate type from generic ApiSuccessResponse to preserve meta access after type guards.
+ */
+export interface PollStationSuccessResponse {
+  ok: true;
+  data: PollStationData;
+  meta: PollStationMeta;
+}
+
+/**
  * Request body for POST /functions/v1/poll-station
  */
 export interface PollStationRequest {

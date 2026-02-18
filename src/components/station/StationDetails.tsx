@@ -3,6 +3,7 @@ import LocationOnIcon from '@mui/icons-material/LocationOn';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import { DistanceBadge } from '../common/DistanceBadge';
 import { ConnectionIndicator } from '../common/ConnectionIndicator';
+import { FreshnessIndicator } from '../common/FreshnessIndicator';
 import { formatAddress } from '../../utils/address';
 import type { RealtimeConnectionState } from '../../../types/realtime';
 
@@ -20,6 +21,10 @@ interface StationDetailsProps {
   /** @deprecated Use connectionState instead */
   hasRealtime?: boolean;
   connectionState?: RealtimeConnectionState;
+  observedAt?: string | null;
+  isStale?: boolean;
+  scraperTriggered?: boolean;
+  isRateLimited?: boolean;
 }
 
 export function StationDetails({
@@ -35,6 +40,10 @@ export function StationDetails({
   distanceKm,
   hasRealtime,
   connectionState,
+  observedAt,
+  isStale = false,
+  scraperTriggered = false,
+  isRateLimited = false,
 }: StationDetailsProps) {
   // Use connectionState if provided, otherwise derive from hasRealtime for backwards compatibility
   // Default to 'disconnected' when neither is specified to avoid misleading "Live" indicator
@@ -94,6 +103,13 @@ export function StationDetails({
           }}
         />
         <ConnectionIndicator state={effectiveConnectionState} size="small" />
+        <FreshnessIndicator
+          observedAt={observedAt ?? null}
+          isStale={isStale}
+          scraperTriggered={scraperTriggered}
+          isRateLimited={isRateLimited}
+          size="small"
+        />
       </Stack>
 
       <Typography
