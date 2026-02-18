@@ -28,6 +28,8 @@ describe('apiClient', () => {
         cp_id: 12345,
         port1_status: 'Available',
         port2_status: 'Occupied',
+        port1_update_date: null,
+        port2_update_date: null,
         overall_status: 'PartiallyOccupied',
         observed_at: '2025-01-31T10:30:00Z',
       };

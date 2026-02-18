@@ -6,6 +6,7 @@ import * as apiClient from '../services/apiClient';
 import * as rateLimitCache from '../utils/rateLimitCache';
 import * as time from '../utils/time';
 import type { RealtimeConnectionState } from '../../types/realtime';
+import type { StationSnapshot } from '../../api/charger';
 import type { PollStationSuccessResponse, ApiErrorResponse, PollStationData } from '../types/api';
 
 // Mock modules
@@ -34,7 +35,7 @@ vi.mock('../utils/time', () => ({
 }));
 
 describe('useStationData', () => {
-  const mockSnapshot: charger.StationSnapshot = {
+  const mockSnapshot: StationSnapshot = {
     id: 'test-id',
     cp_id: 12345,
     source: 'user_station',
@@ -88,6 +89,8 @@ describe('useStationData', () => {
     cp_id: 12345,
     port1_status: 'AVAILABLE',
     port2_status: 'OCCUPIED',
+    port1_update_date: null,
+    port2_update_date: null,
     overall_status: 'AVAILABLE',
     observed_at: '2024-01-01T12:00:00Z',
   };
@@ -303,7 +306,7 @@ describe('useStationData', () => {
     });
 
     it('should update data on realtime event with newer timestamp', async () => {
-      let realtimeCallback: ((snapshot: charger.StationSnapshot) => void) | null = null;
+      let realtimeCallback: ((snapshot: StationSnapshot) => void) | null = null;
 
       vi.mocked(charger.subscribeToSnapshots).mockImplementation(
         (_cpId, callback, onConnectionStateChange) => {
@@ -460,7 +463,7 @@ describe('useStationData', () => {
     });
 
     it('should reset scraperTriggered on Realtime update', async () => {
-      let realtimeCallback: ((snapshot: charger.StationSnapshot) => void) | null = null;
+      let realtimeCallback: ((snapshot: StationSnapshot) => void) | null = null;
 
       vi.mocked(charger.subscribeToSnapshots).mockImplementation(
         (_cpId, callback, onConnectionStateChange) => {
@@ -525,7 +528,7 @@ describe('useStationData', () => {
     });
 
     it('should not downgrade data when poll returns older timestamp', async () => {
-      let realtimeCallback: ((snapshot: charger.StationSnapshot) => void) | null = null;
+      let realtimeCallback: ((snapshot: StationSnapshot) => void) | null = null;
 
       vi.mocked(charger.subscribeToSnapshots).mockImplementation(
         (_cpId, callback, onConnectionStateChange) => {

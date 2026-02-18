@@ -21,7 +21,7 @@ export function useStationSearch(): UseStationSearchReturn {
   const [usingCachedData, setUsingCachedData] = useState(false);
   const [scraperTriggered, setScraperTriggered] = useState(false);
   const abortControllerRef = useRef<AbortController | null>(null);
-  const retryTimerRef = useRef<ReturnType<typeof setTimeout>>();
+  const retryTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const retryAbortRef = useRef<AbortController | null>(null);
   const lastSearchCoordsRef = useRef<{ lat: number; lon: number } | null>(null);
   const lastRadiusRef = useRef<number>(0);

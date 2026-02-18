@@ -98,7 +98,7 @@ export function useStationData(
   const prevCpIdRef = useRef<number | null>(null);
   const currentDataTimestampRef = useRef<number>(0);
   const scraperTriggeredRef = useRef(false);
-  const fallbackTimerRef = useRef<ReturnType<typeof setTimeout>>();
+  const fallbackTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   useEffect(() => {
     if (!cpId) {

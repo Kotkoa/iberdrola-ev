@@ -120,7 +120,7 @@ const mockStation = {
   priceKwh: 0,
   socketType: 'Type 2',
   distanceKm: 0.5,
-  verificationState: 'verified_free',
+  verificationState: 'verified_free' as const,
 };
 
 // Helper to create error response
@@ -203,7 +203,7 @@ describe('useStationSearch', () => {
         priceKwh: 0,
         socketType: 'Type 2',
         distanceKm: 0.5,
-        verificationState: 'verified_free',
+        verificationState: 'verified_free' as const,
       },
     ];
 
@@ -246,7 +246,7 @@ describe('useStationSearch', () => {
         priceKwh: 0,
         socketType: 'Type 2',
         distanceKm: 0.5,
-        verificationState: 'verified_free',
+        verificationState: 'verified_free' as const,
       },
     ];
 
