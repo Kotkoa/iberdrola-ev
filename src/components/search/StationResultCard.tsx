@@ -83,7 +83,7 @@ export function StationResultCard({
 
       <Stack direction="row" gap={0.5} sx={{ mt: 1, flexWrap: 'wrap', alignItems: 'center' }}>
         <Chip
-          label="22 kW"
+          label={`${station.maxPower ?? 22} kW`}
           size="small"
           variant="outlined"
           sx={{ fontSize: '0.7rem', height: 20 }}

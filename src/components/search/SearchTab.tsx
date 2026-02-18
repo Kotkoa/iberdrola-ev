@@ -8,7 +8,6 @@ import Snackbar from '@mui/material/Snackbar';
 import RoomOutlinedIcon from '@mui/icons-material/RoomOutlined';
 import { RadiusSelector } from './RadiusSelector';
 import { SearchResults } from './SearchResults';
-import { SearchProgressBar } from './SearchProgressBar';
 import { useStationSearch } from '../../hooks/useStationSearch';
 import { usePrimaryStation } from '../../context/PrimaryStationContext';
 import { useUserLocation } from '../../hooks/useUserLocation';
@@ -21,7 +20,7 @@ interface SearchTabProps {
 export function SearchTab({ onStationSelected }: SearchTabProps) {
   const [radius, setRadius] = useState(5);
   const [snackbarOpen, setSnackbarOpen] = useState(false);
-  const { stations, loading, enriching, progress, error, usingCachedData, search } =
+  const { stations, loading, error, usingCachedData, scraperTriggered, search } =
     useStationSearch();
 
   const { primaryStationId, setPrimaryStation } = usePrimaryStation();
@@ -87,8 +86,10 @@ export function SearchTab({ onStationSelected }: SearchTabProps) {
           </Stack>
         </Stack>
 
-        {(loading || enriching) && progress.total > 0 && (
-          <SearchProgressBar current={progress.current} total={progress.total} />
+        {scraperTriggered && !loading && (
+          <Alert severity="info" sx={{ mb: 2, fontSize: { xs: '0.75rem', sm: '0.875rem' } }}>
+            Updating station data...
+          </Alert>
         )}
 
         {error && (
@@ -109,7 +110,7 @@ export function SearchTab({ onStationSelected }: SearchTabProps) {
           />
         )}
 
-        {!loading && !enriching && stations.length === 0 && !error && (
+        {!loading && stations.length === 0 && !error && (
           <Box sx={{ py: 4, textAlign: 'center' }}>
             <Typography color="text.secondary">No stations found in this area.</Typography>
             <Typography variant="caption" color="text.secondary">

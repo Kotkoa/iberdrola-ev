@@ -1,9 +1,10 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act, waitFor } from '@testing-library/react';
 import { useStationSearch } from './useStationSearch';
 import * as apiClient from '../services/apiClient';
 import * as iberdrola from '../services/iberdrola';
 import * as localSearch from '../services/localSearch';
+import { DATA_FRESHNESS } from '../constants';
 import type { SearchNearbySuccessResponse, ApiErrorResponse } from '../types/api';
 import type { StationInfoPartial } from '../services/iberdrola';
 
@@ -87,7 +88,8 @@ function createMockPosition(lat: number, lon: number): GeolocationPosition {
 // Helper to create successful response
 function createSuccessResponse(
   stations: SearchNearbySuccessResponse['data']['stations'],
-  scraperTriggered = false
+  scraperTriggered = false,
+  retryAfter: number | null = null
 ): SearchNearbySuccessResponse {
   return {
     ok: true,
@@ -98,10 +100,28 @@ function createSuccessResponse(
     meta: {
       fresh: false,
       scraper_triggered: scraperTriggered,
-      retry_after: null,
+      retry_after: retryAfter,
     },
   };
 }
+
+// Reusable mock station for auto-retry tests
+const mockStation = {
+  cpId: 123,
+  cuprId: 456,
+  name: 'Station 1',
+  latitude: 38.84,
+  longitude: -0.12,
+  addressFull: 'Street 1',
+  overallStatus: 'AVAILABLE',
+  totalPorts: 2,
+  maxPower: 22,
+  freePorts: 1,
+  priceKwh: 0,
+  socketType: 'Type 2',
+  distanceKm: 0.5,
+  verificationState: 'verified_free',
+};
 
 // Helper to create error response
 function createErrorResponse(message: string, code = 'INTERNAL_ERROR'): ApiErrorResponse {
@@ -124,9 +144,7 @@ describe('useStationSearch', () => {
 
     expect(result.current.stations).toEqual([]);
     expect(result.current.loading).toBe(false);
-    expect(result.current.enriching).toBe(false);
     expect(result.current.error).toBeNull();
-    expect(result.current.progress).toEqual({ current: 0, total: 0 });
     expect(result.current.usingCachedData).toBe(false);
     expect(result.current.scraperTriggered).toBe(false);
   });
@@ -430,5 +448,253 @@ describe('useStationSearch', () => {
     });
 
     expect(result.current.scraperTriggered).toBe(false);
+  });
+
+  describe('auto-retry', () => {
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('should auto-retry after SCRAPER_EXPECTED_DELAY_MS when scraper triggered', async () => {
+      vi.useFakeTimers();
+
+      vi.mocked(iberdrola.getUserLocation).mockResolvedValue(createMockPosition(38.84, -0.12));
+      vi.mocked(apiClient.searchNearby)
+        .mockResolvedValueOnce(createSuccessResponse([mockStation], true))
+        .mockResolvedValueOnce(
+          createSuccessResponse([{ ...mockStation, overallStatus: 'OCCUPIED' }])
+        );
+
+      const { result } = renderHook(() => useStationSearch());
+
+      await act(async () => {
+        await result.current.search(5);
+      });
+
+      expect(result.current.scraperTriggered).toBe(true);
+
+      // advanceTimersByTimeAsync flushes both timers and microtasks (resolved promises)
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(DATA_FRESHNESS.SCRAPER_EXPECTED_DELAY_MS);
+      });
+
+      expect(apiClient.searchNearby).toHaveBeenCalledTimes(2);
+      expect(result.current.scraperTriggered).toBe(false);
+    });
+
+    it('should use original coordinates for retry (not call getUserLocation again)', async () => {
+      vi.useFakeTimers();
+
+      vi.mocked(iberdrola.getUserLocation).mockResolvedValue(createMockPosition(38.84, -0.12));
+      vi.mocked(apiClient.searchNearby)
+        .mockResolvedValueOnce(createSuccessResponse([mockStation], true))
+        .mockResolvedValueOnce(createSuccessResponse([mockStation]));
+
+      const { result } = renderHook(() => useStationSearch());
+
+      await act(async () => {
+        await result.current.search(5);
+      });
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(DATA_FRESHNESS.SCRAPER_EXPECTED_DELAY_MS);
+      });
+
+      expect(apiClient.searchNearby).toHaveBeenCalledTimes(2);
+      // getUserLocation should only be called once (during initial search)
+      expect(iberdrola.getUserLocation).toHaveBeenCalledTimes(1);
+    });
+
+    it('should clear retry timer on new search', async () => {
+      vi.useFakeTimers();
+
+      vi.mocked(iberdrola.getUserLocation).mockResolvedValue(createMockPosition(38.84, -0.12));
+      vi.mocked(apiClient.searchNearby)
+        // First search: scraper triggered, schedules retry in 25s
+        .mockResolvedValueOnce(createSuccessResponse([mockStation], true))
+        // Second search: scraper triggered again, schedules new retry
+        .mockResolvedValueOnce(createSuccessResponse([mockStation], true))
+        // Retry for second search
+        .mockResolvedValueOnce(createSuccessResponse([mockStation]));
+
+      const { result } = renderHook(() => useStationSearch());
+
+      // First search — schedules retry in 25s
+      await act(async () => {
+        await result.current.search(3);
+      });
+
+      // Advance 10s (NOT enough for first retry)
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(10_000);
+      });
+
+      // Second search — clears first retry timer, schedules new one
+      await act(async () => {
+        await result.current.search(10);
+      });
+
+      // Advance 15s more — NOT enough for second retry (needs 25s from search2)
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(15_000);
+      });
+
+      // Only 2 calls so far: search1 + search2, no retry yet
+      expect(apiClient.searchNearby).toHaveBeenCalledTimes(2);
+
+      // Advance remaining 10s — now second retry fires (25s total from search2)
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(10_000);
+      });
+
+      expect(apiClient.searchNearby).toHaveBeenCalledTimes(3);
+    });
+
+    it('should clear retry timer on unmount', async () => {
+      vi.useFakeTimers();
+
+      vi.mocked(iberdrola.getUserLocation).mockResolvedValue(createMockPosition(38.84, -0.12));
+      vi.mocked(apiClient.searchNearby).mockResolvedValueOnce(
+        createSuccessResponse([mockStation], true)
+      );
+
+      const { result, unmount } = renderHook(() => useStationSearch());
+
+      await act(async () => {
+        await result.current.search(5);
+      });
+
+      expect(result.current.scraperTriggered).toBe(true);
+
+      // Unmount before retry fires
+      unmount();
+
+      // Advance past retry delay — should NOT trigger additional searchNearby
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(DATA_FRESHNESS.SCRAPER_EXPECTED_DELAY_MS);
+      });
+
+      expect(apiClient.searchNearby).toHaveBeenCalledTimes(1);
+    });
+
+    it('should not retry more than once when scraper_triggered is false and retry_after is set', async () => {
+      vi.useFakeTimers();
+
+      vi.mocked(iberdrola.getUserLocation).mockResolvedValue(createMockPosition(38.84, -0.12));
+      vi.mocked(apiClient.searchNearby)
+        // First call: scraper on cooldown
+        .mockResolvedValueOnce(createSuccessResponse([mockStation], false, 180))
+        // Immediate re-fetch (one allowed)
+        .mockResolvedValueOnce(createSuccessResponse([mockStation], false, 170));
+
+      const { result } = renderHook(() => useStationSearch());
+
+      await act(async () => {
+        await result.current.search(5);
+      });
+
+      // Flush the immediate setTimeout(silentRefetch, 0)
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+
+      expect(apiClient.searchNearby).toHaveBeenCalledTimes(2);
+
+      // Advance significantly more — no additional retry should happen
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(60_000);
+      });
+
+      expect(apiClient.searchNearby).toHaveBeenCalledTimes(2);
+      expect(result.current.stations).toHaveLength(1);
+    });
+
+    it('should not clear stations during silent retry', async () => {
+      vi.useFakeTimers();
+
+      vi.mocked(iberdrola.getUserLocation).mockResolvedValue(createMockPosition(38.84, -0.12));
+
+      let retryResolve: (value: SearchNearbySuccessResponse) => void;
+      const retryPromise = new Promise<SearchNearbySuccessResponse>((resolve) => {
+        retryResolve = resolve;
+      });
+
+      vi.mocked(apiClient.searchNearby)
+        .mockResolvedValueOnce(createSuccessResponse([mockStation], true))
+        .mockReturnValueOnce(retryPromise);
+
+      const { result } = renderHook(() => useStationSearch());
+
+      await act(async () => {
+        await result.current.search(5);
+      });
+
+      expect(result.current.stations).toHaveLength(1);
+
+      // Fire retry timer — silent re-fetch starts but hasn't resolved yet
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(DATA_FRESHNESS.SCRAPER_EXPECTED_DELAY_MS);
+      });
+
+      // Stations should still be visible during pending retry
+      expect(result.current.stations).toHaveLength(1);
+      expect(result.current.stations[0].overallStatus).toBe('AVAILABLE');
+
+      // Resolve the retry
+      await act(async () => {
+        retryResolve!(createSuccessResponse([{ ...mockStation, overallStatus: 'OCCUPIED' }]));
+      });
+
+      expect(result.current.stations[0].overallStatus).toBe('OCCUPIED');
+    });
+
+    it('should update stations after silent retry', async () => {
+      vi.useFakeTimers();
+
+      const updatedStation = { ...mockStation, overallStatus: 'OCCUPIED', freePorts: 0 };
+
+      vi.mocked(iberdrola.getUserLocation).mockResolvedValue(createMockPosition(38.84, -0.12));
+      vi.mocked(apiClient.searchNearby)
+        .mockResolvedValueOnce(createSuccessResponse([mockStation], true))
+        .mockResolvedValueOnce(createSuccessResponse([updatedStation]));
+
+      const { result } = renderHook(() => useStationSearch());
+
+      await act(async () => {
+        await result.current.search(5);
+      });
+
+      expect(result.current.stations[0].overallStatus).toBe('AVAILABLE');
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(DATA_FRESHNESS.SCRAPER_EXPECTED_DELAY_MS);
+      });
+
+      expect(result.current.stations[0].overallStatus).toBe('OCCUPIED');
+      expect(result.current.stations[0].freePorts).toBe(0);
+    });
+
+    it('should reset scraperTriggered after retry completes', async () => {
+      vi.useFakeTimers();
+
+      vi.mocked(iberdrola.getUserLocation).mockResolvedValue(createMockPosition(38.84, -0.12));
+      vi.mocked(apiClient.searchNearby)
+        .mockResolvedValueOnce(createSuccessResponse([mockStation], true))
+        .mockResolvedValueOnce(createSuccessResponse([mockStation]));
+
+      const { result } = renderHook(() => useStationSearch());
+
+      await act(async () => {
+        await result.current.search(5);
+      });
+
+      expect(result.current.scraperTriggered).toBe(true);
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(DATA_FRESHNESS.SCRAPER_EXPECTED_DELAY_MS);
+      });
+
+      expect(result.current.scraperTriggered).toBe(false);
+    });
   });
 });
