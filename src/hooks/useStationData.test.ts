@@ -88,10 +88,16 @@ describe('useStationData', () => {
   const mockPollData: PollStationData = {
     cp_id: 12345,
     port1_status: 'AVAILABLE',
-    port2_status: 'OCCUPIED',
+    port1_power_kw: 22,
+    port1_price_kwh: 0,
     port1_update_date: null,
+    port2_status: 'OCCUPIED',
+    port2_power_kw: 22,
+    port2_price_kwh: 0,
     port2_update_date: null,
     overall_status: 'AVAILABLE',
+    emergency_stop_pressed: false,
+    situation_code: 'OPER',
     observed_at: '2024-01-01T12:00:00Z',
   };
 
@@ -502,6 +508,56 @@ describe('useStationData', () => {
       await waitFor(() => {
         expect(result.current.scraperTriggered).toBe(false);
       });
+    });
+
+    it('should clear scraperTriggered via fallback timer in periodic refresh', async () => {
+      vi.useFakeTimers();
+
+      vi.mocked(charger.getLatestSnapshot).mockResolvedValue(mockSnapshot);
+      vi.mocked(charger.getStationMetadata).mockResolvedValue(mockMetadata);
+      // First call: fresh cache (skip poll), subsequent isDataStale checks: stale
+      vi.mocked(time.isDataStale).mockReturnValue(false);
+
+      const { result } = renderHook(() => useStationData(12345, 67890));
+
+      // Wait for initial load with fresh data
+      await vi.waitFor(() => {
+        expect(result.current.state).toBe('ready');
+        expect(result.current.scraperTriggered).toBe(false);
+      });
+
+      // Now periodic refresh will fire — make poll return scraper_triggered: true
+      vi.mocked(apiClient.pollStation).mockResolvedValue({
+        ok: true,
+        data: { ...mockPollData, observed_at: '2024-01-01T13:00:00Z' },
+        meta: { fresh: false, scraper_triggered: true, retry_after: null },
+      });
+      // Make isDataStale return true so periodic refresh triggers pollStation
+      vi.mocked(time.isDataStale).mockReturnValue(true);
+
+      // Advance to trigger 60s periodic interval
+      await vi.advanceTimersByTimeAsync(60_000);
+
+      await vi.waitFor(() => {
+        expect(result.current.scraperTriggered).toBe(true);
+      });
+
+      // Prepare fresh snapshot for fallback
+      const freshSnapshot = {
+        ...mockSnapshot,
+        observed_at: '2024-01-01T14:00:00Z',
+        created_at: '2024-01-01T14:00:00Z',
+      };
+      vi.mocked(charger.getLatestSnapshot).mockResolvedValue(freshSnapshot);
+
+      // Advance by 40s fallback timeout
+      await vi.advanceTimersByTimeAsync(40_000);
+
+      await vi.waitFor(() => {
+        expect(result.current.scraperTriggered).toBe(false);
+      });
+
+      vi.useRealTimers();
     });
 
     it('should expose observedAt from data', async () => {

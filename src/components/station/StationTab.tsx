@@ -98,14 +98,15 @@ export function StationTab({ onNavigateToSearch }: StationTabProps) {
     return () => clearInterval(intervalId);
   }, []);
 
+  const cpId = primaryStation?.cp_id;
   useEffect(() => {
-    if (!primaryStation) return;
-    restoreSubscriptionState(primaryStation.cp_id);
-  }, [primaryStation, restoreSubscriptionState]);
+    if (!cpId) return;
+    restoreSubscriptionState(cpId);
+  }, [cpId, restoreSubscriptionState]);
 
   // Reset subscription state when a push notification is received
   useEffect(() => {
-    if (!primaryStation || !('serviceWorker' in navigator)) return;
+    if (!cpId || !('serviceWorker' in navigator)) return;
 
     const handleSwMessage = (event: MessageEvent) => {
       const data: unknown = event.data;
@@ -116,7 +117,7 @@ export function StationTab({ onNavigateToSearch }: StationTabProps) {
         (data as { type: string }).type === 'PUSH_RECEIVED'
       ) {
         const msg = data as { stationId?: string; portNumber?: number };
-        if (String(msg.stationId) !== String(primaryStation.cp_id)) return;
+        if (String(msg.stationId) !== String(cpId)) return;
         const port = msg.portNumber;
         if (port === 1 || port === 2) {
           setSubscriptionState((prev) => ({ ...prev, [port]: 'idle' }));
@@ -126,7 +127,7 @@ export function StationTab({ onNavigateToSearch }: StationTabProps) {
 
     navigator.serviceWorker.addEventListener('message', handleSwMessage);
     return () => navigator.serviceWorker.removeEventListener('message', handleSwMessage);
-  }, [primaryStation]);
+  }, [cpId]);
 
   useEffect(() => {
     setPushAvailable(isPushSupported());

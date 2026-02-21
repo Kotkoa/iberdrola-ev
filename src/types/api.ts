@@ -56,14 +56,26 @@ export interface PollStationData {
   cp_id: number;
   /** Port 1 status (e.g., 'Available', 'Occupied', 'OutOfService') */
   port1_status: string | null;
-  /** Port 2 status */
-  port2_status: string | null;
+  /** Port 1 power in kW */
+  port1_power_kw?: number | null;
+  /** Port 1 price per kWh */
+  port1_price_kwh?: number | null;
   /** Timestamp when port 1 status last changed */
   port1_update_date: string | null;
+  /** Port 2 status */
+  port2_status: string | null;
+  /** Port 2 power in kW */
+  port2_power_kw?: number | null;
+  /** Port 2 price per kWh */
+  port2_price_kwh?: number | null;
   /** Timestamp when port 2 status last changed */
   port2_update_date: string | null;
   /** Overall station status */
   overall_status: string | null;
+  /** Whether emergency stop is pressed */
+  emergency_stop_pressed?: boolean | null;
+  /** Situation code (e.g., 'OPER') */
+  situation_code?: string | null;
   /** Timestamp when snapshot was recorded */
   observed_at: string;
 }

@@ -50,13 +50,17 @@ function pollDataToChargerStatus(
     cp_name: metadata?.cp_name ?? 'Unknown',
     schedule: null,
     port1_status: pollData.port1_status,
-    port2_status: pollData.port2_status,
-    port1_power_kw: null,
+    port1_power_kw: pollData.port1_power_kw ?? null,
+    port1_price_kwh: pollData.port1_price_kwh ?? null,
     port1_update_date: pollData.port1_update_date,
-    port2_power_kw: null,
+    port2_status: pollData.port2_status,
+    port2_power_kw: pollData.port2_power_kw ?? null,
+    port2_price_kwh: pollData.port2_price_kwh ?? null,
     port2_update_date: pollData.port2_update_date,
     overall_status: pollData.overall_status,
     overall_update_date: pollData.observed_at,
+    emergency_stop_pressed: pollData.emergency_stop_pressed ?? null,
+    situation_code: pollData.situation_code ?? null,
     cp_latitude: metadata?.cp_latitude,
     cp_longitude: metadata?.cp_longitude,
     address_full: metadata?.address_full,
@@ -399,6 +403,28 @@ export function useStationData(
         if (result.meta.scraper_triggered) {
           setScraperTriggered(true);
           scraperTriggeredRef.current = true;
+
+          // Fallback timer — same pattern as initial load (lines 294-309)
+          clearTimeout(fallbackTimerRef.current);
+          fallbackTimerRef.current = setTimeout(async () => {
+            if (!active) return;
+            if (!scraperTriggeredRef.current) return;
+
+            console.log(`[useStationData] Periodic refresh fallback for ${cpId}`);
+            const freshSnapshot = await getLatestSnapshot(cpId);
+            if (!active) return;
+
+            if (freshSnapshot) {
+              const ts = getObservationTimeMs(freshSnapshot);
+              if (ts > currentDataTimestampRef.current) {
+                const cs = snapshotToChargerStatus(freshSnapshot, metadataRef.current ?? undefined);
+                currentDataTimestampRef.current = ts;
+                setData(cs);
+              }
+            }
+            setScraperTriggered(false);
+            scraperTriggeredRef.current = false;
+          }, DATA_FRESHNESS.REALTIME_FALLBACK_TIMEOUT_MS);
         }
       } else if (isRateLimited(result)) {
         const retryAfter = result.error.retry_after ?? 300;
@@ -409,6 +435,7 @@ export function useStationData(
     return () => {
       active = false;
       clearInterval(intervalId);
+      clearTimeout(fallbackTimerRef.current);
     };
   }, [cpId, cuprId, ttlMinutes]);
 
