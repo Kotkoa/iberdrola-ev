@@ -55,16 +55,16 @@ test.describe('Subscription contract', () => {
       port: 1,
     });
 
-    // Button changes to "Alert active"
-    await expect(subscribeButton).toContainText('Alert active');
+    // Button changes to "Cancel alert"
+    await expect(subscribeButton).toContainText('Cancel alert');
 
     // Success promo appears
     await expect(page.getByTestId('subscription-promo')).toBeVisible();
   });
 
-  // ─── Restore: check-subscription returns ports → "Alert active" on load ───
+  // ─── Restore: check-subscription returns ports → "Cancel alert" on load ───
 
-  test('restore — shows Alert active on load for subscribed port', async ({ page, context }) => {
+  test('restore — shows Cancel alert on load for subscribed port', async ({ page, context }) => {
     await context.grantPermissions(['notifications']);
     await mockPushApi(context);
     await seedPrimaryStation(context);
@@ -88,8 +88,8 @@ test.describe('Subscription contract', () => {
       timeout: 10_000,
     });
 
-    // Port 1 subscribe button shows "Alert active" (restored from check-subscription)
-    await expect(page.getByTestId('subscribe-button-1')).toContainText('Alert active', {
+    // Port 1 subscribe button shows "Cancel alert" (restored from check-subscription)
+    await expect(page.getByTestId('subscribe-button-1')).toContainText('Cancel alert', {
       timeout: 10_000,
     });
 
@@ -100,9 +100,9 @@ test.describe('Subscription contract', () => {
     await expect(page.getByTestId('subscription-promo')).toBeVisible();
   });
 
-  // ─── Push received: SW postMessage resets "Alert active" → "Get notified" ───
+  // ─── Push received: SW postMessage resets "Cancel alert" → "Get notified" ───
 
-  test('push received — resets Alert active back to Get notified', async ({ page, context }) => {
+  test('push received — resets Cancel alert back to Get notified', async ({ page, context }) => {
     await context.grantPermissions(['notifications']);
     await mockPushApi(context);
     await seedPrimaryStation(context);
@@ -134,12 +134,12 @@ test.describe('Subscription contract', () => {
     await expect(port1Button).toBeVisible();
     await port1Button.click();
 
-    // Wait for start-watch to be called and button to show "Alert active"
+    // Wait for start-watch to be called and button to show "Cancel alert"
     await expect(async () => {
       const calls = getRequestsMatching(captured, 'start-watch');
       expect(calls.length).toBeGreaterThan(0);
     }).toPass({ timeout: 10_000 });
-    await expect(port1Button).toContainText('Alert active');
+    await expect(port1Button).toContainText('Cancel alert');
 
     // Simulate SW postMessage for port 1 (as the Service Worker would after push notification)
     await page.evaluate((stationId: string) => {
@@ -149,7 +149,7 @@ test.describe('Subscription contract', () => {
       navigator.serviceWorker.dispatchEvent(event);
     }, String(TEST_STATION.cpId));
 
-    // Port 1 resets from "Alert active" → "Get notified"
+    // Port 1 resets from "Cancel alert" → "Get notified"
     await expect(port1Button).toContainText('Get notified', { timeout: 5_000 });
 
     // Port 2 remains unaffected — still "Get notified"

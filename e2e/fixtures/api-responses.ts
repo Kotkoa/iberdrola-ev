@@ -8,7 +8,7 @@ interface PollStationOptions {
   observedAt?: string;
 }
 
-/** Successful poll-station response matching ApiSuccessResponse<PollStationData> */
+/** Successful poll-station response matching PollStationSuccessResponse */
 export function createPollSuccess(options: PollStationOptions = {}) {
   const observedAt = options.observedAt ?? new Date().toISOString();
   return {
@@ -21,6 +21,11 @@ export function createPollSuccess(options: PollStationOptions = {}) {
       port2_update_date: observedAt,
       overall_status: options.overallStatus ?? 'AVAILABLE',
       observed_at: observedAt,
+    },
+    meta: {
+      fresh: false,
+      scraper_triggered: false,
+      retry_after: null,
     },
   };
 }
