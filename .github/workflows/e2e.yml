@@ -25,14 +25,18 @@ jobs:
       - name: Install Playwright browsers
         run: npx playwright install chromium --with-deps
 
-      - name: Run E2E tests
-        run: yarn test:e2e
+      - name: Build application
+        run: yarn build
         env:
-          CI: true
           VITE_SUPABASE_URL: https://test.supabase.co
           VITE_SUPABASE_ANON_KEY: test-anon-key
           VITE_VAPID_PUBLIC_KEY: test-vapid-key
           VITE_CHECK_SUB_URL: https://test.supabase.co/functions/v1/check-subscription
+
+      - name: Run E2E tests
+        run: yarn test:e2e
+        env:
+          CI: true
 
       - name: Upload test artifacts
         if: failure()
@@ -40,6 +44,6 @@ jobs:
         with:
           name: e2e-report
           path: |
-            e2e/playwright-report/
+            playwright-report/
             e2e/test-results/
           retention-days: 7

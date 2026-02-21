@@ -1,14 +1,18 @@
 import { defineConfig, devices } from '@playwright/test';
 
+const isCI = !!process.env.CI;
+const baseURL = isCI ? 'http://127.0.0.1:4173' : 'http://127.0.0.1:5173';
+
 export default defineConfig({
   testDir: './tests',
   fullyParallel: false,
-  forbidOnly: !!process.env.CI,
-  retries: process.env.CI ? 2 : 0,
+  forbidOnly: isCI,
+  retries: isCI ? 2 : 0,
   workers: 1,
   reporter: 'html',
+  outputDir: './test-results',
   use: {
-    baseURL: 'http://127.0.0.1:5173',
+    baseURL,
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
     video: 'on-first-retry',
@@ -20,9 +24,9 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: 'yarn dev',
-    url: 'http://127.0.0.1:5173',
-    reuseExistingServer: !process.env.CI,
+    command: isCI ? 'yarn preview --port 4173' : 'yarn dev',
+    url: baseURL,
+    reuseExistingServer: !isCI,
     timeout: 120_000,
   },
 });
