@@ -1,4 +1,4 @@
-import { startWatch, isApiSuccess } from './services/apiClient';
+import { startWatch, stopWatch, isApiSuccess } from './services/apiClient';
 import type { StartWatchData } from './types/api';
 
 const VAPID_PUBLIC_KEY = import.meta.env.VITE_VAPID_PUBLIC_KEY;
@@ -163,4 +163,29 @@ export async function subscribeWithWatch(
     fresh: result.data.fresh,
     nextPollIn: result.data.next_poll_in,
   };
+}
+
+/**
+ * Cancel a station watch subscription
+ *
+ * @param cpId - Charge point ID (used as station_id in subscriptions)
+ * @param portNumber - Port number to unsubscribe (1 or 2)
+ */
+export async function unsubscribeWatch(cpId: number, portNumber: 1 | 2): Promise<void> {
+  if (!isPushSupported()) return;
+
+  const registration = await navigator.serviceWorker.ready;
+  const subscription = await registration.pushManager.getSubscription();
+
+  if (!subscription) return;
+
+  const result = await stopWatch({
+    station_id: String(cpId),
+    port_number: portNumber,
+    endpoint: subscription.endpoint,
+  });
+
+  if (!isApiSuccess(result)) {
+    throw new Error(result.error.message);
+  }
 }

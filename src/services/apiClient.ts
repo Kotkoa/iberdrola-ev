@@ -26,6 +26,8 @@ import type {
   PollStationSuccessResponse,
   StartWatchData,
   StartWatchRequest,
+  StopWatchData,
+  StopWatchRequest,
   SearchNearbySuccessResponse,
   SearchNearbyRequest,
 } from '../types/api';
@@ -131,6 +133,33 @@ export async function startWatch(request: StartWatchRequest): Promise<ApiRespons
     const json = await response.json();
 
     return json as ApiResponse<StartWatchData>;
+  } catch (error) {
+    return {
+      ok: false,
+      error: {
+        code: 'INTERNAL_ERROR',
+        message: error instanceof Error ? error.message : 'Network request failed',
+      },
+    };
+  }
+}
+
+/**
+ * Cancel a station watch subscription
+ *
+ * Deactivates the subscription and expires related polling tasks.
+ */
+export async function stopWatch(request: StopWatchRequest): Promise<ApiResponse<StopWatchData>> {
+  try {
+    const response = await fetch(`${EDGE_BASE}/stop-watch`, {
+      method: 'POST',
+      headers: getHeaders(),
+      body: JSON.stringify(request),
+    });
+
+    const json = await response.json();
+
+    return json as ApiResponse<StopWatchData>;
   } catch (error) {
     return {
       ok: false,

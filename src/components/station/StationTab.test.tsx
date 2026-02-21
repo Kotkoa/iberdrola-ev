@@ -48,6 +48,7 @@ vi.mock('../../hooks/useUserLocation', () => ({
 vi.mock('../../pwa', () => ({
   isPushSupported: vi.fn(() => true),
   subscribeWithWatch: vi.fn(),
+  unsubscribeWatch: vi.fn(),
 }));
 
 describe('StationTab', () => {
@@ -115,18 +116,18 @@ describe('StationTab', () => {
         expect(globalThis.fetch).toHaveBeenCalled();
       });
 
-      // The "Alert active" button should NOT appear because we're using wrong field
+      // The "Cancel alert" button should NOT appear because we're using wrong field
       // This test documents the expected behavior after the bug fix
       await waitFor(
         () => {
-          const alertActiveButtons = screen.queryAllByRole('button', { name: /alert active/i });
+          const alertActiveButtons = screen.queryAllByRole('button', { name: /cancel alert/i });
           expect(alertActiveButtons).toHaveLength(0);
         },
         { timeout: 1000 }
       );
     });
 
-    it('should show Alert active button when subscribedPorts includes port number', async () => {
+    it('should show Cancel alert button when subscribedPorts includes port number', async () => {
       // Mock the check-subscription endpoint returning correct field
       globalThis.fetch = vi.fn().mockResolvedValueOnce({
         ok: true,
@@ -138,7 +139,7 @@ describe('StationTab', () => {
       // Wait for the subscription state to be restored
       await waitFor(
         () => {
-          const alertActiveButton = screen.queryByRole('button', { name: /alert active/i });
+          const alertActiveButton = screen.queryByRole('button', { name: /cancel alert/i });
           // Button should exist because port 1 is in subscribedPorts
           expect(alertActiveButton).toBeInTheDocument();
         },
@@ -206,7 +207,7 @@ describe('StationTab', () => {
     }
 
     it('should reset subscription state to idle when PUSH_RECEIVED matches station and port', async () => {
-      // Restore subscription state so port 1 shows "Alert active"
+      // Restore subscription state so port 1 shows "Cancel alert"
       globalThis.fetch = vi.fn().mockResolvedValueOnce({
         ok: true,
         json: () => Promise.resolve({ subscribedPorts: [1] }),
@@ -214,10 +215,10 @@ describe('StationTab', () => {
 
       render(<StationTab onNavigateToSearch={mockNavigate} />);
 
-      // Wait for "Alert active" to appear (subscription restored)
+      // Wait for "Cancel alert" to appear (subscription restored)
       await waitFor(
         () => {
-          expect(screen.getByRole('button', { name: /alert active/i })).toBeInTheDocument();
+          expect(screen.getByRole('button', { name: /cancel alert/i })).toBeInTheDocument();
         },
         { timeout: 2000 }
       );
@@ -232,11 +233,11 @@ describe('StationTab', () => {
       await waitFor(() => {
         expect(screen.getByRole('button', { name: /get notified/i })).toBeInTheDocument();
       });
-      expect(screen.queryByRole('button', { name: /alert active/i })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /cancel alert/i })).not.toBeInTheDocument();
     });
 
     it('should ignore PUSH_RECEIVED when stationId does not match', async () => {
-      // Restore subscription state so port 1 shows "Alert active"
+      // Restore subscription state so port 1 shows "Cancel alert"
       globalThis.fetch = vi.fn().mockResolvedValueOnce({
         ok: true,
         json: () => Promise.resolve({ subscribedPorts: [1] }),
@@ -246,7 +247,7 @@ describe('StationTab', () => {
 
       await waitFor(
         () => {
-          expect(screen.getByRole('button', { name: /alert active/i })).toBeInTheDocument();
+          expect(screen.getByRole('button', { name: /cancel alert/i })).toBeInTheDocument();
         },
         { timeout: 2000 }
       );
@@ -257,13 +258,13 @@ describe('StationTab', () => {
         handler({ data: { type: 'PUSH_RECEIVED', stationId: '999999', portNumber: 1 } });
       });
 
-      // Button should still show "Alert active" (not reset)
-      expect(screen.getByRole('button', { name: /alert active/i })).toBeInTheDocument();
+      // Button should still show "Cancel alert" (not reset)
+      expect(screen.getByRole('button', { name: /cancel alert/i })).toBeInTheDocument();
       expect(screen.queryByRole('button', { name: /get notified/i })).not.toBeInTheDocument();
     });
 
     it('should ignore PUSH_RECEIVED when portNumber does not match any valid port', async () => {
-      // Restore subscription state so port 1 shows "Alert active"
+      // Restore subscription state so port 1 shows "Cancel alert"
       globalThis.fetch = vi.fn().mockResolvedValueOnce({
         ok: true,
         json: () => Promise.resolve({ subscribedPorts: [1] }),
@@ -273,7 +274,7 @@ describe('StationTab', () => {
 
       await waitFor(
         () => {
-          expect(screen.getByRole('button', { name: /alert active/i })).toBeInTheDocument();
+          expect(screen.getByRole('button', { name: /cancel alert/i })).toBeInTheDocument();
         },
         { timeout: 2000 }
       );
@@ -284,8 +285,8 @@ describe('StationTab', () => {
         handler({ data: { type: 'PUSH_RECEIVED', stationId: '147988', portNumber: 3 } });
       });
 
-      // Button should still show "Alert active" (not reset)
-      expect(screen.getByRole('button', { name: /alert active/i })).toBeInTheDocument();
+      // Button should still show "Cancel alert" (not reset)
+      expect(screen.getByRole('button', { name: /cancel alert/i })).toBeInTheDocument();
       expect(screen.queryByRole('button', { name: /get notified/i })).not.toBeInTheDocument();
     });
   });

@@ -6,7 +6,7 @@ import { StationEmptyState } from './StationEmptyState';
 import { StationDetails } from './StationDetails';
 import { PortsList } from '../PortsList';
 import { LoadingSkeleton } from '../LoadingSkeleton';
-import { isPushSupported, subscribeWithWatch } from '../../pwa';
+import { isPushSupported, subscribeWithWatch, unsubscribeWatch } from '../../pwa';
 import { formatDuration } from '../../utils/time';
 import { calculateDistance } from '../../utils/maps';
 import { useUserLocation } from '../../hooks/useUserLocation';
@@ -164,6 +164,30 @@ export function StationTab({ onNavigateToSearch }: StationTabProps) {
     [primaryStation, primaryStationCuprId]
   );
 
+  const handleUnsubscribeClick = useCallback(
+    async (portNumber: PortNumber) => {
+      if (!primaryStation) return;
+
+      // Debounce check
+      const now = Date.now();
+      if (now - lastSubscribeTimeRef.current[portNumber] < DEBOUNCE_MS) return;
+      lastSubscribeTimeRef.current[portNumber] = now;
+
+      setSubscriptionState((prev) => ({ ...prev, [portNumber]: 'cancelling' }));
+      try {
+        await unsubscribeWatch(primaryStation.cp_id, portNumber);
+        setSubscriptionState((prev) => ({ ...prev, [portNumber]: 'idle' }));
+      } catch (err) {
+        setSubscriptionState((prev) => ({ ...prev, [portNumber]: 'success' }));
+        setSubscriptionErrors((prev) => ({
+          ...prev,
+          [portNumber]: err instanceof Error ? err.message : 'Unsubscribing failed',
+        }));
+      }
+    },
+    [primaryStation]
+  );
+
   if (primaryStationId === null) {
     return <StationEmptyState onNavigateToSearch={onNavigateToSearch} />;
   }
@@ -261,6 +285,7 @@ export function StationTab({ onNavigateToSearch }: StationTabProps) {
         subscriptionErrors={subscriptionErrors}
         pushAvailable={pushAvailable}
         onSubscribeClick={handleSubscribeClick}
+        onUnsubscribeClick={handleUnsubscribeClick}
       />
     </Box>
   );

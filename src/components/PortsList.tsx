@@ -17,6 +17,7 @@ interface PortsListProps {
   subscriptionErrors: Record<PortNumber, string | null>;
   pushAvailable: boolean;
   onSubscribeClick: (portNumber: PortNumber) => void;
+  onUnsubscribeClick: (portNumber: PortNumber) => void;
 }
 
 export function PortsList({
@@ -25,6 +26,7 @@ export function PortsList({
   subscriptionErrors,
   pushAvailable,
   onSubscribeClick,
+  onUnsubscribeClick,
 }: PortsListProps) {
   // Count ports that are both subscribed AND still occupied
   const subscribedOccupiedCount = portConfigs.filter(
@@ -50,14 +52,26 @@ export function PortsList({
             const state = subscriptionState[portNumber];
             const errorMessage = subscriptionErrors[portNumber];
 
-            const buttonLabel =
-              state === 'success'
-                ? 'Alert active'
+            const isSubscribed = state === 'success';
+            const isCancelling = state === 'cancelling';
+
+            const buttonLabel = isSubscribed
+              ? 'Cancel alert'
+              : isCancelling
+                ? 'Cancelling...'
                 : state === 'error'
                   ? 'Try again'
                   : 'Get notified';
 
-            const isDisabled = !pushAvailable || state === 'loading' || state === 'success';
+            const isDisabled = !pushAvailable || state === 'loading' || state === 'cancelling';
+
+            const handleClick = () => {
+              if (isSubscribed) {
+                onUnsubscribeClick(portNumber);
+              } else {
+                onSubscribeClick(portNumber);
+              }
+            };
 
             return (
               <Box
@@ -81,12 +95,12 @@ export function PortsList({
                 {!isAvailable && (
                   <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
                     <Button
-                      variant="contained"
+                      variant={isSubscribed ? 'outlined' : 'contained'}
                       color="success"
                       fullWidth
                       disabled={isDisabled}
                       data-testid={`subscribe-button-${portNumber}`}
-                      onClick={() => onSubscribeClick(portNumber)}
+                      onClick={handleClick}
                       sx={{
                         textTransform: 'none',
                         fontSize: { xs: '0.75rem', sm: '0.875rem' },

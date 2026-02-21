@@ -153,6 +153,27 @@ export interface StartWatchRequest {
 }
 
 // ============================================================================
+// stop-watch Types
+// ============================================================================
+
+/**
+ * Response data from POST /functions/v1/stop-watch
+ */
+export interface StopWatchData {
+  deactivated: number;
+  tasks_expired: number;
+}
+
+/**
+ * Request body for POST /functions/v1/stop-watch
+ */
+export interface StopWatchRequest {
+  station_id: string;
+  port_number: number | null;
+  endpoint: string;
+}
+
+// ============================================================================
 // search-nearby Types
 // ============================================================================
 

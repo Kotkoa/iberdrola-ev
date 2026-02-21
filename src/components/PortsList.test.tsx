@@ -36,6 +36,7 @@ describe('PortsList', () => {
     subscriptionErrors: { 1: null, 2: null } as Record<PortNumber, string | null>,
     pushAvailable: true,
     onSubscribeClick: vi.fn(),
+    onUnsubscribeClick: vi.fn(),
   };
 
   it('should render port cards for each port', () => {
@@ -100,8 +101,8 @@ describe('PortsList', () => {
     render(<PortsList {...defaultProps} subscriptionState={{ 1: 'idle', 2: 'success' }} />);
 
     const button = screen.getByRole('button');
-    expect(button).toHaveTextContent('Alert active');
-    expect(button).toBeDisabled();
+    expect(button).toHaveTextContent('Cancel alert');
+    expect(button).not.toBeDisabled();
   });
 
   it('should show success alert when subscribed to one port', () => {
