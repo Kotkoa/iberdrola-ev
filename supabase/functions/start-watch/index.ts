@@ -135,11 +135,12 @@ Deno.serve(async (req) => {
     const stationId = String(metadata.cp_id);
     const portNumber = port ?? null;
 
-    // Deactivate ALL existing active subscriptions for this endpoint (one-active-per-browser model)
+    // Deactivate active subscriptions for OTHER stations (one-station-per-browser, multi-port allowed)
     await supabaseAdmin
       .from('subscriptions')
       .update({ is_active: false })
       .eq('endpoint', subscription.endpoint)
+      .neq('station_id', stationId)
       .eq('is_active', true);
 
     // Check if subscription already exists for this exact station + port + endpoint
