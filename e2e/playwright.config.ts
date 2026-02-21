@@ -24,7 +24,7 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: isCI ? 'yarn preview --port 4173' : 'yarn dev',
+    command: isCI ? 'yarn preview --host 127.0.0.1 --port 4173' : 'yarn dev',
     url: baseURL,
     reuseExistingServer: !isCI,
     timeout: 120_000,
