@@ -19,6 +19,11 @@ interface SearchResultsProps {
   showPaid: boolean;
 }
 
+interface StationWithDistance {
+  station: StationInfoPartial;
+  distanceKm: number | null;
+}
+
 export function SearchResults({
   stations,
   primaryStationId,
@@ -26,16 +31,6 @@ export function SearchResults({
   userLocation,
   showPaid,
 }: SearchResultsProps) {
-  const getDistanceKm = (station: StationInfoPartial): number | null => {
-    if (!userLocation) return null;
-    return calculateDistance(
-      userLocation.latitude,
-      userLocation.longitude,
-      station.latitude,
-      station.longitude
-    );
-  };
-
   const filteredStations = useMemo(() => {
     return stations.filter((s) => {
       if (s.priceKwh === undefined) return true;
@@ -43,24 +38,19 @@ export function SearchResults({
     });
   }, [stations, showPaid]);
 
-  const sortedStations = useMemo(() => {
-    if (!userLocation) return filteredStations;
+  const sortedStations = useMemo((): StationWithDistance[] => {
+    const withDistance = filteredStations.map((s) => ({
+      station: s,
+      distanceKm: userLocation
+        ? calculateDistance(userLocation.latitude, userLocation.longitude, s.latitude, s.longitude)
+        : null,
+    }));
 
-    return [...filteredStations].sort((a, b) => {
-      const distA = calculateDistance(
-        userLocation.latitude,
-        userLocation.longitude,
-        a.latitude,
-        a.longitude
-      );
-      const distB = calculateDistance(
-        userLocation.latitude,
-        userLocation.longitude,
-        b.latitude,
-        b.longitude
-      );
-      return distA - distB;
-    });
+    if (userLocation) {
+      withDistance.sort((a, b) => (a.distanceKm ?? 0) - (b.distanceKm ?? 0));
+    }
+
+    return withDistance;
   }, [filteredStations, userLocation]);
 
   if (filteredStations.length === 0) {
@@ -78,13 +68,13 @@ export function SearchResults({
 
   return (
     <Stack spacing={1}>
-      {sortedStations.map((station) => (
+      {sortedStations.map(({ station, distanceKm }) => (
         <StationResultCard
           key={station.cpId}
           station={station}
           isPrimary={station.cpId === primaryStationId}
           onSetPrimary={onSetPrimary}
-          distanceKm={getDistanceKm(station)}
+          distanceKm={distanceKm}
         />
       ))}
     </Stack>

@@ -1,6 +1,6 @@
 import './App.css';
 
-import { useState, lazy, Suspense } from 'react';
+import { useState, useCallback, lazy, Suspense } from 'react';
 import Box from '@mui/material/Box';
 import { PrimaryStationProvider } from './context/PrimaryStationContext';
 import { AppLayout } from './components/layout/AppLayout';
@@ -16,27 +16,36 @@ const SearchTab = lazy(() =>
 
 function App() {
   const [activeTab, setActiveTab] = useState<TabName>('station');
+  const [searchTabMounted, setSearchTabMounted] = useState(false);
 
-  const handleNavigateToSearch = () => {
-    setActiveTab('search');
-  };
+  const handleTabChange = useCallback((tab: TabName) => {
+    setActiveTab(tab);
+    if (tab === 'search') setSearchTabMounted(true);
+  }, []);
 
-  const handleStationSelected = () => {
-    setActiveTab('station');
-  };
+  const handleNavigateToSearch = useCallback(() => {
+    handleTabChange('search');
+  }, [handleTabChange]);
+
+  const handleStationSelected = useCallback(() => {
+    handleTabChange('station');
+  }, [handleTabChange]);
 
   return (
     <PrimaryStationProvider>
       <AppLayout>
-        <TabNavigation activeTab={activeTab} onTabChange={setActiveTab} />
+        <TabNavigation activeTab={activeTab} onTabChange={handleTabChange} />
 
         <Box sx={{ flex: 1, width: '100%', minHeight: 0, overflow: 'hidden' }}>
-          {activeTab === 'station' ? (
+          <Box sx={{ display: activeTab === 'station' ? 'block' : 'none' }}>
             <StationTab onNavigateToSearch={handleNavigateToSearch} />
-          ) : (
-            <Suspense fallback={<LoadingSkeleton />}>
-              <SearchTab onStationSelected={handleStationSelected} />
-            </Suspense>
+          </Box>
+          {searchTabMounted && (
+            <Box sx={{ display: activeTab === 'search' ? 'block' : 'none' }}>
+              <Suspense fallback={<LoadingSkeleton />}>
+                <SearchTab onStationSelected={handleStationSelected} />
+              </Suspense>
+            </Box>
           )}
         </Box>
 

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import Box from '@mui/material/Box';
 import Stack from '@mui/material/Stack';
 import Button from '@mui/material/Button';
@@ -30,13 +30,14 @@ export function SearchTab({ onStationSelected }: SearchTabProps) {
     search(radius);
   };
 
-  const handleSetPrimary = (station: StationInfoPartial) => {
-    setPrimaryStation(station);
-    setSnackbarOpen(true);
-    if (onStationSelected) {
-      onStationSelected();
-    }
-  };
+  const handleSetPrimary = useCallback(
+    (station: StationInfoPartial) => {
+      setPrimaryStation(station);
+      setSnackbarOpen(true);
+      onStationSelected?.();
+    },
+    [setPrimaryStation, onStationSelected]
+  );
 
   const handleCloseSnackbar = () => {
     setSnackbarOpen(false);

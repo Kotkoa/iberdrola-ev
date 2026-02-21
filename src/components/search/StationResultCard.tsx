@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import Box from '@mui/material/Box';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
@@ -15,7 +16,7 @@ interface StationResultCardProps {
   distanceKm: number | null;
 }
 
-export function StationResultCard({
+export const StationResultCard = memo(function StationResultCard({
   station,
   isPrimary,
   onSetPrimary,
@@ -106,4 +107,4 @@ export function StationResultCard({
       </Stack>
     </Box>
   );
-}
+});

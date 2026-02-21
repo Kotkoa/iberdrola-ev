@@ -48,7 +48,7 @@ function pollDataToChargerStatus(
     created_at: pollData.observed_at,
     cp_id: pollData.cp_id,
     cp_name: metadata?.cp_name ?? 'Unknown',
-    schedule: null,
+    schedule: '24/7',
     port1_status: pollData.port1_status,
     port1_power_kw: pollData.port1_power_kw ?? null,
     port1_price_kwh: pollData.port1_price_kwh ?? null,
