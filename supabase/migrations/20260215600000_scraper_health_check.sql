@@ -11,7 +11,7 @@ CREATE OR REPLACE FUNCTION public.check_scraper_health(
 )
 RETURNS TABLE (
   last_observed_at TIMESTAMPTZ,
-  age_minutes DOUBLE PRECISION,
+  age_minutes NUMERIC,
   is_healthy BOOLEAN
 )
 LANGUAGE plpgsql
