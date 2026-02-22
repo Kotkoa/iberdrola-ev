@@ -5,7 +5,7 @@ ALTER TABLE public.station_snapshots
 
 -- Trigger function: only update changed_at when status really changes
 CREATE OR REPLACE FUNCTION public.maintain_port_status_changed_at()
-RETURNS TRIGGER LANGUAGE plpgsql AS $$
+RETURNS TRIGGER LANGUAGE plpgsql SET search_path = public AS $$
 BEGIN
   IF TG_OP = 'INSERT' THEN
     IF NEW.port1_status IS NOT NULL THEN
