@@ -24,6 +24,8 @@ interface SnapshotRow {
   overall_status: string | null;
   emergency_stop_pressed: boolean | null;
   situation_code: string | null;
+  port1_status_changed_at: string | null;
+  port2_status_changed_at: string | null;
   observed_at: string;
   created_at: string;
 }
@@ -125,7 +127,7 @@ Deno.serve(async (req) => {
     const { data: snapshot } = await supabaseAdmin
       .from('station_snapshots')
       .select(
-        'cp_id, port1_status, port1_power_kw, port1_price_kwh, port1_update_date, port2_status, port2_power_kw, port2_price_kwh, port2_update_date, overall_status, emergency_stop_pressed, situation_code, observed_at, created_at'
+        'cp_id, port1_status, port1_power_kw, port1_price_kwh, port1_update_date, port1_status_changed_at, port2_status, port2_power_kw, port2_price_kwh, port2_update_date, port2_status_changed_at, overall_status, emergency_stop_pressed, situation_code, observed_at, created_at'
       )
       .eq('cp_id', cpId)
       .order('observed_at', { ascending: false })
@@ -177,10 +179,12 @@ Deno.serve(async (req) => {
             port1_power_kw: row.port1_power_kw,
             port1_price_kwh: row.port1_price_kwh,
             port1_update_date: row.port1_update_date,
+            port1_status_changed_at: row.port1_status_changed_at,
             port2_status: row.port2_status,
             port2_power_kw: row.port2_power_kw,
             port2_price_kwh: row.port2_price_kwh,
             port2_update_date: row.port2_update_date,
+            port2_status_changed_at: row.port2_status_changed_at,
             overall_status: row.overall_status,
             emergency_stop_pressed: row.emergency_stop_pressed,
             situation_code: row.situation_code,

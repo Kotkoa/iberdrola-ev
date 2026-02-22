@@ -127,6 +127,7 @@ Primary table for station status (deduplicated, 5-min throttle).
 - `port1_power_kw`, `port2_power_kw`
 - `port1_price_kwh`, `port2_price_kwh`
 - `port1_update_date`, `port2_update_date`
+- `port1_status_changed_at`, `port2_status_changed_at` (DB trigger, reliable)
 - `overall_status`, `emergency_stop_pressed`
 - `situation_code` (OPER/MAINT/OOS)
 - `source` (`user_nearby`, `user_station`, `scraper`)

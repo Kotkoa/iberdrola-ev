@@ -39,10 +39,12 @@ CREATE TABLE station_snapshots (
   port1_power_kw NUMERIC,
   port1_price_kwh NUMERIC DEFAULT 0,
   port1_update_date TIMESTAMP WITH TIME ZONE,
+  port1_status_changed_at TIMESTAMP WITH TIME ZONE,  -- DB trigger: set only on actual status change
   port2_status TEXT,
   port2_power_kw NUMERIC,
   port2_price_kwh NUMERIC DEFAULT 0,
   port2_update_date TIMESTAMP WITH TIME ZONE,
+  port2_status_changed_at TIMESTAMP WITH TIME ZONE,  -- DB trigger: set only on actual status change
   overall_status TEXT,
   emergency_stop_pressed BOOLEAN DEFAULT false,
   situation_code TEXT,
@@ -880,8 +882,10 @@ interface ChargerStatus {
   port2_status: string | null;
   port1_power_kw: number | null;
   port1_update_date: string | null;
+  port1_status_changed_at?: string | null;  // DB trigger timestamp
   port2_power_kw: number | null;
   port2_update_date: string | null;
+  port2_status_changed_at?: string | null;  // DB trigger timestamp
   overall_status: string | null;
   overall_update_date: string | null;
   cp_latitude?: number | null;
@@ -1555,10 +1559,12 @@ async function saveSnapshot(
 | `port1_power_kw` | NUMERIC | `logicalSocket[0].physicalSocket[0].maxPower` |
 | `port1_price_kwh` | NUMERIC | `logicalSocket[0].physicalSocket[0].appliedRate.recharge.finalPrice` |
 | `port1_update_date` | TIMESTAMPTZ | `logicalSocket[0].status.updateDate` |
+| `port1_status_changed_at` | TIMESTAMPTZ | DB trigger (set on actual status change) |
 | `port2_status` | TEXT | `logicalSocket[1].status.statusCode` |
 | `port2_power_kw` | NUMERIC | `logicalSocket[1].physicalSocket[0].maxPower` |
 | `port2_price_kwh` | NUMERIC | `logicalSocket[1].physicalSocket[0].appliedRate.recharge.finalPrice` |
 | `port2_update_date` | TIMESTAMPTZ | `logicalSocket[1].status.updateDate` |
+| `port2_status_changed_at` | TIMESTAMPTZ | DB trigger (set on actual status change) |
 | `overall_status` | TEXT | `cpStatus.statusCode` |
 | `emergency_stop_pressed` | BOOLEAN | `emergencyStopButtonPressed` |
 | `situation_code` | TEXT | `locationData.situationCode` |

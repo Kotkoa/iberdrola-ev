@@ -212,12 +212,10 @@ export function StationTab({ onNavigateToSearch }: StationTabProps) {
     );
   }
 
-  const port1Update = primaryStation.port1_update_date
-    ? new Date(primaryStation.port1_update_date)
-    : null;
-  const port2Update = primaryStation.port2_update_date
-    ? new Date(primaryStation.port2_update_date)
-    : null;
+  const port1UpdateRaw = primaryStation.port1_status_changed_at ?? primaryStation.port1_update_date;
+  const port2UpdateRaw = primaryStation.port2_status_changed_at ?? primaryStation.port2_update_date;
+  const port1Update = port1UpdateRaw ? new Date(port1UpdateRaw) : null;
+  const port2Update = port2UpdateRaw ? new Date(port2UpdateRaw) : null;
 
   const port1DurationMinutes = port1Update
     ? Math.floor((now.getTime() - port1Update.getTime()) / 60000)

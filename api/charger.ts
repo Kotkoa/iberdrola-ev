@@ -20,10 +20,12 @@ type RawSnapshotData = {
   port1_power_kw: string | number | null;
   port1_price_kwh: string | number | null;
   port1_update_date: string | null;
+  port1_status_changed_at: string | null;
   port2_status: string | null;
   port2_power_kw: string | number | null;
   port2_price_kwh: string | number | null;
   port2_update_date: string | null;
+  port2_status_changed_at: string | null;
   overall_status: string | null;
   emergency_stop_pressed: boolean | null;
   situation_code: string | null;
@@ -39,10 +41,12 @@ export interface StationSnapshot {
   port1_power_kw: number | null;
   port1_price_kwh: number | null;
   port1_update_date: string | null;
+  port1_status_changed_at: string | null;
   port2_status: string | null;
   port2_power_kw: number | null;
   port2_price_kwh: number | null;
   port2_update_date: string | null;
+  port2_status_changed_at: string | null;
   overall_status: string | null;
   emergency_stop_pressed: boolean | null;
   situation_code: string | null;
@@ -162,6 +166,8 @@ export function snapshotToChargerStatus(
     port2_price_kwh: snapshot.port2_price_kwh,
     emergency_stop_pressed: snapshot.emergency_stop_pressed,
     situation_code: snapshot.situation_code,
+    port1_status_changed_at: snapshot.port1_status_changed_at,
+    port2_status_changed_at: snapshot.port2_status_changed_at,
   };
 }
 

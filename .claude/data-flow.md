@@ -41,6 +41,7 @@ Supabase (station_snapshots + station_metadata) → useCharger hook → React st
 - `port1_socket_type`, `port2_socket_type` - Socket type (e.g., "Mennekes (Type 2)")
 - `port1_price_kwh`, `port2_price_kwh` - Charging price (€/kWh, 0 = free)
 - `port1_power_kw`, `port2_power_kw` - Power rating (kW)
+- `port1_status_changed_at`, `port2_status_changed_at` - DB trigger timestamp, set only when port status actually changes (used for "Occupied for X h Y min" timer instead of unreliable `portN_update_date` from Iberdrola API)
 
 ## UI Components for Data Display
 

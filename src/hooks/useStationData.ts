@@ -61,6 +61,8 @@ function pollDataToChargerStatus(
     overall_update_date: pollData.observed_at,
     emergency_stop_pressed: pollData.emergency_stop_pressed ?? null,
     situation_code: pollData.situation_code ?? null,
+    port1_status_changed_at: pollData.port1_status_changed_at ?? null,
+    port2_status_changed_at: pollData.port2_status_changed_at ?? null,
     cp_latitude: metadata?.cp_latitude,
     cp_longitude: metadata?.cp_longitude,
     address_full: metadata?.address_full,

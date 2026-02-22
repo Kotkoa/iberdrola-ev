@@ -25,6 +25,8 @@ export interface ChargerStatus {
   port2_socket_type?: string | null;
   emergency_stop_pressed?: boolean | null;
   situation_code?: string | null;
+  port1_status_changed_at?: string | null;
+  port2_status_changed_at?: string | null;
 }
 
 /**
