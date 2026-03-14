@@ -1,6 +1,8 @@
 -- Reduce can_poll_station cooldown from 5 min to 2 min
 -- Allows subscription-checker (cron */3) to poll on every run
 
+DROP FUNCTION IF EXISTS public.can_poll_station(INTEGER);
+
 CREATE OR REPLACE FUNCTION public.can_poll_station(p_cupr_id INTEGER)
 RETURNS TABLE (can_poll BOOLEAN, last_observed TIMESTAMPTZ, seconds_until_next INTEGER)
 LANGUAGE plpgsql
