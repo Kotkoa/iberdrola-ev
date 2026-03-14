@@ -32,3 +32,6 @@ coverage
 # Playwright
 test-results/
 playwright-report/
+
+# Supabase CLI
+supabase/.temp/
