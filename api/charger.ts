@@ -84,7 +84,7 @@ export function subscribeToSnapshots(
     .on(
       'postgres_changes',
       {
-        event: 'INSERT',
+        event: '*',
         schema: 'public',
         table: 'station_snapshots',
         filter: `cp_id=eq.${cpId}`,
