@@ -134,16 +134,16 @@ Deno.serve(async (req) => {
       .limit(1)
       .single();
 
-    // 3. Check if we can trigger scraper (rate limit: 5 min)
+    // 3. Check if we can trigger scraper (rate limit: 2 min)
     const { data: throttle } = await supabaseAdmin
       .from('snapshot_throttle')
       .select('last_snapshot_at')
       .eq('cp_id', cpId)
       .single();
 
-    const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+    const twoMinutesAgo = new Date(Date.now() - 2 * 60 * 1000);
     const lastPollAt = throttle?.last_snapshot_at ? new Date(throttle.last_snapshot_at) : null;
-    const canTrigger = !lastPollAt || lastPollAt < fiveMinutesAgo;
+    const canTrigger = !lastPollAt || lastPollAt < twoMinutesAgo;
 
     let scraperTriggered = false;
     let retryAfter: number | null = null;

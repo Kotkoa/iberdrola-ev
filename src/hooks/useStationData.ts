@@ -220,17 +220,7 @@ export function useStationData(
           setInternalState('error');
         };
 
-        const stale = isDataStale(getObservationTimestamp(snapshot), ttlMinutes);
-
-        // 1. Fresh cache hit (skip on station switch to trigger on-demand scrape)
-        if (snapshot && !stale && !cpIdChanged) {
-          console.log(`[useStationData] Using fresh cache for ${cpId}`);
-          const chargerStatus = snapshotToChargerStatus(snapshot, metadataRef.current ?? undefined);
-          applyIfNewer(chargerStatus, getObservationTimeMs(snapshot), 'cache');
-          return;
-        }
-
-        // 2. No cuprId — can't call Edge, use whatever we have
+        // 1. No cuprId — can't call Edge, use whatever we have
         if (cuprId === undefined) {
           if (snapshot) {
             console.log(`[useStationData] Using stale data for ${cpId} (no cuprId for refresh)`);
@@ -245,7 +235,7 @@ export function useStationData(
           return;
         }
 
-        // 3. Rate limited in local cache — skip API call
+        // 2. Rate limited in local cache — skip API call
         if (isStationRateLimited(cuprId)) {
           console.log(`[useStationData] Rate limited for ${cpId}, using cache`);
           if (snapshot) {
@@ -261,7 +251,7 @@ export function useStationData(
           return;
         }
 
-        // 4. Stale or missing — show stale data immediately, poll in background
+        // 3. Show cached data immediately, always poll in background
         if (snapshot) {
           // Show stale data right away (no loading_api skeleton)
           console.log(`[useStationData] Showing stale data for ${cpId}, polling in background`);
@@ -369,7 +359,7 @@ export function useStationData(
     if (!cpId || cuprId === undefined) return;
 
     let active = true;
-    const CHECK_INTERVAL_MS = 60_000;
+    const CHECK_INTERVAL_MS = 30_000;
     const ttlMs = ttlMinutes * 60 * 1000;
 
     const intervalId = setInterval(async () => {

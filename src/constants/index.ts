@@ -101,8 +101,8 @@ export const TAB_NAMES = {
 // Data Freshness
 // ========================
 export const DATA_FRESHNESS = {
-  /** TTL for station data freshness (minutes). Matches server-side throttle (5 min). */
-  STATION_TTL_MINUTES: 5,
+  /** TTL for station data freshness (minutes). Matches server-side throttle (2 min). */
+  STATION_TTL_MINUTES: 2,
   /** Expected scraper round-trip: GitHub Actions queue + execution (~20-30s) */
   SCRAPER_EXPECTED_DELAY_MS: 25_000,
   /** Fallback timeout if Realtime doesn't deliver after scraper trigger */

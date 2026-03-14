@@ -187,6 +187,7 @@ describe('useStationData', () => {
       vi.mocked(charger.getLatestSnapshot).mockResolvedValue(mockSnapshot);
       vi.mocked(charger.getStationMetadata).mockResolvedValue(mockMetadata);
       vi.mocked(time.isDataStale).mockReturnValue(false);
+      vi.mocked(apiClient.pollStation).mockResolvedValue(mockPollSuccessResponse);
 
       const { result } = renderHook(() => useStationData(12345, 67890));
 
@@ -202,6 +203,7 @@ describe('useStationData', () => {
       vi.mocked(charger.getLatestSnapshot).mockResolvedValue(mockSnapshot);
       vi.mocked(charger.getStationMetadata).mockResolvedValue(mockMetadata);
       vi.mocked(time.isDataStale).mockReturnValue(false); // Fresh data
+      vi.mocked(apiClient.pollStation).mockResolvedValue(mockPollSuccessResponse);
 
       const { result } = renderHook(() => useStationData(12345, 67890));
 
@@ -241,16 +243,16 @@ describe('useStationData', () => {
   });
 
   describe('TTL checking', () => {
-    it('should use cache when data is fresh (within TTL)', async () => {
+    it('should always poll even when data is fresh (within TTL)', async () => {
       vi.mocked(charger.getLatestSnapshot).mockResolvedValue(mockSnapshot);
       vi.mocked(charger.getStationMetadata).mockResolvedValue(mockMetadata);
       vi.mocked(time.isDataStale).mockReturnValue(false);
+      vi.mocked(apiClient.pollStation).mockResolvedValue(mockPollSuccessResponse);
 
       renderHook(() => useStationData(12345, 67890));
 
       await waitFor(() => {
-        expect(time.isDataStale).toHaveBeenCalledWith(mockSnapshot.observed_at, 5);
-        expect(apiClient.pollStation).not.toHaveBeenCalled();
+        expect(apiClient.pollStation).toHaveBeenCalledWith(67890);
       });
     });
 
@@ -287,6 +289,7 @@ describe('useStationData', () => {
       vi.mocked(charger.getLatestSnapshot).mockResolvedValue(mockSnapshot);
       vi.mocked(charger.getStationMetadata).mockResolvedValue(mockMetadata);
       vi.mocked(time.isDataStale).mockReturnValue(false);
+      vi.mocked(apiClient.pollStation).mockResolvedValue(mockPollSuccessResponse);
 
       renderHook(() => useStationData(12345, 67890));
 
@@ -315,6 +318,7 @@ describe('useStationData', () => {
       vi.mocked(charger.getLatestSnapshot).mockResolvedValue(mockSnapshot);
       vi.mocked(charger.getStationMetadata).mockResolvedValue(mockMetadata);
       vi.mocked(time.isDataStale).mockReturnValue(false);
+      vi.mocked(apiClient.pollStation).mockResolvedValue(mockPollSuccessResponse);
 
       const { unmount } = renderHook(() => useStationData(12345, 67890));
 
@@ -332,6 +336,7 @@ describe('useStationData', () => {
       vi.mocked(charger.getLatestSnapshot).mockResolvedValue(mockSnapshot);
       vi.mocked(charger.getStationMetadata).mockResolvedValue(mockMetadata);
       vi.mocked(time.isDataStale).mockReturnValue(false);
+      vi.mocked(apiClient.pollStation).mockResolvedValue(mockPollSuccessResponse);
 
       const updatedChargerStatus = {
         ...mockChargerStatus,
@@ -371,6 +376,7 @@ describe('useStationData', () => {
       vi.mocked(charger.getLatestSnapshot).mockResolvedValue(mockSnapshot);
       vi.mocked(charger.getStationMetadata).mockResolvedValue(mockMetadata);
       vi.mocked(time.isDataStale).mockReturnValue(false);
+      vi.mocked(apiClient.pollStation).mockResolvedValue(mockPollSuccessResponse);
 
       const { result, rerender } = renderHook(({ cpId }) => useStationData(cpId, 67890), {
         initialProps: { cpId: 12345 as number | null },
@@ -393,6 +399,7 @@ describe('useStationData', () => {
       vi.mocked(charger.getLatestSnapshot).mockResolvedValue(mockSnapshot);
       vi.mocked(charger.getStationMetadata).mockResolvedValue(mockMetadata);
       vi.mocked(time.isDataStale).mockReturnValue(false);
+      vi.mocked(apiClient.pollStation).mockResolvedValue(mockPollSuccessResponse);
 
       const { result, rerender } = renderHook(({ cpId }) => useStationData(cpId, 67890), {
         initialProps: { cpId: 12345 as number | null },
@@ -515,12 +522,12 @@ describe('useStationData', () => {
 
       vi.mocked(charger.getLatestSnapshot).mockResolvedValue(mockSnapshot);
       vi.mocked(charger.getStationMetadata).mockResolvedValue(mockMetadata);
-      // First call: fresh cache (skip poll), subsequent isDataStale checks: stale
       vi.mocked(time.isDataStale).mockReturnValue(false);
+      // Initial poll: scraper not triggered (fresh data)
+      vi.mocked(apiClient.pollStation).mockResolvedValue(mockPollSuccessResponse);
 
       const { result } = renderHook(() => useStationData(12345, 67890));
 
-      // Wait for initial load with fresh data
       await vi.waitFor(() => {
         expect(result.current.state).toBe('ready');
         expect(result.current.scraperTriggered).toBe(false);
@@ -532,11 +539,10 @@ describe('useStationData', () => {
         data: { ...mockPollData, observed_at: '2024-01-01T13:00:00Z' },
         meta: { fresh: false, scraper_triggered: true, retry_after: null },
       });
-      // Make isDataStale return true so periodic refresh triggers pollStation
       vi.mocked(time.isDataStale).mockReturnValue(true);
 
-      // Advance to trigger 60s periodic interval
-      await vi.advanceTimersByTimeAsync(60_000);
+      // Advance to trigger 30s periodic interval
+      await vi.advanceTimersByTimeAsync(30_000);
 
       await vi.waitFor(() => {
         expect(result.current.scraperTriggered).toBe(true);
@@ -564,6 +570,7 @@ describe('useStationData', () => {
       vi.mocked(charger.getLatestSnapshot).mockResolvedValue(mockSnapshot);
       vi.mocked(charger.getStationMetadata).mockResolvedValue(mockMetadata);
       vi.mocked(time.isDataStale).mockReturnValue(false);
+      vi.mocked(apiClient.pollStation).mockResolvedValue(mockPollSuccessResponse);
 
       const { result } = renderHook(() => useStationData(12345, 67890));
 
@@ -578,6 +585,7 @@ describe('useStationData', () => {
       vi.mocked(charger.getLatestSnapshot).mockResolvedValue(mockSnapshot);
       vi.mocked(charger.getStationMetadata).mockResolvedValue(mockMetadata);
       vi.mocked(time.isDataStale).mockReturnValue(false);
+      vi.mocked(apiClient.pollStation).mockResolvedValue(mockPollSuccessResponse);
 
       // Initial data has T1 timestamp
       const { result } = renderHook(() => useStationData(12345, 67890));
