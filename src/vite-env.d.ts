@@ -5,6 +5,7 @@ interface ImportMetaEnv {
   readonly VITE_SUPABASE_ANON_KEY?: string;
   readonly VITE_VAPID_PUBLIC_KEY?: string;
   readonly VITE_SAVE_SUBSCRIPTION_URL?: string;
+  readonly VITE_GA_MEASUREMENT_ID?: string;
 }
 
 interface ImportMeta {

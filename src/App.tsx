@@ -1,6 +1,6 @@
 import './App.css';
 
-import { useState, useCallback, lazy, Suspense } from 'react';
+import { useState, useCallback, useEffect, lazy, Suspense } from 'react';
 import Box from '@mui/material/Box';
 import { PrimaryStationProvider } from './context/PrimaryStationContext';
 import { AppLayout } from './components/layout/AppLayout';
@@ -8,6 +8,7 @@ import { TabNavigation } from './components/layout/TabNavigation';
 import { StationTab } from './components/station/StationTab';
 import { LoadingSkeleton } from './components/LoadingSkeleton';
 import Copyright from './components/Copyright';
+import { trackPageView } from './analytics';
 import type { TabName } from './types';
 
 const SearchTab = lazy(() =>
@@ -21,6 +22,11 @@ function App() {
   const handleTabChange = useCallback((tab: TabName) => {
     setActiveTab(tab);
     if (tab === 'search') setSearchTabMounted(true);
+    trackPageView(tab);
+  }, []);
+
+  useEffect(() => {
+    trackPageView('station');
   }, []);
 
   const handleNavigateToSearch = useCallback(() => {

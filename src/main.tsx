@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import './index.css';
 import App from './App';
 import { registerServiceWorker } from './pwa';
+import { initAnalytics } from './analytics';
 import ErrorBoundary from './components/ErrorBoundary';
 
 window.addEventListener('unhandledrejection', (event) => {
@@ -29,4 +30,5 @@ root.render(
   </StrictMode>
 );
 
+initAnalytics();
 void registerServiceWorker();
