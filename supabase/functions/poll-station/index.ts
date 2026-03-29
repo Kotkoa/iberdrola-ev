@@ -134,37 +134,20 @@ Deno.serve(async (req) => {
       .limit(1)
       .single();
 
-    // 3. Check if we can trigger scraper (rate limit: 2 min)
-    const { data: throttle } = await supabaseAdmin
-      .from('snapshot_throttle')
-      .select('last_snapshot_at')
-      .eq('cp_id', cpId)
-      .single();
-
-    const twoMinutesAgo = new Date(Date.now() - 2 * 60 * 1000);
-    const lastPollAt = throttle?.last_snapshot_at ? new Date(throttle.last_snapshot_at) : null;
-    const canTrigger = !lastPollAt || lastPollAt < twoMinutesAgo;
+    // 3. Check if we can trigger scraper (rate limit: 5 min based on snapshot freshness)
+    const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+    const lastObservedAt = snapshot?.observed_at
+      ? new Date((snapshot as SnapshotRow).observed_at)
+      : null;
+    const canTrigger = !lastObservedAt || lastObservedAt < fiveMinutesAgo;
 
     let scraperTriggered = false;
     let retryAfter: number | null = null;
 
     if (canTrigger) {
-      // 4. Trigger GitHub Action (fire-and-forget)
       scraperTriggered = await triggerGitHubAction(cupr_id);
-
-      if (scraperTriggered) {
-        // 5. Update throttle to prevent rapid re-triggers
-        await supabaseAdmin.from('snapshot_throttle').upsert(
-          {
-            cp_id: cpId,
-            last_snapshot_at: new Date().toISOString(),
-          },
-          { onConflict: 'cp_id' }
-        );
-      }
-    } else if (lastPollAt) {
-      // Calculate seconds until next poll allowed
-      retryAfter = Math.ceil((lastPollAt.getTime() + 5 * 60 * 1000 - Date.now()) / 1000);
+    } else if (lastObservedAt) {
+      retryAfter = Math.ceil((lastObservedAt.getTime() + 5 * 60 * 1000 - Date.now()) / 1000);
     }
 
     // 6. Return cached data (always)

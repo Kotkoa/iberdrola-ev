@@ -77,41 +77,24 @@ Deno.serve(async (req) => {
       { onConflict: 'cp_id' }
     );
 
-    const { data: hashResult } = await supabaseAdmin.rpc('compute_snapshot_hash', {
-      p1_status: snapshotData.port1_status,
-      p1_power: snapshotData.port1_power_kw,
-      p1_price: snapshotData.port1_price_kwh,
-      p2_status: snapshotData.port2_status,
-      p2_power: snapshotData.port2_power_kw,
-      p2_price: snapshotData.port2_price_kwh,
-      overall: snapshotData.overall_status,
-      emergency: snapshotData.emergency_stop_pressed,
-      situation: snapshotData.situation_code,
-    });
+    const { data: existing } = await supabaseAdmin
+      .from('station_snapshots')
+      .select('observed_at')
+      .eq('cp_id', cpId)
+      .single();
 
-    const payloadHash = hashResult as string;
-
-    const { data: shouldStore } = await supabaseAdmin.rpc('should_store_snapshot', {
-      p_cp_id: cpId,
-      p_hash: payloadHash,
-      p_minutes: 5,
-    });
+    const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+    const shouldStore = !existing?.observed_at || new Date(existing.observed_at) < fiveMinutesAgo;
 
     let stored = false;
 
     if (shouldStore) {
-      await supabaseAdmin.from('station_snapshots').insert({
-        cp_id: cpId,
-        source,
-        payload_hash: payloadHash,
-        ...snapshotData,
-      });
-
-      await supabaseAdmin.from('snapshot_throttle').upsert(
+      await supabaseAdmin.from('station_snapshots').upsert(
         {
           cp_id: cpId,
-          last_payload_hash: payloadHash,
-          last_snapshot_at: new Date().toISOString(),
+          source,
+          observed_at: new Date().toISOString(),
+          ...snapshotData,
         },
         { onConflict: 'cp_id' }
       );
