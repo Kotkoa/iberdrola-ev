@@ -21,7 +21,6 @@ This document describes the API architecture for the Iberdrola EV Charger Monito
 |-------|---------|-------------|
 | `station_snapshots` | Current and historical station status data | `id` (UUID) |
 | `station_metadata` | Static station info (location, address, IDs) | `cp_id` |
-| `snapshot_throttle` | Deduplication table (5-min TTL) | `cp_id` |
 | `station_verification_queue` | Queue of stations pending price verification | `cp_id` |
 | `subscriptions` | Push notification subscriptions (one-active-per-browser) | `id` (UUID) |
 | `polling_tasks` | Polling tasks for confirmed notification dispatch | `id` (UUID) |
@@ -70,16 +69,6 @@ CREATE TABLE station_metadata (
     CHECK (verification_state IN ('unprocessed','verified_free','verified_paid','failed','dead_letter')),
   price_verified_at TIMESTAMP WITH TIME ZONE,
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT now()
-);
-```
-
-### snapshot_throttle
-
-```sql
-CREATE TABLE snapshot_throttle (
-  cp_id INTEGER PRIMARY KEY,
-  last_payload_hash TEXT,
-  last_snapshot_at TIMESTAMP WITH TIME ZONE
 );
 ```
 
@@ -180,36 +169,6 @@ CREATE FUNCTION search_stations_nearby(
   free BOOLEAN,
   distance_km DOUBLE PRECISION
 );
-```
-
-### compute_snapshot_hash
-
-Computes a hash of snapshot data for deduplication.
-
-```sql
-CREATE FUNCTION compute_snapshot_hash(
-  p1_status TEXT,
-  p1_power NUMERIC,
-  p1_price NUMERIC,
-  p2_status TEXT,
-  p2_power NUMERIC,
-  p2_price NUMERIC,
-  overall TEXT,
-  emergency BOOLEAN,
-  situation TEXT
-) RETURNS TEXT;
-```
-
-### should_store_snapshot
-
-Checks if a new snapshot should be stored (throttle logic).
-
-```sql
-CREATE FUNCTION should_store_snapshot(
-  p_cp_id INTEGER,
-  p_hash TEXT,
-  p_minutes INTEGER DEFAULT 5
-) RETURNS BOOLEAN;
 ```
 
 ### enqueue_verification_candidates
@@ -1458,79 +1417,10 @@ Snapshots are deduplicated using a hash-based throttle mechanism to avoid storin
 1. parseEntidad(detailJson) → extract status fields
          │
          v
-2. computeSnapshotHash(parsed) → RPC: compute_snapshot_hash
-         │
-         v
-3. shouldStoreSnapshot(cpId, hash) → RPC: should_store_snapshot
-         │
-    ┌────┴────┐
-    │         │
-  false      true
-    │         │
-    v         v
- SKIP      INSERT into station_snapshots
-             │
-             v
-          updateThrottle(cpId, hash)
+2. saveSnapshot() → UPSERT into station_snapshots
 ```
 
-#### Hash Computation (RPC)
-
-```typescript
-async function computeSnapshotHash(parsed): Promise<string | null>
-
-// Calls RPC function
-POST /rest/v1/rpc/compute_snapshot_hash
-
-{
-  "p1_status": "FREE",
-  "p1_power": 22.0,
-  "p1_price": 0.35,
-  "p2_status": "OCCUPIED",
-  "p2_power": 22.0,
-  "p2_price": 0.35,
-  "overall": "OPERATIVE",
-  "emergency": false,
-  "situation": null
-}
-```
-
-#### Throttle Check (RPC)
-
-```typescript
-async function shouldStoreSnapshot(
-  cpId: number,
-  hash: string,
-  minutes: number = 5
-): Promise<boolean>
-
-// Calls RPC function
-POST /rest/v1/rpc/should_store_snapshot
-
-{
-  "p_cp_id": 12345,
-  "p_hash": "abc123...",
-  "p_minutes": 5
-}
-```
-
-Returns `true` if:
-- No previous snapshot exists for this `cpId`
-- Hash differs from last stored hash
-- More than `minutes` have passed since last snapshot
-
-#### Throttle Update
-
-```typescript
-async function updateThrottle(cpId: number, hash: string): Promise<Result>
-
-// Upserts into snapshot_throttle table
-{
-  "cp_id": 12345,
-  "last_payload_hash": "abc123...",
-  "last_snapshot_at": "2024-01-15T10:00:00Z"
-}
-```
+Throttle: `station_snapshots.observed_at` используется как rate limiter (5-min cooldown). Отдельная таблица `snapshot_throttle` удалена — дедупликация через время последнего обновления.
 
 ### Persistence Functions
 

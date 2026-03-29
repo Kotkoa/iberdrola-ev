@@ -73,11 +73,11 @@ and writing results to Supabase via Edge Functions.
            │ FK                  │     situation_code   │
            ▼                     │     created_at  tz   │
 ┌──────────────────────┐         └──────────────────────┘
-│  snapshot_throttle   │                    │
-│──────────────────────│                    │ trigger (UPDATE)
-│ PK  cp_id      int4  │                    ▼
-│     last_payload_hash│         ┌──────────────────────┐
-│     last_snapshot_at │         │ notify_subscribers_  │
+│ (throttle via        │                    │
+│  observed_at column  │                    │ trigger (UPDATE)
+│  in station_snapshots)│                   ▼
+│                      │         ┌──────────────────────┐
+│                      │         │ notify_subscribers_  │
 └──────────────────────┘         │ on_port_available()  │
                                  └──────────┬───────────┘
                                             │ HTTP POST
@@ -119,7 +119,6 @@ and writing results to Supabase via Edge Functions.
 | Relationship | Type | Description |
 |---|---|---|
 | `station_metadata` → `station_snapshots` | 1:1 | One latest snapshot per station (UNIQUE on cp_id) |
-| `station_metadata` → `snapshot_throttle` | 1:1 | Dedup / rate limit record |
 | `subscriptions` → `polling_tasks` | 1:N | Subscription can have multiple polling tasks |
 | `station_metadata` → `station_verification_queue` | 1:1 | Price verification queue |
 
@@ -176,20 +175,9 @@ This keeps the table small (~2,700 rows max = one per station).
 
 ---
 
-### 3.3 `snapshot_throttle` — Rate Limiter
+### 3.3 Rate Limiting
 
-**Purpose**: Prevents scraper from being triggered too often for the same station.
-
-| Column | Type | Notes |
-|---|---|---|
-| `cp_id` | int4 PK, FK | Station reference |
-| `last_payload_hash` | text | Hash of last saved payload |
-| `last_snapshot_at` | timestamptz | When last snapshot was saved |
-
-**Logic**: `should_store_snapshot(cp_id, hash, 5)` — allows new snapshot if:
-- No previous record exists
-- Payload hash changed (data actually changed)
-- 5 minutes elapsed since last snapshot
+Rate limiting uses `station_snapshots.observed_at` directly (5-min cooldown for poll-station, 2-min cooldown for subscription-checker via `can_poll_station()` RPC). No separate throttle table needed.
 
 ---
 
@@ -340,14 +328,11 @@ User searches radius
 ```
 poll-station:
   READ   station_metadata (cp_id lookup)
-  READ   station_snapshots (latest snapshot)
-  READ   snapshot_throttle (rate limit check)
-  WRITE  snapshot_throttle (update last check time)
+  READ   station_snapshots (latest snapshot + observed_at for throttle)
 
 save-snapshot:
-  CALL   should_store_snapshot() (dedup check)
+  READ   station_snapshots.observed_at (throttle check, 5-min cooldown)
   UPSERT station_snapshots (save or update)
-  UPSERT snapshot_throttle (update hash + timestamp)
   UPSERT station_metadata (update if new fields)
 
 search-nearby:
@@ -420,9 +405,7 @@ Reconnection: exponential backoff 1s → 2s → 4s → ... → 30s (cap), max 10
 
 | Function | Purpose | Called By |
 |---|---|---|
-| `should_store_snapshot(cp_id, hash, minutes)` | Check if snapshot should be saved | Edge: save-snapshot |
-| `compute_snapshot_hash(...)` | Deterministic hash of snapshot payload | Edge: save-snapshot |
-| `can_poll_station(cupr_id)` | Check if polling is allowed (rate limit) | Edge: poll-station |
+| `can_poll_station(cupr_id)` | Check if polling is allowed (2-min cooldown via station_snapshots.observed_at) | subscription-checker |
 
 ### Polling Engine
 
@@ -506,7 +489,6 @@ All tables have RLS enabled.
 |---|---|---|---|
 | `station_metadata` | SELECT | SELECT | SELECT, INSERT, UPDATE |
 | `station_snapshots` | SELECT | SELECT | ALL (via `true` policy) |
-| `snapshot_throttle` | — | — | SELECT, INSERT, UPDATE (`true`) |
 | `subscriptions` | — | — | ALL (service_role only) |
 | `polling_tasks` | — | — | ALL (service_role only) |
 | `geo_search_throttle` | — | — | ALL (service_role only) |
@@ -532,7 +514,6 @@ All tables have RLS enabled.
 ### Data Retention
 
 - `station_snapshots`: 3-month retention (cron cleanup)
-- `snapshot_throttle`: No cleanup needed (one row per station, UPSERT)
 - `polling_tasks`: Expire after 12 hours (`expires_at` column)
 - `geo_search_throttle`: No cleanup (small table, one row per bbox_key)
 
@@ -546,30 +527,21 @@ All tables have RLS enabled.
 Layer 1: Client-side (rateLimitCache.ts)
   └── Track retry_after locally, prevent premature requests
 
-Layer 2: Edge Function (snapshot_throttle table)
-  └── should_store_snapshot(cp_id, hash, 5 min)
-      ├── Hash changed → allow (data actually different)
-      ├── 5 min elapsed → allow (time-based refresh)
-      └── Same hash, < 5 min → deny (duplicate)
+Layer 2: Edge Function / Scraper (station_snapshots.observed_at)
+  └── 5-min cooldown per station (poll-station, save-snapshot)
+  └── 2-min cooldown per station (subscription-checker via can_poll_station RPC)
 
 Layer 3: GitHub Actions dispatch
   └── geo_search_throttle (bbox-based, 5 min cooldown)
   └── Prevents duplicate workflow runs for same area
 ```
 
-### Dedup Logic (`should_store_snapshot`)
+### Throttle Logic
 
-```sql
--- Returns TRUE if snapshot should be saved:
--- 1. No previous record for this cp_id
--- 2. Payload hash changed (actual data difference)
--- 3. Same hash but 5+ minutes since last save
-```
-
-This ensures:
-- Identical data is not re-saved within 5 minutes
-- Changed data is always saved immediately
-- Even unchanged data gets a periodic refresh
+Rate limiting uses `station_snapshots.observed_at` as single source of truth:
+- **poll-station**: dispatch scraper only if `observed_at` > 5 min ago
+- **save-snapshot**: save only if `observed_at` > 5 min ago
+- **subscription-checker**: poll only if `observed_at` > 2 min ago (via `can_poll_station` RPC)
 
 ---
 

@@ -40,8 +40,7 @@ Deno.serve(async (req) => {
     // 3. Триггернуть GitHub Action (fire-and-forget)
     await triggerGitHubAction(cupr_id);
 
-    // 4. Обновить throttle
-    await updateThrottle(cupr_id);
+    // 4. Scraper updates station_snapshots.observed_at after fetch
   }
 
   // 5. Вернуть текущий кэш
@@ -120,37 +119,14 @@ async function triggerGitHubAction(cuprId: number): Promise<void> {
 }
 ```
 
-### 3. Rate Limit Check (RPC)
+### 3. Rate Limit Check
 
-Использовать существующую `can_poll_station` или создать новую:
-
-```sql
--- Проверить можно ли триггерить скраппер (5 мин cooldown)
-CREATE OR REPLACE FUNCTION can_trigger_scraper(p_cupr_id INTEGER)
-RETURNS BOOLEAN AS $$
-  SELECT NOT EXISTS (
-    SELECT 1 FROM snapshot_throttle
-    WHERE cupr_id = (
-      SELECT cp_id FROM station_metadata WHERE cupr_id = p_cupr_id LIMIT 1
-    )
-    AND last_snapshot_at > now() - INTERVAL '5 minutes'
-  );
-$$ LANGUAGE sql STABLE;
-```
-
-### 4. Обновить snapshot_throttle после триггера
+Throttle использует `station_snapshots.observed_at` напрямую — отдельная таблица `snapshot_throttle` удалена. Snapshot уже получен в шаге 1, поэтому дополнительный запрос не нужен:
 
 ```typescript
-async function updateThrottle(cuprId: number): Promise<void> {
-  const cpId = await getCpIdFromCuprId(cuprId);
-
-  await supabase
-    .from('snapshot_throttle')
-    .upsert({
-      cp_id: cpId,
-      last_snapshot_at: new Date().toISOString(),
-    }, { onConflict: 'cp_id' });
-}
+const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+const canTrigger = !snapshot?.observed_at
+  || new Date(snapshot.observed_at) < fiveMinutesAgo;
 ```
 
 ---
@@ -278,7 +254,7 @@ Frontend                poll-station            GitHub Actions         Supabase
 - [x] Создать GitHub PAT с scope `workflow` (2026-02-01)
 - [x] Добавить secrets в Supabase: `GITHUB_PAT`, `GITHUB_OWNER`, `GITHUB_REPO` (2026-02-01)
 - [x] Обновить poll-station Edge Function (v3 deployed 2026-02-01)
-- [x] Rate limit через `snapshot_throttle` table (встроено в функцию)
+- [x] Rate limit через `station_snapshots.observed_at` (5 мин cooldown)
 - [x] Тест: poll-station возвращает кэш (200 OK)
 - [x] Тест: GitHub Action триггерится (#7739)
 - [x] Тест: Realtime доставляет обновление (работает)

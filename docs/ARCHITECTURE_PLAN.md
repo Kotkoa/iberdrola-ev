@@ -415,25 +415,10 @@ Prefer: resolution=merge-duplicates
 parseEntidad() → извлечение полей
   │
   ▼
-computeSnapshotHash() → RPC: compute_snapshot_hash
-  │                      Входные данные: p1_status, p1_power, p1_price,
-  │                                       p2_status, p2_power, p2_price,
-  │                                       overall, emergency, situation
-  ▼
-shouldStoreSnapshot(cpId, hash, 5min) → RPC: should_store_snapshot
-  │
-  ├─ true: INSERT + updateThrottle()
-  └─ false: SKIP (хэш совпадает И прошло < 5 минут)
+saveSnapshot() → UPSERT station_snapshots
 ```
 
-**Таблица throttle:**
-```sql
-snapshot_throttle (
-  cp_id INTEGER PRIMARY KEY,
-  last_payload_hash TEXT,
-  last_snapshot_at TIMESTAMPTZ
-)
-```
+**Throttle**: `station_snapshots.observed_at` — 5-min cooldown для poll-station/save-snapshot, 2-min cooldown для subscription-checker.
 
 ### 7.3. Верификация цен (state machine)
 
@@ -622,14 +607,11 @@ interface StationMetadata {
           │              │  Tables:       │
           │              │  - station_snapshots (realtime)
           │              │  - station_metadata              │
-          │              │  - snapshot_throttle             │
           │              │  - station_verification_queue    │
           │              │  - polling_tasks                 │
           │              │                                  │
           │              │  RPC:                            │
           │              │  - search_stations_nearby        │
-          │              │  - compute_snapshot_hash         │
-          │              │  - should_store_snapshot         │
           │              │  - auto_enqueue_unprocessed      │
           │              │  - process_polling_tasks         │
           │              │  - can_poll_station              │

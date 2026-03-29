@@ -67,7 +67,6 @@ Iberdrola API
     ┌─────────────────────────────┐
     │  station_snapshots          │
     │  station_metadata           │
-    │  snapshot_throttle (5-min)  │
     └─────────────────────────────┘
                       ↓
     ┌─────────────────┬────────────────┐
@@ -139,10 +138,6 @@ Reference data (rarely changes).
 - `cp_id`, `cupr_id`
 - `latitude`, `longitude`
 - `address_full`
-
-### `snapshot_throttle`
-
-Deduplication table for snapshot storage (5-min TTL per station).
 
 ### `subscriptions`
 

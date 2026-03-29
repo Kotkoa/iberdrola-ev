@@ -92,8 +92,8 @@ Frontend использует **три** канала связи с бэкенд
                       │
                       ├── [если устарели] pollStation() ──► Edge: poll-station
                       │                                         │
-                      │                                         ├──► snapshot_throttle
-                      │                                         │    (проверка лимита)
+                      │                                         ├──► station_snapshots.observed_at
+                      │                                         │    (5-min throttle)
                       │                                         │
                       │                                         └──► GitHub Actions
                       │                                              dispatch
@@ -784,8 +784,7 @@ station_metadata
 |---|---|---|
 | `search_stations_nearby()` | Edge: search-nearby | Результаты поиска |
 | `get_station_with_snapshot()` | Edge: station-details | Детали станции (альтернативный путь) |
-| `should_store_snapshot()` | Edge: poll-station | Дедупликация — предотвращает лишние записи |
-| `can_poll_station()` | Edge: poll-station | Rate limiting — возвращает `retry_after` |
+| `can_poll_station()` | subscription-checker | Rate limiting — 2-min cooldown via station_snapshots.observed_at |
 
 ### 10.3 Ограничения БД, влияющие на UI
 
@@ -793,7 +792,7 @@ station_metadata
 |---|---|
 | `station_snapshots.cp_id` UNIQUE | Гарантирует одну строку на станцию — фронтенд не пагинирует |
 | `station_metadata.cupr_id` UNIQUE | Обеспечивает стабильные Edge-вызовы |
-| `snapshot_throttle` кулдаун 5 мин | Ограничивает частоту обновления данных |
+| `station_snapshots.observed_at` кулдаун 5 мин | Ограничивает частоту dispatch scraper через poll-station |
 | `geo_search_throttle` кулдаун 5 мин | Ограничивает частоту запуска скрапера при поиске |
 | Фильтр `is_free` в поисковом RPC | По умолчанию в поиске отображаются только бесплатные станции |
 | Макс. 2 порта (колонки port1/port2) | UI рассчитан на 2 порта — для 3+ нужна новая структура колонок |

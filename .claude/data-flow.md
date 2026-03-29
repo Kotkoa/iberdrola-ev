@@ -25,7 +25,6 @@ Supabase (station_snapshots + station_metadata) → useCharger hook → React st
 | ------------------- | ------------------------------------------------------------------------------- |
 | `station_snapshots` | Primary table for station status (port statuses, power, prices, emergency stop) |
 | `station_metadata`  | Reference data (rarely changes): coordinates, address, cupr_id mapping          |
-| `snapshot_throttle` | Deduplication table for snapshot storage (5-min TTL)                            |
 
 ## Extended Data Fields
 
