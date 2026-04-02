@@ -1,5 +1,8 @@
 -- Add verification_state to search_stations_nearby RPC return type
 -- Allows frontend to show free/unverified/paid badges on search results
+-- Must DROP first because CREATE OR REPLACE cannot change return type
+
+DROP FUNCTION IF EXISTS public.search_stations_nearby(double precision, double precision, double precision, boolean);
 
 CREATE OR REPLACE FUNCTION public.search_stations_nearby(
   p_lat double precision,
