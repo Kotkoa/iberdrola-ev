@@ -42,12 +42,35 @@ function App() {
       <AppLayout>
         <TabNavigation activeTab={activeTab} onTabChange={handleTabChange} />
 
-        <Box sx={{ flex: 1, width: '100%', minHeight: 0, overflow: 'hidden' }}>
-          <Box sx={{ display: activeTab === 'station' ? 'block' : 'none' }}>
+        <Box
+          sx={{
+            display: 'flex',
+            flexDirection: 'column',
+            flex: 1,
+            width: '100%',
+            minHeight: 0,
+            overflow: 'hidden',
+          }}
+        >
+          <Box
+            sx={{
+              display: activeTab === 'station' ? 'flex' : 'none',
+              flexDirection: 'column',
+              flex: 1,
+              minHeight: 0,
+            }}
+          >
             <StationTab onNavigateToSearch={handleNavigateToSearch} />
           </Box>
           {searchTabMounted && (
-            <Box sx={{ display: activeTab === 'search' ? 'block' : 'none' }}>
+            <Box
+              sx={{
+                display: activeTab === 'search' ? 'flex' : 'none',
+                flexDirection: 'column',
+                flex: 1,
+                minHeight: 0,
+              }}
+            >
               <Suspense fallback={<LoadingSkeleton />}>
                 <SearchTab onStationSelected={handleStationSelected} />
               </Suspense>
