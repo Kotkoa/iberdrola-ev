@@ -159,35 +159,11 @@ Deno.serve(async (req) => {
       );
     }
 
-    // 2. Keep only stations explicitly verified as FREE in station_metadata
+    // 2. Filter out verified_paid stations — show free + unprocessed
     const rows = (stations || []) as Record<string, unknown>[];
-    const cpIds = rows.map((s) => s.cp_id).filter((id): id is number => typeof id === 'number');
-
-    const verificationMap = new Map<number, string>();
-    if (cpIds.length > 0) {
-      const { data: verificationRows, error: verificationError } = await supabaseAdmin
-        .from('station_metadata')
-        .select('cp_id, verification_state')
-        .in('cp_id', cpIds);
-
-      if (verificationError) {
-        console.warn(
-          '[search-nearby] verification state lookup failed:',
-          verificationError.message
-        );
-      } else {
-        for (const row of verificationRows || []) {
-          verificationMap.set(
-            row.cp_id as number,
-            (row.verification_state as string) || 'unprocessed'
-          );
-        }
-      }
-    }
-
-    const verifiedRows = rows.filter((s) => {
-      const cpId = s.cp_id as number;
-      return verificationMap.get(cpId) === 'verified_free';
+    const filteredRows = rows.filter((s) => {
+      const state = (s.verification_state as string) || 'unprocessed';
+      return state !== 'verified_paid';
     });
 
     // 3. Enqueue nearby unverified stations for verification (single batched RPC)
@@ -269,7 +245,7 @@ Deno.serve(async (req) => {
     }
 
     // 5. Transform results to frontend format
-    const results: StationResult[] = verifiedRows.map((s: Record<string, unknown>) => ({
+    const results: StationResult[] = filteredRows.map((s: Record<string, unknown>) => ({
       cpId: s.cp_id as number,
       cuprId: s.cupr_id as number,
       name: (s.name as string) || 'Unknown',
@@ -283,7 +259,7 @@ Deno.serve(async (req) => {
       priceKwh: s.price_kwh as number | null,
       socketType: s.socket_type as string | null,
       distanceKm: s.distance_km as number,
-      verificationState: 'verified_free',
+      verificationState: (s.verification_state as string) || 'unprocessed',
     }));
 
     return new Response(

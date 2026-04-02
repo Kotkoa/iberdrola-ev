@@ -2,7 +2,6 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act, waitFor } from '@testing-library/react';
 import { useStationSearch } from './useStationSearch';
 import * as apiClient from '../services/apiClient';
-import * as iberdrola from '../services/iberdrola';
 import * as localSearch from '../services/localSearch';
 import { DATA_FRESHNESS } from '../constants';
 import type { SearchNearbySuccessResponse, ApiErrorResponse } from '../types/api';
@@ -17,73 +16,11 @@ vi.mock('../services/apiClient', async () => {
   };
 });
 
-vi.mock('../services/iberdrola', async () => {
-  const actual = await vi.importActual('../services/iberdrola');
-  return {
-    ...actual,
-    getUserLocation: vi.fn(),
-  };
-});
-
 vi.mock('../services/localSearch', () => ({
   searchLocalStations: vi.fn(),
 }));
 
-// Mock GeolocationPositionError (not available in test environment)
-class MockGeolocationPositionError extends Error {
-  code: number;
-  PERMISSION_DENIED = 1;
-  POSITION_UNAVAILABLE = 2;
-  TIMEOUT = 3;
-
-  constructor(message: string, code: number) {
-    super(message);
-    this.code = code;
-    this.name = 'GeolocationPositionError';
-  }
-}
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-(globalThis as any).GeolocationPositionError = MockGeolocationPositionError;
-
-// Helper to create mock GeolocationCoordinates with toJSON method
-function createMockCoords(lat: number, lon: number): GeolocationCoordinates {
-  return {
-    latitude: lat,
-    longitude: lon,
-    accuracy: 10,
-    altitude: null,
-    altitudeAccuracy: null,
-    heading: null,
-    speed: null,
-    toJSON() {
-      return {
-        latitude: this.latitude,
-        longitude: this.longitude,
-        accuracy: this.accuracy,
-        altitude: this.altitude,
-        altitudeAccuracy: this.altitudeAccuracy,
-        heading: this.heading,
-        speed: this.speed,
-      };
-    },
-  };
-}
-
-// Helper to create mock GeolocationPosition with toJSON method
-function createMockPosition(lat: number, lon: number): GeolocationPosition {
-  const coords = createMockCoords(lat, lon);
-  return {
-    coords,
-    timestamp: Date.now(),
-    toJSON() {
-      return {
-        coords: coords.toJSON(),
-        timestamp: this.timestamp,
-      };
-    },
-  };
-}
+const testLocation = { latitude: 38.84, longitude: -0.12 };
 
 // Helper to create successful response
 function createSuccessResponse(
@@ -170,14 +107,12 @@ describe('useStationSearch', () => {
   });
 
   it('should call searchNearby Edge Function with correct params', async () => {
-    vi.mocked(iberdrola.getUserLocation).mockResolvedValue(createMockPosition(38.84, -0.12));
-
     vi.mocked(apiClient.searchNearby).mockResolvedValue(createSuccessResponse([]));
 
     const { result } = renderHook(() => useStationSearch());
 
     await act(async () => {
-      await result.current.search(5);
+      await result.current.search(5, testLocation);
     });
 
     expect(apiClient.searchNearby).toHaveBeenCalledWith({
@@ -207,14 +142,12 @@ describe('useStationSearch', () => {
       },
     ];
 
-    vi.mocked(iberdrola.getUserLocation).mockResolvedValue(createMockPosition(38.84, -0.12));
-
     vi.mocked(apiClient.searchNearby).mockResolvedValue(createSuccessResponse(mockStations));
 
     const { result } = renderHook(() => useStationSearch());
 
     await act(async () => {
-      await result.current.search(5);
+      await result.current.search(5, testLocation);
     });
 
     await waitFor(() => {
@@ -250,8 +183,6 @@ describe('useStationSearch', () => {
       },
     ];
 
-    vi.mocked(iberdrola.getUserLocation).mockResolvedValue(createMockPosition(38.84, -0.12));
-
     vi.mocked(apiClient.searchNearby).mockResolvedValue(
       createSuccessResponse(mockStations, true) // scraper_triggered = true
     );
@@ -259,7 +190,7 @@ describe('useStationSearch', () => {
     const { result } = renderHook(() => useStationSearch());
 
     await act(async () => {
-      await result.current.search(5);
+      await result.current.search(5, testLocation);
     });
 
     await waitFor(() => {
@@ -270,8 +201,6 @@ describe('useStationSearch', () => {
   });
 
   it('should set scraperTriggered to false when meta.scraper_triggered is false', async () => {
-    vi.mocked(iberdrola.getUserLocation).mockResolvedValue(createMockPosition(38.84, -0.12));
-
     vi.mocked(apiClient.searchNearby).mockResolvedValue(
       createSuccessResponse([], false) // scraper_triggered = false
     );
@@ -279,7 +208,7 @@ describe('useStationSearch', () => {
     const { result } = renderHook(() => useStationSearch());
 
     await act(async () => {
-      await result.current.search(5);
+      await result.current.search(5, testLocation);
     });
 
     await waitFor(() => {
@@ -290,14 +219,12 @@ describe('useStationSearch', () => {
   });
 
   it('should show error when no stations found', async () => {
-    vi.mocked(iberdrola.getUserLocation).mockResolvedValue(createMockPosition(38.84, -0.12));
-
     vi.mocked(apiClient.searchNearby).mockResolvedValue(createSuccessResponse([]));
 
     const { result } = renderHook(() => useStationSearch());
 
     await act(async () => {
-      await result.current.search(5);
+      await result.current.search(5, testLocation);
     });
 
     await waitFor(() => {
@@ -323,8 +250,6 @@ describe('useStationSearch', () => {
       },
     ];
 
-    vi.mocked(iberdrola.getUserLocation).mockResolvedValue(createMockPosition(38.84, -0.12));
-
     vi.mocked(apiClient.searchNearby).mockResolvedValue(createErrorResponse('Edge Function error'));
 
     vi.mocked(localSearch.searchLocalStations).mockResolvedValue(localStations);
@@ -332,7 +257,7 @@ describe('useStationSearch', () => {
     const { result } = renderHook(() => useStationSearch());
 
     await act(async () => {
-      await result.current.search(5);
+      await result.current.search(5, testLocation);
     });
 
     await waitFor(() => {
@@ -348,8 +273,6 @@ describe('useStationSearch', () => {
   });
 
   it('should show error when both Edge Function and local fallback fail', async () => {
-    vi.mocked(iberdrola.getUserLocation).mockResolvedValue(createMockPosition(38.84, -0.12));
-
     vi.mocked(apiClient.searchNearby).mockResolvedValue(
       createErrorResponse('Edge Function unavailable')
     );
@@ -359,7 +282,7 @@ describe('useStationSearch', () => {
     const { result } = renderHook(() => useStationSearch());
 
     await act(async () => {
-      await result.current.search(5);
+      await result.current.search(5, testLocation);
     });
 
     await waitFor(() => {
@@ -371,11 +294,7 @@ describe('useStationSearch', () => {
     expect(result.current.error).toBe('Edge Function unavailable');
   });
 
-  it('should handle geolocation error', async () => {
-    vi.mocked(iberdrola.getUserLocation).mockRejectedValue(
-      new MockGeolocationPositionError('User denied Geolocation', 1)
-    );
-
+  it('should show error when location is not available', async () => {
     const { result } = renderHook(() => useStationSearch());
 
     await act(async () => {
@@ -386,19 +305,17 @@ describe('useStationSearch', () => {
       expect(result.current.loading).toBe(false);
     });
 
-    expect(result.current.error).toBe('Location access denied');
+    expect(result.current.error).toBe('Location not available. Please enable location services.');
     expect(result.current.stations).toHaveLength(0);
   });
 
   it('should handle network errors', async () => {
-    vi.mocked(iberdrola.getUserLocation).mockResolvedValue(createMockPosition(38.84, -0.12));
-
     vi.mocked(apiClient.searchNearby).mockRejectedValue(new Error('Network error'));
 
     const { result } = renderHook(() => useStationSearch());
 
     await act(async () => {
-      await result.current.search(5);
+      await result.current.search(5, testLocation);
     });
 
     await waitFor(() => {
@@ -409,17 +326,14 @@ describe('useStationSearch', () => {
   });
 
   it('should set loading state during search', async () => {
-    vi.mocked(iberdrola.getUserLocation).mockImplementation(
-      () =>
-        new Promise((resolve) => setTimeout(() => resolve(createMockPosition(38.84, -0.12)), 100))
+    vi.mocked(apiClient.searchNearby).mockImplementation(
+      () => new Promise((resolve) => setTimeout(() => resolve(createSuccessResponse([])), 100))
     );
-
-    vi.mocked(apiClient.searchNearby).mockResolvedValue(createSuccessResponse([]));
 
     const { result } = renderHook(() => useStationSearch());
 
     act(() => {
-      result.current.search(5);
+      result.current.search(5, testLocation);
     });
 
     // Should be loading immediately
@@ -431,20 +345,18 @@ describe('useStationSearch', () => {
   });
 
   it('should reset state when starting new search', async () => {
-    vi.mocked(iberdrola.getUserLocation).mockResolvedValue(createMockPosition(38.84, -0.12));
-
     vi.mocked(apiClient.searchNearby).mockResolvedValue(createSuccessResponse([]));
 
     const { result } = renderHook(() => useStationSearch());
 
     // First search
     await act(async () => {
-      await result.current.search(5);
+      await result.current.search(5, testLocation);
     });
 
     // Second search should reset scraperTriggered
     await act(async () => {
-      await result.current.search(10);
+      await result.current.search(10, testLocation);
     });
 
     expect(result.current.scraperTriggered).toBe(false);
@@ -458,7 +370,6 @@ describe('useStationSearch', () => {
     it('should auto-retry after SCRAPER_EXPECTED_DELAY_MS when scraper triggered', async () => {
       vi.useFakeTimers();
 
-      vi.mocked(iberdrola.getUserLocation).mockResolvedValue(createMockPosition(38.84, -0.12));
       vi.mocked(apiClient.searchNearby)
         .mockResolvedValueOnce(createSuccessResponse([mockStation], true))
         .mockResolvedValueOnce(
@@ -468,7 +379,7 @@ describe('useStationSearch', () => {
       const { result } = renderHook(() => useStationSearch());
 
       await act(async () => {
-        await result.current.search(5);
+        await result.current.search(5, testLocation);
       });
 
       expect(result.current.scraperTriggered).toBe(true);
@@ -482,33 +393,9 @@ describe('useStationSearch', () => {
       expect(result.current.scraperTriggered).toBe(false);
     });
 
-    it('should use original coordinates for retry (not call getUserLocation again)', async () => {
-      vi.useFakeTimers();
-
-      vi.mocked(iberdrola.getUserLocation).mockResolvedValue(createMockPosition(38.84, -0.12));
-      vi.mocked(apiClient.searchNearby)
-        .mockResolvedValueOnce(createSuccessResponse([mockStation], true))
-        .mockResolvedValueOnce(createSuccessResponse([mockStation]));
-
-      const { result } = renderHook(() => useStationSearch());
-
-      await act(async () => {
-        await result.current.search(5);
-      });
-
-      await act(async () => {
-        await vi.advanceTimersByTimeAsync(DATA_FRESHNESS.SCRAPER_EXPECTED_DELAY_MS);
-      });
-
-      expect(apiClient.searchNearby).toHaveBeenCalledTimes(2);
-      // getUserLocation should only be called once (during initial search)
-      expect(iberdrola.getUserLocation).toHaveBeenCalledTimes(1);
-    });
-
     it('should clear retry timer on new search', async () => {
       vi.useFakeTimers();
 
-      vi.mocked(iberdrola.getUserLocation).mockResolvedValue(createMockPosition(38.84, -0.12));
       vi.mocked(apiClient.searchNearby)
         // First search: scraper triggered, schedules retry in 25s
         .mockResolvedValueOnce(createSuccessResponse([mockStation], true))
@@ -521,7 +408,7 @@ describe('useStationSearch', () => {
 
       // First search — schedules retry in 25s
       await act(async () => {
-        await result.current.search(3);
+        await result.current.search(3, testLocation);
       });
 
       // Advance 10s (NOT enough for first retry)
@@ -531,7 +418,7 @@ describe('useStationSearch', () => {
 
       // Second search — clears first retry timer, schedules new one
       await act(async () => {
-        await result.current.search(10);
+        await result.current.search(10, testLocation);
       });
 
       // Advance 15s more — NOT enough for second retry (needs 25s from search2)
@@ -553,7 +440,6 @@ describe('useStationSearch', () => {
     it('should clear retry timer on unmount', async () => {
       vi.useFakeTimers();
 
-      vi.mocked(iberdrola.getUserLocation).mockResolvedValue(createMockPosition(38.84, -0.12));
       vi.mocked(apiClient.searchNearby).mockResolvedValueOnce(
         createSuccessResponse([mockStation], true)
       );
@@ -561,7 +447,7 @@ describe('useStationSearch', () => {
       const { result, unmount } = renderHook(() => useStationSearch());
 
       await act(async () => {
-        await result.current.search(5);
+        await result.current.search(5, testLocation);
       });
 
       expect(result.current.scraperTriggered).toBe(true);
@@ -580,7 +466,6 @@ describe('useStationSearch', () => {
     it('should not retry more than once when scraper_triggered is false and retry_after is set', async () => {
       vi.useFakeTimers();
 
-      vi.mocked(iberdrola.getUserLocation).mockResolvedValue(createMockPosition(38.84, -0.12));
       vi.mocked(apiClient.searchNearby)
         // First call: scraper on cooldown
         .mockResolvedValueOnce(createSuccessResponse([mockStation], false, 180))
@@ -590,7 +475,7 @@ describe('useStationSearch', () => {
       const { result } = renderHook(() => useStationSearch());
 
       await act(async () => {
-        await result.current.search(5);
+        await result.current.search(5, testLocation);
       });
 
       // Flush the immediate setTimeout(silentRefetch, 0)
@@ -612,8 +497,6 @@ describe('useStationSearch', () => {
     it('should not clear stations during silent retry', async () => {
       vi.useFakeTimers();
 
-      vi.mocked(iberdrola.getUserLocation).mockResolvedValue(createMockPosition(38.84, -0.12));
-
       let retryResolve: (value: SearchNearbySuccessResponse) => void;
       const retryPromise = new Promise<SearchNearbySuccessResponse>((resolve) => {
         retryResolve = resolve;
@@ -626,7 +509,7 @@ describe('useStationSearch', () => {
       const { result } = renderHook(() => useStationSearch());
 
       await act(async () => {
-        await result.current.search(5);
+        await result.current.search(5, testLocation);
       });
 
       expect(result.current.stations).toHaveLength(1);
@@ -653,7 +536,6 @@ describe('useStationSearch', () => {
 
       const updatedStation = { ...mockStation, overallStatus: 'OCCUPIED', freePorts: 0 };
 
-      vi.mocked(iberdrola.getUserLocation).mockResolvedValue(createMockPosition(38.84, -0.12));
       vi.mocked(apiClient.searchNearby)
         .mockResolvedValueOnce(createSuccessResponse([mockStation], true))
         .mockResolvedValueOnce(createSuccessResponse([updatedStation]));
@@ -661,7 +543,7 @@ describe('useStationSearch', () => {
       const { result } = renderHook(() => useStationSearch());
 
       await act(async () => {
-        await result.current.search(5);
+        await result.current.search(5, testLocation);
       });
 
       expect(result.current.stations[0].overallStatus).toBe('AVAILABLE');
@@ -677,7 +559,6 @@ describe('useStationSearch', () => {
     it('should reset scraperTriggered after retry completes', async () => {
       vi.useFakeTimers();
 
-      vi.mocked(iberdrola.getUserLocation).mockResolvedValue(createMockPosition(38.84, -0.12));
       vi.mocked(apiClient.searchNearby)
         .mockResolvedValueOnce(createSuccessResponse([mockStation], true))
         .mockResolvedValueOnce(createSuccessResponse([mockStation]));
@@ -685,7 +566,7 @@ describe('useStationSearch', () => {
       const { result } = renderHook(() => useStationSearch());
 
       await act(async () => {
-        await result.current.search(5);
+        await result.current.search(5, testLocation);
       });
 
       expect(result.current.scraperTriggered).toBe(true);

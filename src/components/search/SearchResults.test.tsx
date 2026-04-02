@@ -20,6 +20,7 @@ function makeStation(overrides: Partial<StationInfoPartial> = {}): StationInfoPa
     overallStatus: 'AVAILABLE',
     totalPorts: 2,
     priceKwh: 0,
+    verificationState: 'verified_free',
     ...overrides,
   };
 }
@@ -56,11 +57,11 @@ describe('SearchResults', () => {
     expect(distanceChips[2]).toHaveTextContent('5.00 km');
   });
 
-  it('filters to free stations when showPaid is false', () => {
+  it('hides verified_paid stations', () => {
     const stations = [
-      makeStation({ cpId: 1, priceKwh: 0 }),
-      makeStation({ cpId: 2, priceKwh: 0.3 }),
-      makeStation({ cpId: 3, priceKwh: 0 }),
+      makeStation({ cpId: 1, verificationState: 'verified_free' }),
+      makeStation({ cpId: 2, verificationState: 'verified_paid' }),
+      makeStation({ cpId: 3, verificationState: 'verified_free' }),
     ];
 
     render(<SearchResults stations={stations} {...defaultProps} showPaid={false} />);
@@ -69,10 +70,10 @@ describe('SearchResults', () => {
     expect(starButtons).toHaveLength(2);
   });
 
-  it('shows empty state when all stations filtered out', () => {
+  it('shows empty state when all stations are verified_paid', () => {
     const stations = [
-      makeStation({ cpId: 1, priceKwh: 0.3 }),
-      makeStation({ cpId: 2, priceKwh: 0.5 }),
+      makeStation({ cpId: 1, verificationState: 'verified_paid' }),
+      makeStation({ cpId: 2, verificationState: 'verified_paid' }),
     ];
 
     render(<SearchResults stations={stations} {...defaultProps} showPaid={false} />);

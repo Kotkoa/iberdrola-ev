@@ -16,6 +16,7 @@ function makeStation(overrides: Partial<StationInfoPartial> = {}): StationInfoPa
     overallStatus: 'AVAILABLE',
     totalPorts: 2,
     priceKwh: 0,
+    verificationState: 'verified_free',
     ...overrides,
   };
 }

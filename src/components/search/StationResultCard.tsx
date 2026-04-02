@@ -22,8 +22,12 @@ export const StationResultCard = memo(function StationResultCard({
   onSetPrimary,
   distanceKm,
 }: StationResultCardProps) {
+  const isVerifiedFree = station.verificationState === 'verified_free';
+  const canSetPrimary = isVerifiedFree;
+
   const handleStarClick = (e: React.MouseEvent) => {
     e.stopPropagation();
+    if (!canSetPrimary) return;
     onSetPrimary(station);
   };
 
@@ -76,7 +80,15 @@ export const StationResultCard = memo(function StationResultCard({
           size="small"
           onClick={handleStarClick}
           color={isPrimary ? 'primary' : 'default'}
-          aria-label={isPrimary ? 'Primary station' : 'Set as primary'}
+          disabled={!canSetPrimary && !isPrimary}
+          aria-label={
+            isPrimary
+              ? 'Primary station'
+              : canSetPrimary
+                ? 'Set as primary'
+                : 'Verification pending'
+          }
+          sx={{ opacity: canSetPrimary || isPrimary ? 1 : 0.3 }}
         >
           {isPrimary ? <StarIcon fontSize="small" /> : <StarBorderIcon fontSize="small" />}
         </IconButton>
@@ -89,13 +101,22 @@ export const StationResultCard = memo(function StationResultCard({
           variant="outlined"
           sx={{ fontSize: '0.7rem', height: 20 }}
         />
-        <Chip
-          label="FREE"
-          size="small"
-          color="success"
-          variant="outlined"
-          sx={{ fontSize: '0.7rem', height: 20 }}
-        />
+        {isVerifiedFree ? (
+          <Chip
+            label="FREE"
+            size="small"
+            color="success"
+            variant="outlined"
+            sx={{ fontSize: '0.7rem', height: 20 }}
+          />
+        ) : (
+          <Chip
+            label="Checking..."
+            size="small"
+            variant="outlined"
+            sx={{ fontSize: '0.7rem', height: 20, color: 'text.secondary', borderColor: 'divider' }}
+          />
+        )}
         <Box sx={{ ml: 'auto' }}>
           <DistanceBadge
             distanceKm={distanceKm}

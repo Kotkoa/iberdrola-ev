@@ -1,8 +1,13 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { getUserLocation, type StationInfoPartial } from '../services/iberdrola';
+import { type StationInfoPartial } from '../services/iberdrola';
 import { searchNearby, isApiSuccess } from '../services/apiClient';
 import { searchLocalStations } from '../services/localSearch';
 import { DATA_FRESHNESS } from '../constants';
+
+interface SearchLocation {
+  latitude: number;
+  longitude: number;
+}
 
 export interface UseStationSearchReturn {
   stations: StationInfoPartial[];
@@ -10,7 +15,7 @@ export interface UseStationSearchReturn {
   error: string | null;
   usingCachedData: boolean;
   scraperTriggered: boolean;
-  search: (radius: number) => Promise<void>;
+  search: (radius: number, location?: SearchLocation) => Promise<void>;
   clear: () => void;
 }
 
@@ -64,6 +69,7 @@ export function useStationSearch(): UseStationSearchReturn {
           freePorts: s.freePorts ?? undefined,
           priceKwh: s.priceKwh ?? undefined,
           socketType: s.socketType ?? undefined,
+          verificationState: s.verificationState ?? undefined,
           _fromCache: true,
         }));
 
@@ -80,7 +86,7 @@ export function useStationSearch(): UseStationSearchReturn {
   }, []);
 
   const search = useCallback(
-    async (radius: number) => {
+    async (radius: number, location?: SearchLocation) => {
       // Cancel previous search + retry timer
       abortControllerRef.current?.abort();
       retryAbortRef.current?.abort();
@@ -97,20 +103,22 @@ export function useStationSearch(): UseStationSearchReturn {
         setUsingCachedData(false);
         setScraperTriggered(false);
 
-        const pos = await getUserLocation();
+        if (!location) {
+          throw new Error('Location not available. Please enable location services.');
+        }
         if (controller.signal.aborted) return;
 
         // Store coordinates for silent retry
         lastSearchCoordsRef.current = {
-          lat: pos.coords.latitude,
-          lon: pos.coords.longitude,
+          lat: location.latitude,
+          lon: location.longitude,
         };
         lastRadiusRef.current = radius;
 
         console.log('[Search] Calling search-nearby Edge Function');
         const response = await searchNearby({
-          latitude: pos.coords.latitude,
-          longitude: pos.coords.longitude,
+          latitude: location.latitude,
+          longitude: location.longitude,
           radiusKm: radius,
         });
 
@@ -130,6 +138,7 @@ export function useStationSearch(): UseStationSearchReturn {
             freePorts: s.freePorts ?? undefined,
             priceKwh: s.priceKwh ?? undefined,
             socketType: s.socketType ?? undefined,
+            verificationState: s.verificationState ?? undefined,
             _fromCache: true,
           }));
 
@@ -159,8 +168,8 @@ export function useStationSearch(): UseStationSearchReturn {
           console.warn('[Search] Edge Function error, using local fallback:', response.error);
 
           const localResults = await searchLocalStations(
-            pos.coords.latitude,
-            pos.coords.longitude,
+            location.latitude,
+            location.longitude,
             radius,
             true
           );
@@ -177,12 +186,7 @@ export function useStationSearch(): UseStationSearchReturn {
         if (controller.signal.aborted) return;
         if (err instanceof DOMException && err.name === 'AbortError') return;
 
-        const errorMsg =
-          err instanceof GeolocationPositionError
-            ? 'Location access denied'
-            : err instanceof Error
-              ? err.message
-              : 'Search failed';
+        const errorMsg = err instanceof Error ? err.message : 'Search failed';
         setError(errorMsg);
       } finally {
         setLoading(false);

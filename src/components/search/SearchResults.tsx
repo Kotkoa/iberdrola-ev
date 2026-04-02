@@ -32,23 +32,38 @@ export function SearchResults({
   showPaid,
 }: SearchResultsProps) {
   const filteredStations = useMemo(() => {
-    return stations.filter((s) => {
-      if (s.priceKwh === undefined) return true;
-      return showPaid ? s.priceKwh > 0 : s.priceKwh === 0;
+    return stations.filter((station) => {
+      if (station.verificationState === 'verified_paid') return false;
+      const isUnverified =
+        !station.verificationState ||
+        station.verificationState === 'unprocessed' ||
+        station.verificationState === 'failed' ||
+        station.verificationState === 'dead_letter';
+      if (isUnverified) return true;
+      if (station.priceKwh === undefined) return true;
+      return showPaid ? station.priceKwh > 0 : station.priceKwh === 0;
     });
   }, [stations, showPaid]);
 
   const sortedStations = useMemo((): StationWithDistance[] => {
-    const withDistance = filteredStations.map((s) => ({
-      station: s,
+    const withDistance = filteredStations.map((station) => ({
+      station,
       distanceKm: userLocation
-        ? calculateDistance(userLocation.latitude, userLocation.longitude, s.latitude, s.longitude)
+        ? calculateDistance(
+            userLocation.latitude,
+            userLocation.longitude,
+            station.latitude,
+            station.longitude
+          )
         : null,
     }));
 
-    if (userLocation) {
-      withDistance.sort((a, b) => (a.distanceKm ?? 0) - (b.distanceKm ?? 0));
-    }
+    withDistance.sort((itemA, itemB) => {
+      const isVerifiedA = itemA.station.verificationState === 'verified_free' ? 0 : 1;
+      const isVerifiedB = itemB.station.verificationState === 'verified_free' ? 0 : 1;
+      if (isVerifiedA !== isVerifiedB) return isVerifiedA - isVerifiedB;
+      return (itemA.distanceKm ?? 0) - (itemB.distanceKm ?? 0);
+    });
 
     return withDistance;
   }, [filteredStations, userLocation]);
@@ -68,6 +83,9 @@ export function SearchResults({
 
   return (
     <Stack spacing={1}>
+      <Typography variant="caption" color="text.secondary">
+        {filteredStations.length} station{filteredStations.length !== 1 ? 's' : ''} found
+      </Typography>
       {sortedStations.map(({ station, distanceKm }) => (
         <StationResultCard
           key={station.cpId}

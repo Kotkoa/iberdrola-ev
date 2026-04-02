@@ -24,10 +24,10 @@ export function SearchTab({ onStationSelected }: SearchTabProps) {
     useStationSearch();
 
   const { primaryStationId, setPrimaryStation } = usePrimaryStation();
-  const { location: userLocation } = useUserLocation();
+  const { location: userLocation, loading: locationLoading } = useUserLocation();
 
   const handleSearch = () => {
-    search(radius);
+    search(radius, userLocation ?? undefined);
   };
 
   const handleSetPrimary = useCallback(
@@ -43,14 +43,14 @@ export function SearchTab({ onStationSelected }: SearchTabProps) {
     setSnackbarOpen(false);
   };
 
-  // Auto-search on mount
+  // Auto-search when location becomes available
   const hasSearchedRef = useRef(false);
   useEffect(() => {
-    if (!hasSearchedRef.current) {
+    if (!hasSearchedRef.current && userLocation) {
       hasSearchedRef.current = true;
-      search(3); // default radius
+      search(3, userLocation);
     }
-  }, [search]);
+  }, [search, userLocation]);
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
@@ -74,7 +74,7 @@ export function SearchTab({ onStationSelected }: SearchTabProps) {
               variant="outlined"
               color="success"
               onClick={handleSearch}
-              disabled={loading}
+              disabled={loading || locationLoading || !userLocation}
               startIcon={<RoomOutlinedIcon fontSize="small" />}
               sx={{
                 height: '40px',
@@ -82,7 +82,7 @@ export function SearchTab({ onStationSelected }: SearchTabProps) {
                 fontSize: { xs: '0.75rem', sm: '0.875rem' },
               }}
             >
-              {loading ? 'Searching...' : 'Find Stations'}
+              {locationLoading ? 'Getting location...' : loading ? 'Searching...' : 'Find Stations'}
             </Button>
           </Stack>
         </Stack>

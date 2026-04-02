@@ -75,6 +75,13 @@ export interface StationListItemFull {
   socketNum: number;
 }
 
+export type VerificationState =
+  | 'verified_free'
+  | 'verified_paid'
+  | 'unprocessed'
+  | 'failed'
+  | 'dead_letter';
+
 export interface StationInfoPartial {
   cpId: number;
   cuprId: number;
@@ -90,6 +97,7 @@ export interface StationInfoPartial {
   socketType?: string;
   emergencyStopPressed?: boolean;
   supportsReservation?: boolean;
+  verificationState?: VerificationState;
   _fromCache?: boolean;
 }
 
@@ -220,19 +228,6 @@ export async function enrichStationDetails(
   // No cache available - return partial as-is (API is blocked)
   console.warn(`[enrichment] No cache for cpId=${partial.cpId}, API is blocked`);
   return partial;
-}
-
-/**
- * Gets user's current geolocation
- */
-export async function getUserLocation(): Promise<GeolocationPosition> {
-  return new Promise<GeolocationPosition>((resolve, reject) => {
-    navigator.geolocation.getCurrentPosition(resolve, reject, {
-      enableHighAccuracy: true,
-      timeout: 10000,
-      maximumAge: 0,
-    });
-  });
 }
 
 export interface ChargerStatusFromApi {
