@@ -219,7 +219,16 @@ Deno.serve(async (req) => {
 
     if (taskError) {
       console.error('Create polling task error:', taskError);
-      // Don't fail the request, subscription is already saved
+      // Compensating rollback: a subscription without a polling task is a zombie
+      // (UI shows "subscribed" but nothing is polling), so deactivate and fail loudly.
+      await supabaseAdmin.from('subscriptions').update({ is_active: false }).eq('id', subData.id);
+      return new Response(
+        JSON.stringify({
+          ok: false,
+          error: { code: 'POLLING_TASK_FAILED', message: taskError.message },
+        }),
+        { status: 500, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } }
+      );
     }
 
     return new Response(
