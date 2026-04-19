@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { interceptAll } from '../helpers/intercept';
 import { seedPrimaryStation } from '../helpers/setup-station';
-import { assertPollNotCalled, assertPollCalledWith } from '../helpers/assert-requests';
+import { assertPollCalledWith } from '../helpers/assert-requests';
 import { createFreshSnapshot, createStaleSnapshot, createMetadata } from '../fixtures/station-data';
 import {
   createPollSuccess,
@@ -11,9 +11,12 @@ import {
 import { TEST_STATION } from '../fixtures/constants';
 
 test.describe('Station data flow', () => {
-  // ─── A. Fresh cache: poll-station NOT called, UI from snapshot ───
+  // ─── A. Fresh cache: UI from snapshot, poll-station fires in background ───
 
-  test('fresh cache — shows data without calling poll-station', async ({ page, context }) => {
+  test('fresh cache — shows data immediately and polls in background', async ({
+    page,
+    context,
+  }) => {
     await seedPrimaryStation(context);
 
     const snapshot = createFreshSnapshot({
@@ -24,6 +27,11 @@ test.describe('Station data flow', () => {
     const captured = await interceptAll(page, {
       snapshots: [snapshot],
       metadata: [createMetadata()],
+      pollStation: createPollSuccess({
+        port1Status: 'AVAILABLE',
+        port2Status: 'BUSY',
+        overallStatus: 'AVAILABLE',
+      }),
     });
 
     await page.goto('/');
@@ -35,11 +43,12 @@ test.describe('Station data flow', () => {
     await expect(page.getByTestId('port-card-1')).toBeVisible();
     await expect(page.getByTestId('port-card-2')).toBeVisible();
 
-    // poll-station was NOT called (data is fresh)
-    assertPollNotCalled(captured);
+    // Background poll fired with correct cuprId
+    await expect.poll(() => captured.some((req) => req.url.includes('poll-station'))).toBe(true);
+    assertPollCalledWith(captured, TEST_STATION.cuprId);
   });
 
-  test('fresh cache — both ports available', async ({ page, context }) => {
+  test('fresh cache — both ports available, polls in background', async ({ page, context }) => {
     await seedPrimaryStation(context);
 
     const snapshot = createFreshSnapshot({
@@ -51,15 +60,21 @@ test.describe('Station data flow', () => {
     const captured = await interceptAll(page, {
       snapshots: [snapshot],
       metadata: [createMetadata()],
+      pollStation: createPollSuccess({
+        port1Status: 'AVAILABLE',
+        port2Status: 'AVAILABLE',
+        overallStatus: 'AVAILABLE',
+      }),
     });
 
     await page.goto('/');
 
     await expect(page.getByTestId('station-availability')).toContainText('Available: 2 of 2');
-    assertPollNotCalled(captured);
+    await expect.poll(() => captured.some((req) => req.url.includes('poll-station'))).toBe(true);
+    assertPollCalledWith(captured, TEST_STATION.cuprId);
   });
 
-  test('fresh cache — both ports busy', async ({ page, context }) => {
+  test('fresh cache — both ports busy, polls in background', async ({ page, context }) => {
     await seedPrimaryStation(context);
 
     const snapshot = createFreshSnapshot({
@@ -71,12 +86,18 @@ test.describe('Station data flow', () => {
     const captured = await interceptAll(page, {
       snapshots: [snapshot],
       metadata: [createMetadata()],
+      pollStation: createPollSuccess({
+        port1Status: 'BUSY',
+        port2Status: 'BUSY',
+        overallStatus: 'BUSY',
+      }),
     });
 
     await page.goto('/');
 
     await expect(page.getByTestId('station-availability')).toContainText('All ports are busy');
-    assertPollNotCalled(captured);
+    await expect.poll(() => captured.some((req) => req.url.includes('poll-station'))).toBe(true);
+    assertPollCalledWith(captured, TEST_STATION.cuprId);
   });
 
   // ─── B. Stale cache: poll-station called, UI updates ───

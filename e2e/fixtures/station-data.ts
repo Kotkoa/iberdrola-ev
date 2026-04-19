@@ -16,11 +16,11 @@ interface SnapshotOptions {
 
 /**
  * Creates a station_snapshots row matching RawSnapshotData from api/charger.ts.
- * Default: both ports AVAILABLE, observed 2 minutes ago (fresh within TTL=5).
+ * Default: both ports AVAILABLE, observed 30 seconds ago (fresh within STATION_TTL_MINUTES=2).
  */
 export function createSnapshot(options: SnapshotOptions = {}) {
   const now = new Date();
-  const defaultObservedAt = new Date(now.getTime() - 2 * 60 * 1000).toISOString();
+  const defaultObservedAt = new Date(now.getTime() - 30 * 1000).toISOString();
   const observedAt = options.observedAt ?? defaultObservedAt;
 
   return {
@@ -44,9 +44,9 @@ export function createSnapshot(options: SnapshotOptions = {}) {
   };
 }
 
-/** Snapshot within TTL (2 min ago, fresh for TTL=5) */
+/** Snapshot well within TTL (30 s ago, fresh for STATION_TTL_MINUTES=2) */
 export function createFreshSnapshot(options: SnapshotOptions = {}) {
-  const freshTime = new Date(Date.now() - 2 * 60 * 1000).toISOString();
+  const freshTime = new Date(Date.now() - 30 * 1000).toISOString();
   return createSnapshot({ observedAt: freshTime, ...options });
 }
 
